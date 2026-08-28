@@ -65,4 +65,18 @@ describe('domain boundary', () => {
 
     expect(collectSpecifiers(source)).toEqual(['react', '@/domain/x.ts', 'zustand', 'echarts']);
   });
+
+  test('ECharts imports stay inside the visualization adapter', async () => {
+    const files = [...new Bun.Glob('src/**/*.{ts,tsx}').scanSync('.')].filter(
+      (file) => !file.startsWith('src/visualization/'),
+    );
+    const sources = await Promise.all(files.map(async (file) => [file, await Bun.file(file).text()] as const));
+    const violations = sources.flatMap(([file, source]) =>
+      collectSpecifiers(source)
+        .filter((specifier) => specifier === 'echarts' || specifier.startsWith('echarts/'))
+        .map((specifier) => `${file} imports ${specifier}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
 });
