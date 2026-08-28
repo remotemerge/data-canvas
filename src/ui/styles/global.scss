@@ -178,6 +178,27 @@ select:focus-visible {
   font-size: var(--dc-text-sm);
 }
 
+.agent-status,
+.agent-created-badge {
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-status[data-active="true"],
+.agent-created-badge {
+  border-color: #397656;
+  color: #7ad9a5;
+}
+
+.agent-created-badge {
+  margin-left: var(--dc-space-2);
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
 .workspace__body {
   display: grid;
   grid-template-columns: var(--dc-panel-width) 1fr var(--dc-panel-width);

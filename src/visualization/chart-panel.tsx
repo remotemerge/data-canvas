@@ -82,6 +82,14 @@ export const ChartPanel = ({
   onError: (error: DomainError) => void;
 }) => {
   const workspace = useWorkspace((state) => state.workspace);
+  const agentCreated = useWorkspace((state) =>
+    state.history.some(
+      (entry) =>
+        entry.actor === 'agent' &&
+        entry.type === 'visualization.create' &&
+        entry.changedEntityIds.includes(visualization.id),
+    ),
+  );
   const actions = useActions();
   const [result, setResult] = useState<ChartResult | null>(null);
   const [error, setError] = useState<DomainError | null>(null);
@@ -118,7 +126,10 @@ export const ChartPanel = ({
   return (
     <article className="chart-panel">
       <header className="chart-panel__header">
-        <h3>{visualization.title}</h3>
+        <h3>
+          {visualization.title}
+          {agentCreated ? <span className="agent-created-badge">agent</span> : null}
+        </h3>
         <div className="chart-panel__controls">
           <button type="button" aria-pressed={visualization.linkedSelection} onClick={() => void toggleLinked()}>
             Link

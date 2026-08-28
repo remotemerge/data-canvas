@@ -2,6 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppRoutes } from '@/app/routing/app-routes.tsx';
 import { startEngine } from '@/app/bootstrap/start-engine.ts';
+import { dispatcher } from '@/application/actions/dispatcher.ts';
+import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
+import { getWorkspace, workspaceStore } from '@/state/workspace-store.ts';
+import { startToolLifecycle } from '@/webmcp/registry/tool-lifecycle.ts';
 import '@/ui/styles/global.scss';
 
 const container = document.getElementById('root');
@@ -18,6 +22,13 @@ if (!container) {
  * `startEngine` resolves, so readiness is communicated rather than the app appearing inert.
  */
 void startEngine();
+void startToolLifecycle({
+  dispatcher,
+  getWorkspace,
+  fetchTableWindow: (request) => registeredDataEngine.fetchTableWindow(request),
+  executeAnalysis: (query) => registeredDataEngine.executeAnalysis(query),
+  subscribeWorkspace: (listener) => workspaceStore.subscribe(listener),
+});
 
 createRoot(container).render(
   <StrictMode>
