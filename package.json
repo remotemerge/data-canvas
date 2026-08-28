@@ -40,6 +40,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@mcp-b/webmcp-types": "^5.0.1",
     "@types/bun": "^1.4.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
