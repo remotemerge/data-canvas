@@ -89,7 +89,10 @@ export const stubDataEngine = (
     ),
 ): DataEnginePort => ({
   importFile,
-  fetchTableWindow: () => Promise.resolve(ok({ rows: [], columnIds: [], offset: 0, stale: false })),
+  fetchTableWindow: () =>
+    Promise.resolve(ok({ rows: [], columnIds: [], columns: [], totalRowCount: 0, offset: 0, stale: false })),
+  executeAnalysis: () => Promise.resolve(ok({ rows: [], columns: [] })),
+  getDistinctValues: () => Promise.resolve(ok({ values: [], truncated: false })),
 });
 
 export interface TestHarness {

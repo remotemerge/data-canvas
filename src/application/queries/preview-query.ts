@@ -20,5 +20,6 @@ export const fetchPreview = (
     datasetId,
     offset: 0,
     limit: PREVIEW_ROW_LIMIT,
+    filters: [],
     ...(signal === undefined ? {} : { signal }),
   });
