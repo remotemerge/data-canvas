@@ -11,8 +11,19 @@ import { describe, expect, test } from 'bun:test';
  * Enforced here rather than in lint config, which is owned by the maintainer and stays as authored.
  */
 
-/** Where a store write is legitimate: the store's own module and the dispatcher's commit. */
-const MUTATION_ALLOWLIST = ['src/state/workspace-store.ts', 'src/application/actions/dispatcher.ts'];
+/**
+ * Where a store write is legitimate.
+ *
+ * The workspace store and the dispatcher's commit are the pair the rule is about.
+ * `engine-status.ts` is listed because it owns a *different* store: engine readiness is session
+ * state, never part of the workspace aggregate, so it is not revisioned or attributable and the
+ * dispatcher has nothing to say about it. The distinction is checked below rather than assumed.
+ */
+const MUTATION_ALLOWLIST = [
+  'src/state/workspace-store.ts',
+  'src/application/actions/dispatcher.ts',
+  'src/state/engine-status.ts',
+];
 
 const SET_STATE_PATTERN = /\bsetState\s*\(/;
 
@@ -61,5 +72,14 @@ describe('store mutation boundary', () => {
     const dispatcher = await Bun.file('src/application/actions/dispatcher.ts').text();
 
     expect(SET_STATE_PATTERN.test(dispatcher)).toBe(true);
+  });
+
+  test('the engine-status exemption does not reach the workspace store', async () => {
+    // The exemption is only defensible while that module writes its own session store. If it ever
+    // imported the workspace store, it would become the second mutation path this file forbids.
+    const source = await Bun.file('src/state/engine-status.ts').text();
+
+    expect(source).not.toContain('workspace-store');
+    expect(source).not.toContain('dispatcher');
   });
 });

@@ -17,27 +17,59 @@ export interface ImportedRelation {
 }
 
 /**
- * The application's view of the analytical engine.
+ * A bounded read of consecutive rows.
  *
- * Declared here, in the application layer, so handlers depend on a port rather than on
- * DuckDB-Wasm. The concrete engine is supplied later and plugs in without any handler change.
- *
- * Only the operations the current action handlers need appear here. Query execution and windowed
- * reads are added by the plans that introduce their callers, keeping the port free of speculative
- * surface.
+ * `limit` is a request, not a guarantee: the engine caps it. Rows are positional arrays rather than
+ * keyed objects because column identity already lives in the domain `Column[]`, and rebuilding a
+ * key per cell would allocate a property name per value for every row read.
  */
-export interface DataEnginePort {
-  importFile(file: unknown, datasetId: EntityId): Promise<Result<ImportedRelation, DomainError>>;
+export interface TableWindowRequest {
+  datasetId: EntityId;
+  offset: number;
+  limit: number;
+  signal?: AbortSignal;
+}
+
+export interface TableWindow {
+  rows: readonly (string | number | boolean | null)[][];
+  /** Column IDs in result order, so a caller maps cells to domain columns without guessing. */
+  columnIds: readonly EntityId[];
+  offset: number;
+  /**
+   * True when a newer request for the same logical work superseded this one. The caller discards
+   * the window rather than rendering it, which is what prevents an older, slower read from
+   * overwriting a newer one.
+   */
+  stale: boolean;
 }
 
 /**
- * The placeholder engine used until a real one exists.
+ * The application's view of the analytical engine.
+ *
+ * Declared here, in the application layer, so handlers depend on a port rather than on DuckDB-Wasm.
+ * No DuckDB type appears in this file and no connection object crosses it.
+ *
+ * Only the operations the current callers need appear here. Analysis-query execution and distinct
+ * value reads arrive with the plan that introduces their callers, keeping the port free of
+ * speculative surface.
+ */
+export interface DataEnginePort {
+  importFile(file: unknown, datasetId: EntityId): Promise<Result<ImportedRelation, DomainError>>;
+  fetchTableWindow(request: TableWindowRequest): Promise<Result<TableWindow, DomainError>>;
+}
+
+/**
+ * The placeholder engine used before initialization completes, and in tests that exercise handler
+ * logic without an engine.
  *
  * It fails rather than pretending to succeed: an action that silently no-ops would commit a
  * `Dataset` describing a relation that was never created, and every later query against it would
  * fail with a far less obvious error.
  */
+const unavailable = (): Result<never, DomainError> =>
+  err({ code: 'ENGINE_UNAVAILABLE', message: 'The analytical engine is not available yet.' });
+
 export const unavailableDataEngine: DataEnginePort = {
-  importFile: () =>
-    Promise.resolve(err({ code: 'ENGINE_UNAVAILABLE', message: 'The analytical engine is not available yet.' })),
+  importFile: () => Promise.resolve(unavailable()),
+  fetchTableWindow: () => Promise.resolve(unavailable()),
 };

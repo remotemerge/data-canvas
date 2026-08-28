@@ -85,11 +85,16 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Content-first rather than centred: a preview table must start at the top and grow downwards. */
+  justify-content: flex-start;
   gap: var(--dc-space-4);
   padding: var(--dc-space-8);
   min-height: 0;
   overflow: auto;
+}
+
+.workspace__canvas > .workspace__empty {
+  margin-block: auto;
 }
 
 .workspace__empty {
@@ -231,4 +236,187 @@ body {
   font-size: var(--dc-text-lg);
   line-height: 1;
   cursor: pointer;
+}
+
+.engine-status {
+  padding: var(--dc-space-2) var(--dc-space-4);
+  width: 100%;
+  max-width: 40rem;
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  text-align: center;
+}
+
+.engine-status--failed {
+  border-color: #7f3b3b;
+  background: #2a1618;
+  color: #ff9d9d;
+}
+
+/* The native file input is replaced by a styled button but stays in the DOM and focusable, so
+   keyboard and assistive-technology users reach the same control rather than a decorative one. */
+.import__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.import__button {
+  padding: var(--dc-space-2) var(--dc-space-4);
+  width: 100%;
+  border: 1px solid var(--dc-color-accent);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.import__button:disabled {
+  border-color: var(--dc-color-border);
+  color: var(--dc-color-text-muted);
+  cursor: not-allowed;
+}
+
+.import__hint {
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.dataset-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dataset-list__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+}
+
+/* Long filenames are user-supplied and must not push the panel wider than its column. */
+.dataset-list__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dataset-list__status {
+  flex: none;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.dataset-list__status[data-status="error"] {
+  color: #ff9d9d;
+}
+
+.schema__summary {
+  margin: 0 0 var(--dc-space-3);
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.schema__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schema__column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--dc-space-2);
+  font-size: var(--dc-text-sm);
+}
+
+/* Column headers come from the imported file and can be arbitrarily long or unbroken. */
+.schema__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.schema__type {
+  padding: 0 var(--dc-space-2);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-accent);
+  font-size: var(--dc-text-sm);
+}
+
+.schema__type[data-logical-type="unknown"] {
+  color: var(--dc-color-text-muted);
+}
+
+.schema__nullable,
+.schema__physical {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.schema__physical {
+  margin-left: auto;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.preview__caption {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.preview__scroll {
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  overflow: auto;
+  max-height: 60vh;
+}
+
+.preview__table {
+  border-collapse: collapse;
+  font-size: var(--dc-text-sm);
+  white-space: nowrap;
+}
+
+.preview__table th,
+.preview__table td {
+  padding: var(--dc-space-2) var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-color-border);
+  text-align: left;
+  /* Cell values are imported content; one pathological value must not stretch the whole table. */
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--dc-color-surface-raised);
+  font-weight: 600;
 }
