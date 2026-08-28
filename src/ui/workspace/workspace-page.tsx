@@ -102,6 +102,13 @@ export const WorkspacePage = (): React.JSX.Element => {
 
         <aside className="workspace__panel workspace__panel--right">
           <ActionHistoryPanel />
+          <section className="privacy-notice" aria-labelledby="privacy-notice-title">
+            <h2 id="privacy-notice-title" className="workspace__panel-heading">
+              Privacy
+            </h2>
+            <p>Your imported data stays in DuckDB-Wasm in this browser.</p>
+            <p>Data returned through WebMCP is sent to the AI agent you use and may be processed in the cloud.</p>
+          </section>
         </aside>
       </div>
     </div>
