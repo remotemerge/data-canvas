@@ -1,3 +1,4 @@
+import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
@@ -24,6 +25,11 @@ export const selectVisualizations = (state: WorkspaceState): Record<EntityId, Vi
 export const selectFilters = (state: WorkspaceState): Record<EntityId, Filter> => state.workspace.filters;
 
 export const selectActiveDatasetId = (state: WorkspaceState): EntityId | undefined => state.workspace.activeDatasetId;
+
+export const selectLayoutColumns = (state: WorkspaceState): number => state.workspace.layout.columns;
+
+/** Returns the stored array; components reverse or slice it inside a `useMemo`. */
+export const selectHistory = (state: WorkspaceState): ActionHistoryEntry[] => state.history;
 
 export const selectActiveDataset = (state: WorkspaceState): Dataset | undefined => {
   const { activeDatasetId, datasets } = state.workspace;

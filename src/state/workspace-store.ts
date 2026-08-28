@@ -1,8 +1,17 @@
 import { createStore } from 'zustand/vanilla';
+import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
 import { createEmptyWorkspace, type Workspace } from '@/domain/workspace/workspace.ts';
 
 export interface WorkspaceState {
   workspace: Workspace;
+  /**
+   * Append-only log of committed actions, capped by a ring buffer.
+   *
+   * It lives beside the workspace rather than inside it because it describes changes *to* the
+   * workspace rather than being part of the aggregate. It holds no dataset values, so keeping it
+   * here respects the rule that only metadata belongs in the store.
+   */
+  history: ActionHistoryEntry[];
 }
 
 /**
@@ -21,6 +30,7 @@ export interface WorkspaceState {
  */
 export const workspaceStore = createStore<WorkspaceState>()(() => ({
   workspace: createEmptyWorkspace(),
+  history: [],
 }));
 
 /** Narrow read accessor for non-React consumers (services, WebMCP adapter, tests). */
