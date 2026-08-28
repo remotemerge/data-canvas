@@ -1,5 +1,5 @@
 import type { Column } from '@/domain/dataset/dataset.ts';
-import { NULLARY_FILTER_OPERATORS } from '@/domain/filter/filter.ts';
+import { FILTER_OPERATORS, NULLARY_FILTER_OPERATORS } from '@/domain/filter/filter.ts';
 import type { FilterOperator } from '@/domain/filter/filter.ts';
 import { isNumericType, isTemporalType, isTextType } from '@/domain/logical-type.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
@@ -211,3 +211,12 @@ export const validateFilter = (column: Column, operator: FilterOperator, value: 
       );
   }
 };
+
+export const getCompatibleFilterOperators = (column: Column): FilterOperator[] =>
+  FILTER_OPERATORS.filter((operator) => {
+    if (operator === 'contains') return isTextType(column.logicalType);
+    if (operator === 'gt' || operator === 'gte' || operator === 'lt' || operator === 'lte' || operator === 'between') {
+      return isNumericType(column.logicalType) || isTemporalType(column.logicalType);
+    }
+    return true;
+  });
