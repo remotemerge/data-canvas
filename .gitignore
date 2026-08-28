@@ -1,0 +1,54 @@
+### Vendor directories
+/.yarn/
+/node_modules/
+
+### Build directories
+/.bs-data/playwright-profile/
+/.playwright-*/
+/dist/
+
+### JetBrains
+/.idea/*
+!/.idea/dictionaries/
+!/.idea/dictionaries/*.xml
+!/.idea/vcs.xml
+
+### Visual Studio Code
+/.vscode/*
+!/.vscode/*.json
+
+### Windows template
+*.lnk
+Thumbs.db
+[Dd]esktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+
+### macOS template
+.DS_Store
+._*
+
+### Linux template
+*~
+.Trash-*
+.directory
+.fuse_hidden*
+.nfs*
+
+### Editor files
+*.cvsignore
+*.njsproj
+*.ntvs*
+*.sln
+*.suo
+*.sw?
+
+### Generated files
+*.cache
+*.key
+*.log
+*.snapshot
+.env
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
