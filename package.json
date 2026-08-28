@@ -28,16 +28,22 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
+    "@tanstack/react-table": "^9.2.3",
+    "@tanstack/react-virtual": "^3.14.10",
+    "ajv": "^8.20.0",
+    "echarts": "^6.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-icons": "^5.7.0",
-    "react-router-dom": "^7.18.2"
+    "react-router-dom": "^7.18.2",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
     "sass": "^1.103.1",
