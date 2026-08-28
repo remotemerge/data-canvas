@@ -16,6 +16,7 @@ import { DatasetSchemaPanel } from '@/ui/dataset/dataset-schema-panel.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
 import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
+import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx';
 
 /**
  * The workspace shell.
@@ -48,6 +49,7 @@ export const WorkspacePage = (): React.JSX.Element => {
       <header className="workspace__header">
         <h1 className="workspace__title">{name}</h1>
         <span className="workspace__revision">revision {revision}</span>
+        <AgentStatusIndicator />
       </header>
 
       <div className="workspace__body">
