@@ -43,3 +43,6 @@ export const selectActiveDataset = (state: WorkspaceState): Dataset | undefined 
  */
 export const selectFiltersForDataset = (state: WorkspaceState, datasetId: EntityId): Filter[] =>
   Object.values(state.workspace.filters).filter((filter) => filter.datasetId === datasetId);
+
+export const selectTableSortForDataset = (state: WorkspaceState, datasetId: EntityId) =>
+  state.workspace.tableSorts[datasetId] ?? [];

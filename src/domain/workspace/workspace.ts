@@ -3,6 +3,7 @@ import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
 import type { Selection } from '@/domain/selection/selection.ts';
+import type { SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import { createEntityId, ID_PREFIX, type EntityId } from '@/shared/ids/entity-id.ts';
 
@@ -47,6 +48,7 @@ export interface Workspace {
   datasets: Record<EntityId, Dataset>;
   visualizations: Record<EntityId, Visualization>;
   filters: Record<EntityId, Filter>;
+  tableSorts: Record<EntityId, SortSpec[]>;
   selections: Record<EntityId, Selection>;
   metrics: Record<EntityId, Metric>;
   annotations: Record<EntityId, Annotation>;
@@ -69,6 +71,7 @@ export const createEmptyWorkspace = (name = 'Untitled workspace'): Workspace => 
     datasets: {},
     visualizations: {},
     filters: {},
+    tableSorts: {},
     selections: {},
     metrics: {},
     annotations: {},

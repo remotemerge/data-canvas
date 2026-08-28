@@ -8,7 +8,7 @@ import type {
   VisualizationPresentation,
 } from '@/domain/visualization/visualization.ts';
 import type { WorkspaceLayoutItem } from '@/domain/workspace/workspace.ts';
-import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import type { Result } from '@/shared/result/result.ts';
@@ -76,6 +76,11 @@ export interface RemoveFilterInput {
 export interface ClearFiltersInput {
   /** Omitted clears every filter in the workspace; supplied clears only that dataset's filters. */
   datasetId?: EntityId;
+}
+
+export interface SetTableSortInput {
+  datasetId: EntityId;
+  sort: SortSpec[];
 }
 
 export interface CreateVisualizationInput {
@@ -168,6 +173,7 @@ export type ApplicationAction =
   | { type: 'filter.apply'; payload: ApplyFilterInput }
   | { type: 'filter.remove'; payload: RemoveFilterInput }
   | { type: 'filters.clear'; payload: ClearFiltersInput }
+  | { type: 'table.sort'; payload: SetTableSortInput }
   | { type: 'visualization.create'; payload: CreateVisualizationInput }
   | { type: 'visualization.update'; payload: UpdateVisualizationInput }
   | { type: 'visualization.remove'; payload: RemoveVisualizationInput }
@@ -190,6 +196,7 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'filter.apply',
   'filter.remove',
   'filters.clear',
+  'table.sort',
   'visualization.create',
   'visualization.update',
   'visualization.remove',
