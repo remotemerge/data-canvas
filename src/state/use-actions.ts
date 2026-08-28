@@ -16,6 +16,7 @@ import type {
   RemoveVisualizationInput,
   SetActiveDatasetInput,
   SetSelectionInput,
+  SetTableSortInput,
   UpdateLayoutInput,
   UpdateVisualizationInput,
 } from '@/application/actions/action-types.ts';
@@ -33,6 +34,7 @@ export interface WorkspaceCommands {
   applyFilter: Command<ApplyFilterInput>;
   removeFilter: Command<RemoveFilterInput>;
   clearFilters: Command<ClearFiltersInput>;
+  setTableSort: Command<SetTableSortInput>;
   createVisualization: Command<CreateVisualizationInput>;
   updateVisualization: Command<UpdateVisualizationInput>;
   removeVisualization: Command<RemoveVisualizationInput>;
@@ -59,6 +61,7 @@ const humanCommands: WorkspaceCommands = {
   applyFilter: (input) => dispatcher.execute({ type: 'filter.apply', payload: input }, { actor: 'human' }),
   removeFilter: (input) => dispatcher.execute({ type: 'filter.remove', payload: input }, { actor: 'human' }),
   clearFilters: (input) => dispatcher.execute({ type: 'filters.clear', payload: input }, { actor: 'human' }),
+  setTableSort: (input) => dispatcher.execute({ type: 'table.sort', payload: input }, { actor: 'human' }),
   createVisualization: (input) =>
     dispatcher.execute({ type: 'visualization.create', payload: input }, { actor: 'human' }),
   updateVisualization: (input) =>

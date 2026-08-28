@@ -30,4 +30,5 @@ export interface AnalysisQuery {
   filters: FilterExpression[];
   orderBy?: SortSpec[];
   limit?: number;
+  offset?: number;
 }

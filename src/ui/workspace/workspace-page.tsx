@@ -10,7 +10,8 @@ import {
 import { ActionErrorBanner } from '@/ui/components/action-error-banner.tsx';
 import { EngineStatusBanner } from '@/ui/components/engine-status-banner.tsx';
 import { DatasetImportButton } from '@/ui/dataset/dataset-import-button.tsx';
-import { DatasetPreviewTable } from '@/ui/dataset/dataset-preview-table.tsx';
+import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
+import { FilterPanel } from '@/ui/dataset/filter-panel.tsx';
 import { DatasetSchemaPanel } from '@/ui/dataset/dataset-schema-panel.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
@@ -76,6 +77,7 @@ export const WorkspacePage = (): React.JSX.Element => {
           </section>
 
           <CanvasDensityControl onError={setActionError} />
+          {activeDataset === undefined ? null : <FilterPanel dataset={activeDataset} onError={setActionError} />}
         </aside>
 
         <main className="workspace__canvas">
@@ -88,7 +90,7 @@ export const WorkspacePage = (): React.JSX.Element => {
               <p>Import a CSV or JSON file to explore its schema and rows.</p>
             </div>
           ) : (
-            <DatasetPreviewTable dataset={activeDataset} />
+            <WorkspaceTable dataset={activeDataset} />
           )}
         </main>
 

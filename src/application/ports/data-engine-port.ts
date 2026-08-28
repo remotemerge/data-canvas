@@ -1,4 +1,7 @@
 import type { Column } from '@/domain/dataset/dataset.ts';
+import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
+import type { Filter } from '@/domain/filter/filter.ts';
+import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err } from '@/shared/result/result.ts';
@@ -27,6 +30,8 @@ export interface TableWindowRequest {
   datasetId: EntityId;
   offset: number;
   limit: number;
+  sort?: SortSpec[];
+  filters: Filter[];
   signal?: AbortSignal;
 }
 
@@ -41,6 +46,31 @@ export interface TableWindow {
    * overwriting a newer one.
    */
   stale: boolean;
+  columns: ResultColumn[];
+  totalRowCount: number;
+}
+
+export interface AnalysisResult {
+  rows: readonly (string | number | boolean | null)[][];
+  columns: ResultColumn[];
+}
+
+export interface DistinctValuesRequest {
+  datasetId: EntityId;
+  columnId: EntityId;
+  filters: Filter[];
+  limit?: number;
+  signal?: AbortSignal;
+}
+
+export interface DistinctValue {
+  value: string | number | boolean | null;
+  count: number;
+}
+
+export interface DistinctValuesResult {
+  values: DistinctValue[];
+  truncated: boolean;
 }
 
 /**
@@ -56,6 +86,8 @@ export interface TableWindow {
 export interface DataEnginePort {
   importFile(file: unknown, datasetId: EntityId): Promise<Result<ImportedRelation, DomainError>>;
   fetchTableWindow(request: TableWindowRequest): Promise<Result<TableWindow, DomainError>>;
+  executeAnalysis(query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>>;
+  getDistinctValues(request: DistinctValuesRequest): Promise<Result<DistinctValuesResult, DomainError>>;
 }
 
 /**
@@ -72,4 +104,6 @@ const unavailable = (): Result<never, DomainError> =>
 export const unavailableDataEngine: DataEnginePort = {
   importFile: () => Promise.resolve(unavailable()),
   fetchTableWindow: () => Promise.resolve(unavailable()),
+  executeAnalysis: () => Promise.resolve(unavailable()),
+  getDistinctValues: () => Promise.resolve(unavailable()),
 };

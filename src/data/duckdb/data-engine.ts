@@ -1,10 +1,16 @@
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import type {
+  AnalysisResult,
   DataEnginePort,
+  DistinctValuesRequest,
+  DistinctValuesResult,
   ImportedRelation,
   TableWindow,
   TableWindowRequest,
 } from '@/application/ports/data-engine-port.ts';
+import { createQueryCache } from '@/application/queries/query-cache.ts';
+import { compileAnalysisQuery } from '@/data/compiler/compile-analysis-query.ts';
+import type { CompiledQuery, QueryDataset } from '@/data/compiler/compile-analysis-query.ts';
 import { readArrowRows, readScalarCount } from '@/data/duckdb/arrow-conversion.ts';
 import type { ArrowRowSource } from '@/data/duckdb/arrow-conversion.ts';
 import { closeDuckDB, openDuckDB } from '@/data/duckdb/duckdb-bootstrap.ts';
@@ -23,7 +29,9 @@ import { ingestionFailure, validateColumnCount, validateImportFile } from '@/dat
 import type { ValidatedFile } from '@/data/import/import-dataset.ts';
 import { jsonToCsvBytes } from '@/data/import/json-to-csv.ts';
 import { MAX_TABLE_WINDOW_ROWS } from '@/data/import/import-limits.ts';
+import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
+import type { Filter } from '@/domain/filter/filter.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
@@ -47,6 +55,7 @@ import type { Result } from '@/shared/result/result.ts';
 interface RelationEntry {
   relationName: string;
   columns: Column[];
+  revision: number;
 }
 
 /** One row of DuckDB's `DESCRIBE` output. Only the two fields the engine uses are declared. */
@@ -177,6 +186,31 @@ const buildColumns = async (
   return columns;
 };
 
+const queryDataset = (datasetId: EntityId, relation: RelationEntry): QueryDataset => ({
+  id: datasetId,
+  relationId: relation.relationName,
+  columns: relation.columns,
+});
+
+const executeCompiled = async (connection: AsyncDuckDBConnection, compiled: CompiledQuery): Promise<ArrowRowSource> => {
+  const statement = await connection.prepare(compiled.sql);
+  try {
+    return (await statement.query(...compiled.parameters)) as unknown as ArrowRowSource;
+  } finally {
+    await statement.close();
+  }
+};
+
+const enabledExpressions = (filters: readonly Filter[]) =>
+  filters
+    .filter((filter) => filter.enabled)
+    .map((filter) => ({
+      kind: 'comparison' as const,
+      columnId: filter.columnId,
+      operator: filter.operator,
+      ...(filter.value === undefined ? {} : { value: filter.value }),
+    }));
+
 export const createDataEngine = (): DataEngine => {
   let handle: DuckDBHandle | null = null;
   let initializing: Promise<Result<void, DomainError>> | null = null;
@@ -185,6 +219,7 @@ export const createDataEngine = (): DataEngine => {
 
   /** Relation metadata by dataset ID. Rebuilt per session; the workspace store holds the durable copy. */
   const relations = new Map<EntityId, RelationEntry>();
+  const countCache = createQueryCache<number>();
 
   const requireConnection = (): Result<AsyncDuckDBConnection, DomainError> =>
     handle === null
@@ -270,7 +305,9 @@ export const createDataEngine = (): DataEngine => {
       const counted = await connection.query(`SELECT count(*) FROM ${quoteIdentifier(relationName)}`);
       const rowCount = readScalarCount(counted as unknown as ArrowRowSource);
 
-      relations.set(datasetId, { relationName, columns });
+      const revision = (relations.get(datasetId)?.revision ?? 0) + 1;
+      relations.set(datasetId, { relationName, columns, revision });
+      countCache.clear();
 
       return ok({ relationId: relationName, rowCount, columns });
     } catch {
@@ -290,6 +327,29 @@ export const createDataEngine = (): DataEngine => {
    * bound as parameters because DuckDB does not accept placeholders in `LIMIT`/`OFFSET`; they are
    * coerced through `Math.trunc` and clamped, so no caller-controlled text reaches the SQL.
    */
+  const executeAnalysis = async (query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>> => {
+    const connectionResult = requireConnection();
+    if (!connectionResult.ok) return connectionResult;
+    const relation = relations.get(query.datasetId);
+    if (relation === undefined) {
+      return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
+    }
+    const compiled = compileAnalysisQuery(query, queryDataset(query.datasetId, relation));
+    if (!compiled.ok) return compiled;
+    try {
+      const table = await executeCompiled(connectionResult.value, compiled.value);
+      return ok({
+        rows: readArrowRows(
+          table,
+          compiled.value.resultColumns.map((column) => column.logicalType),
+        ).rows,
+        columns: compiled.value.resultColumns,
+      });
+    } catch {
+      return err(engineFailure('QUERY_FAILED'));
+    }
+  };
+
   const fetchTableWindow = async (request: TableWindowRequest): Promise<Result<TableWindow, DomainError>> => {
     const connectionResult = requireConnection();
 
@@ -301,22 +361,56 @@ export const createDataEngine = (): DataEngine => {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
 
-    const connection = connectionResult.value;
     const limit = Math.min(Math.max(Math.trunc(request.limit) || 0, 0), MAX_TABLE_WINDOW_ROWS);
     const offset = Math.max(Math.trunc(request.offset) || 0, 0);
-    const projection = relation.columns.map((column) => quoteIdentifier(column.physicalName)).join(', ');
+    const filters = enabledExpressions(request.filters);
+    const compiled = compileAnalysisQuery(
+      {
+        datasetId: request.datasetId,
+        dimensions: [],
+        measures: [],
+        filters,
+        orderBy: request.sort ?? [],
+        limit,
+        offset,
+      },
+      queryDataset(request.datasetId, relation),
+    );
+    if (!compiled.ok) return compiled;
+    const countKey = {
+      datasetId: request.datasetId,
+      datasetRevision: relation.revision,
+      filters,
+      limit: 1,
+    };
 
     const scheduled = await scheduler
       .schedule(
         async () => {
-          const table = await connection.query(
-            `SELECT ${projection} FROM ${quoteIdentifier(relation.relationName)} LIMIT ${limit} OFFSET ${offset}`,
-          );
-
-          return readArrowRows(
-            table as unknown as ArrowRowSource,
-            relation.columns.map((column) => column.logicalType),
-          );
+          const table = await executeCompiled(connectionResult.value, compiled.value);
+          let totalRowCount = countCache.get(countKey);
+          if (totalRowCount === undefined) {
+            const count = compileAnalysisQuery(
+              {
+                datasetId: request.datasetId,
+                dimensions: [],
+                measures: [{ aggregate: 'count', alias: 'count' }],
+                filters,
+                limit: 1,
+              },
+              queryDataset(request.datasetId, relation),
+            );
+            if (!count.ok) throw new Error('Count compilation failed');
+            totalRowCount = readScalarCount(await executeCompiled(connectionResult.value, count.value));
+            countCache.set(countKey, totalRowCount);
+          }
+          return {
+            rows: readArrowRows(
+              table,
+              relation.columns.map((column) => column.logicalType),
+            ).rows,
+            totalRowCount,
+          };
         },
         {
           // Keyed per dataset so a window read for one dataset never supersedes another's.
@@ -332,9 +426,37 @@ export const createDataEngine = (): DataEngine => {
 
     // A superseded read returns no rows rather than an error: being overtaken by a newer request
     // is normal interaction, and the caller simply keeps what it already shows.
-    if (scheduled.stale) return ok({ rows: [], columnIds, offset, stale: true });
+    if (scheduled.stale) {
+      return ok({ rows: [], columnIds, columns: compiled.value.resultColumns, totalRowCount: 0, offset, stale: true });
+    }
 
-    return ok({ rows: scheduled.value.rows, columnIds, offset, stale: false });
+    return ok({
+      rows: scheduled.value.rows,
+      columnIds,
+      columns: compiled.value.resultColumns,
+      totalRowCount: scheduled.value.totalRowCount,
+      offset,
+      stale: false,
+    });
+  };
+
+  const getDistinctValues = async (
+    request: DistinctValuesRequest,
+  ): Promise<Result<DistinctValuesResult, DomainError>> => {
+    const limit = Math.min(Math.max(Math.trunc(request.limit ?? 200), 1), 200);
+    const result = await executeAnalysis({
+      datasetId: request.datasetId,
+      dimensions: [request.columnId],
+      measures: [{ aggregate: 'count', alias: 'count' }],
+      filters: enabledExpressions(request.filters),
+      orderBy: [{ measureAlias: 'count', direction: 'desc' }],
+      limit: limit + 1,
+    });
+    if (!result.ok) return result;
+    return ok({
+      values: result.value.rows.slice(0, limit).map((row) => ({ value: row[0] ?? null, count: Number(row[1] ?? 0) })),
+      truncated: result.value.rows.length > limit,
+    });
   };
 
   const initialize = (): Promise<Result<void, DomainError>> => {
@@ -364,6 +486,7 @@ export const createDataEngine = (): DataEngine => {
   const dispose = async (): Promise<void> => {
     scheduler.abortAll();
     relations.clear();
+    countCache.clear();
 
     const opened = handle;
 
@@ -373,7 +496,7 @@ export const createDataEngine = (): DataEngine => {
     if (opened !== null) await closeDuckDB(opened);
   };
 
-  return { initialize, importFile, fetchTableWindow, dispose };
+  return { initialize, importFile, fetchTableWindow, executeAnalysis, getDistinctValues, dispose };
 };
 
 /**

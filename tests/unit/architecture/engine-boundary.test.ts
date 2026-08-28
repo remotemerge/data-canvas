@@ -97,6 +97,6 @@ describe('data engine boundary', () => {
       .filter(([, source]) => /\b(?:SELECT|CREATE TABLE|DESCRIBE)\b/.test(source))
       .map(([file]) => file);
 
-    expect(sqlFiles).toEqual(['src/data/duckdb/data-engine.ts']);
+    expect(sqlFiles).toEqual(['src/data/compiler/compile-analysis-query.ts', 'src/data/duckdb/data-engine.ts']);
   });
 });

@@ -17,6 +17,7 @@ import {
 } from '@/application/actions/handlers/filter-handlers.ts';
 import type { HandlerDeps, HandlerOutcome } from '@/application/actions/handlers/handler-types.ts';
 import { handleUpdateLayout } from '@/application/actions/handlers/layout-handlers.ts';
+import { handleSetTableSort } from '@/application/actions/handlers/table-handlers.ts';
 import { handleCreateMetric, handleRemoveMetric } from '@/application/actions/handlers/metric-handlers.ts';
 import { handleAddAnnotation, handleRemoveAnnotation } from '@/application/actions/handlers/annotation-handlers.ts';
 import { handleClearSelection, handleSetSelection } from '@/application/actions/handlers/selection-handlers.ts';
@@ -73,6 +74,8 @@ const runHandler = (
       return handleRemoveFilter(workspace, action.payload, deps);
     case 'filters.clear':
       return handleClearFilters(workspace, action.payload, deps);
+    case 'table.sort':
+      return handleSetTableSort(workspace, action.payload, deps);
     case 'visualization.create':
       return handleCreateVisualization(workspace, action.payload, deps);
     case 'visualization.update':
