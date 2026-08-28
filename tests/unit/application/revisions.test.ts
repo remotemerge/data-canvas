@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { DataEnginePort } from '@/application/ports/data-engine-port.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { ok } from '@/shared/result/result.ts';
-import { createHarness, workspaceWithDataset } from './action-fixtures.ts';
+import { createHarness, salesDataset, stubDataEngine, workspaceWithDataset } from './action-fixtures.ts';
 
 const DATASET_ID = 'ds_sales';
 
@@ -189,18 +188,20 @@ describe('serialized execution', () => {
     // rather than on both actions happening to be synchronous.
     const { promise: gate, resolve: release } = Promise.withResolvers<void>();
 
-    const engine: DataEnginePort = {
-      importFile: async (_file, datasetId) => {
-        await gate;
+    const engine = stubDataEngine(async (_file, datasetId) => {
+      await gate;
 
-        return ok({ relationId: `dataset_${datasetId.slice(-4)}`, rowCount: 1, columns: [] });
-      },
-    };
+      return ok({ relationId: `dataset_${datasetId.slice(-4)}`, rowCount: 1, columns: [] });
+    });
 
-    const harness = createHarness(workspaceWithDataset(), engine);
+    // A dataset already in `loading` is what `dataset.import` resolves, so the slow action has
+    // something to act on without a preceding commit skewing the revision numbers under test.
+    const base = workspaceWithDataset();
+    const pending = { ...salesDataset('ds_pending'), importStatus: 'loading' as const };
+    const harness = createHarness({ ...base, datasets: { ...base.datasets, [pending.id]: pending } }, engine);
 
     const slow = harness.dispatcher.execute(
-      { type: 'dataset.import', payload: { file: new Blob(['a\n1']), name: 'Slow', sourceKind: 'csv' } },
+      { type: 'dataset.import', payload: { file: new Blob(['a\n1']), datasetId: pending.id } },
       { actor: 'human' },
     );
     const fast = harness.dispatcher.execute({ type: 'layout.update', payload: { columns: 6 } }, { actor: 'human' });

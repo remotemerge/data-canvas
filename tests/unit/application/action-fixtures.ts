@@ -4,11 +4,14 @@ import { createDispatcher } from '@/application/actions/dispatcher.ts';
 import type { DispatcherDeps } from '@/application/actions/dispatcher.ts';
 import type { ApplicationActions } from '@/application/actions/action-types.ts';
 import { unavailableDataEngine } from '@/application/ports/data-engine-port.ts';
+import type { DataEnginePort, ImportedRelation } from '@/application/ports/data-engine-port.ts';
+import { ok } from '@/shared/result/result.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import { createEmptyWorkspace } from '@/domain/workspace/workspace.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
+import type { EntityId } from '@/shared/ids/entity-id.ts';
 import type { WorkspaceState } from '@/state/workspace-store.ts';
 
 /*
@@ -69,6 +72,26 @@ export const workspaceWithDataset = (): Workspace => {
   return { ...createEmptyWorkspace('Test workspace'), datasets: { [dataset.id]: dataset } };
 };
 
+/**
+ * A stand-in engine for handler tests.
+ *
+ * Handler logic is independent of DuckDB, so these tests must not need a worker. The real engine is
+ * exercised in the browser, where it can actually run.
+ */
+export const stubDataEngine = (
+  importFile: DataEnginePort['importFile'] = (_file, datasetId) =>
+    Promise.resolve(
+      ok<ImportedRelation>({
+        relationId: `dataset_${datasetId.slice(-4)}`,
+        rowCount: 42,
+        columns: [column('col_a', 'a', 'number')],
+      }),
+    ),
+): DataEnginePort => ({
+  importFile,
+  fetchTableWindow: () => Promise.resolve(ok({ rows: [], columnIds: [], offset: 0, stale: false })),
+});
+
 export interface TestHarness {
   store: StoreApi<WorkspaceState>;
   dispatcher: ApplicationActions;
@@ -87,5 +110,38 @@ export const createHarness = (
     dispatcher: createDispatcher({ store, dataEngine }),
     workspace: () => store.getState().workspace,
     history: () => store.getState().history,
+  };
+};
+
+/**
+ * Runs the full import lifecycle: commit the `loading` placeholder, then resolve it.
+ *
+ * Tests go through both actions rather than calling `dataset.import` alone, because an import that
+ * skips the placeholder is not a path the application has — the handler rejects a dataset that is
+ * not already loading.
+ */
+export const importThroughDispatcher = async (
+  harness: TestHarness,
+  file: unknown,
+  name = 'Sales',
+): Promise<{
+  datasetId: EntityId | undefined;
+  result: Awaited<ReturnType<ApplicationActions['execute']>>;
+}> => {
+  const started = await harness.dispatcher.execute(
+    { type: 'dataset.beginImport', payload: { name, sourceKind: 'csv', byteSize: 1024 } },
+    { actor: 'human' },
+  );
+
+  const datasetId = started.ok ? started.value.changedEntityIds[0] : undefined;
+
+  if (datasetId === undefined) return { datasetId, result: started };
+
+  return {
+    datasetId,
+    result: await harness.dispatcher.execute(
+      { type: 'dataset.import', payload: { file, datasetId } },
+      { actor: 'human' },
+    ),
   };
 };

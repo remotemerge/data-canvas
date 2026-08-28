@@ -4,7 +4,12 @@ import type {
   ApplicationAction,
   ApplicationActions,
 } from '@/application/actions/action-types.ts';
-import { handleImportDataset, handleSetActiveDataset } from '@/application/actions/handlers/dataset-handlers.ts';
+import {
+  handleBeginDatasetImport,
+  handleFailDatasetImport,
+  handleImportDataset,
+  handleSetActiveDataset,
+} from '@/application/actions/handlers/dataset-handlers.ts';
 import {
   handleApplyFilter,
   handleClearFilters,
@@ -22,8 +27,8 @@ import {
 } from '@/application/actions/handlers/visualization-handlers.ts';
 import { appendHistoryEntry } from '@/application/history/action-history.ts';
 import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
-import { unavailableDataEngine } from '@/application/ports/data-engine-port.ts';
 import type { DataEnginePort } from '@/application/ports/data-engine-port.ts';
+import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -54,8 +59,12 @@ const runHandler = (
   deps: HandlerDeps,
 ): Result<HandlerOutcome, DomainError> | Promise<Result<HandlerOutcome, DomainError>> => {
   switch (action.type) {
+    case 'dataset.beginImport':
+      return handleBeginDatasetImport(workspace, action.payload, deps);
     case 'dataset.import':
       return handleImportDataset(workspace, action.payload, deps);
+    case 'dataset.failImport':
+      return handleFailDatasetImport(workspace, action.payload, deps);
     case 'dataset.setActive':
       return handleSetActiveDataset(workspace, action.payload, deps);
     case 'filter.apply':
@@ -191,7 +200,8 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 /**
  * The application's dispatcher instance.
  *
- * The data engine starts unavailable; actions needing it fail with `ENGINE_UNAVAILABLE` until a
- * real engine is installed. Metadata-only actions are fully functional regardless.
+ * The engine arrives through the registry rather than by direct import, so this module carries no
+ * DuckDB dependency. Until bootstrap registers and starts one, engine-backed actions fail with
+ * `ENGINE_UNAVAILABLE` while metadata-only actions stay fully functional.
  */
-export const dispatcher = createDispatcher({ store: workspaceStore, dataEngine: unavailableDataEngine });
+export const dispatcher = createDispatcher({ store: workspaceStore, dataEngine: registeredDataEngine });

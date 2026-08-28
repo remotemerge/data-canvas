@@ -1,9 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { APPLICATION_ACTION_TYPES } from '@/application/actions/action-types.ts';
 import type { ApplicationAction } from '@/application/actions/action-types.ts';
-import type { DataEnginePort } from '@/application/ports/data-engine-port.ts';
-import { ok } from '@/shared/result/result.ts';
-import { createHarness, salesDataset, visualization, workspaceWithDataset } from './action-fixtures.ts';
+import { domainError } from '@/shared/errors/domain-error.ts';
+import { err, ok } from '@/shared/result/result.ts';
+import {
+  createHarness,
+  importThroughDispatcher,
+  salesDataset,
+  stubDataEngine,
+  visualization,
+  workspaceWithDataset,
+} from './action-fixtures.ts';
 
 const DATASET_ID = 'ds_sales';
 
@@ -14,8 +21,12 @@ describe('dispatcher handler coverage', () => {
    */
   const sampleAction = (type: ApplicationAction['type']): ApplicationAction => {
     switch (type) {
+      case 'dataset.beginImport':
+        return { type, payload: { name: 'Sales', sourceKind: 'csv', byteSize: 8 } };
       case 'dataset.import':
-        return { type, payload: { file: new Blob(['a,b\n1,2']), name: 'Sales', sourceKind: 'csv' } };
+        return { type, payload: { file: new Blob(['a,b\n1,2']), datasetId: DATASET_ID } };
+      case 'dataset.failImport':
+        return { type, payload: { datasetId: DATASET_ID, reason: 'unreadable' } };
       case 'dataset.setActive':
         return { type, payload: { datasetId: DATASET_ID } };
       case 'filter.apply':
@@ -80,7 +91,7 @@ describe('dispatcher handler coverage', () => {
 
   test('every action type in the union is listed in APPLICATION_ACTION_TYPES', () => {
     expect(new Set(APPLICATION_ACTION_TYPES).size).toBe(APPLICATION_ACTION_TYPES.length);
-    expect(APPLICATION_ACTION_TYPES).toHaveLength(15);
+    expect(APPLICATION_ACTION_TYPES).toHaveLength(17);
   });
 });
 
@@ -255,48 +266,86 @@ describe('entity reference resolution', () => {
 describe('data engine port', () => {
   test('dataset.import fails with ENGINE_UNAVAILABLE while no engine is installed', async () => {
     const harness = createHarness();
-
-    const result = await harness.dispatcher.execute(
-      { type: 'dataset.import', payload: { file: new Blob(['a,b\n1,2']), name: 'Sales', sourceKind: 'csv' } },
-      { actor: 'human' },
-    );
+    const { datasetId, result } = await importThroughDispatcher(harness, new Blob(['a,b\n1,2']));
 
     expect(result.ok ? null : result.error.code).toBe('ENGINE_UNAVAILABLE');
-    expect(Object.keys(harness.workspace().datasets)).toHaveLength(1);
+
+    // The placeholder is still committed and still `loading`: only the resolving action failed.
+    expect(datasetId === undefined ? null : harness.workspace().datasets[datasetId]?.importStatus).toBe('loading');
   });
 
   test('a working engine commits the dataset through the same handler, unchanged', async () => {
-    // Plan 03 replaces the stub with a real engine against this same port; no handler edit needed.
-    const engine: DataEnginePort = {
-      importFile: (_file, datasetId) =>
-        Promise.resolve(
-          ok({
-            relationId: `dataset_${datasetId.slice(-4)}`,
-            rowCount: 42,
-            columns: [
-              {
-                id: 'col_a',
-                name: 'a',
-                physicalName: 'a',
-                databaseType: 'BIGINT',
-                logicalType: 'number' as const,
-                nullable: false,
-              },
-            ],
-          }),
-        ),
-    };
-
-    const harness = createHarness(workspaceWithDataset(), engine);
-
-    const result = await harness.dispatcher.execute(
-      { type: 'dataset.import', payload: { file: new Blob(['a\n1']), name: 'Imported', sourceKind: 'csv' } },
-      { actor: 'human' },
-    );
+    const harness = createHarness(workspaceWithDataset(), stubDataEngine());
+    const { datasetId, result } = await importThroughDispatcher(harness, new Blob(['a\n1']), 'Imported');
 
     expect(result.ok).toBe(true);
     expect(Object.keys(harness.workspace().datasets)).toHaveLength(2);
-    expect(harness.workspace().revision).toBe(1);
+
+    // Two commits, so two revisions: the placeholder and its resolution.
+    expect(harness.workspace().revision).toBe(2);
+
+    const imported = datasetId === undefined ? undefined : harness.workspace().datasets[datasetId];
+
+    expect(imported?.importStatus).toBe('ready');
+    expect(imported?.rowCount).toBe(42);
+    expect(imported?.relationId.startsWith('dataset_')).toBe(true);
+  });
+
+  test('the import lifecycle moves loading to ready across two attributable commits', async () => {
+    const harness = createHarness(workspaceWithDataset(), stubDataEngine());
+
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'Imported');
+
+    const types = harness.history().map((entry) => entry.type);
+
+    expect(types).toEqual(['dataset.beginImport', 'dataset.import']);
+    expect(harness.history().every((entry) => entry.actor === 'human')).toBe(true);
+  });
+
+  test('a failed import is committed as an error rather than left loading', async () => {
+    const failing = stubDataEngine(() =>
+      Promise.resolve(err(domainError('IMPORT_FAILED', 'The file could not be parsed.'))),
+    );
+    const harness = createHarness(workspaceWithDataset(), failing);
+    const { datasetId, result } = await importThroughDispatcher(harness, new Blob([' ']));
+
+    expect(result.ok).toBe(false);
+
+    if (datasetId === undefined) throw new Error('expected a placeholder dataset');
+
+    await harness.dispatcher.execute(
+      { type: 'dataset.failImport', payload: { datasetId, reason: 'The file could not be parsed.' } },
+      { actor: 'human' },
+    );
+
+    expect(harness.workspace().datasets[datasetId]?.importStatus).toBe('error');
+
+    // A dataset whose relation was never created must not stay active.
+    expect(harness.workspace().activeDatasetId).not.toBe(datasetId);
+  });
+
+  test('resolving a dataset that already imported is rejected', async () => {
+    const harness = createHarness(workspaceWithDataset(), stubDataEngine());
+
+    // The fixture dataset is already `ready`, which is the state this guard exists to reject.
+    const result = await harness.dispatcher.execute(
+      { type: 'dataset.import', payload: { file: new Blob(['a\n1']), datasetId: DATASET_ID } },
+      { actor: 'human' },
+    );
+
+    expect(result.ok ? null : result.error.code).toBe('IMPORT_FAILED');
+  });
+
+  test('an import failure message carries no file contents', async () => {
+    const secret = 'alice@example.com';
+    const failing = stubDataEngine(() =>
+      Promise.resolve(err(domainError('IMPORT_FAILED', 'The file could not be parsed.'))),
+    );
+    const harness = createHarness(workspaceWithDataset(), failing);
+    const { result } = await importThroughDispatcher(harness, new Blob([`email\n${secret}`]));
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : JSON.stringify(result.error)).not.toContain(secret);
   });
 });
 
@@ -322,26 +371,35 @@ describe('abort handling', () => {
 
   test('a signal aborted while the engine works abandons the commit', async () => {
     const controller = new AbortController();
-    const engine: DataEnginePort = {
-      importFile: async (_file, datasetId) => {
-        // Aborting mid-flight is the case that matters: the handler already did its work.
-        controller.abort();
+    const engine = stubDataEngine(async (_file, datasetId) => {
+      // Aborting mid-flight is the case that matters: the handler already did its work.
+      controller.abort();
 
-        return ok({ relationId: `dataset_${datasetId.slice(-4)}`, rowCount: 1, columns: [] });
-      },
-    };
+      return ok({ relationId: `dataset_${datasetId.slice(-4)}`, rowCount: 1, columns: [] });
+    });
 
     const harness = createHarness(workspaceWithDataset(), engine);
 
+    const started = await harness.dispatcher.execute(
+      { type: 'dataset.beginImport', payload: { name: 'Imported', sourceKind: 'csv', byteSize: 4 } },
+      { actor: 'human' },
+    );
+
+    const datasetId = started.ok ? started.value.changedEntityIds[0] : undefined;
+
+    if (datasetId === undefined) throw new Error('expected a placeholder dataset');
+
     const result = await harness.dispatcher.execute(
-      { type: 'dataset.import', payload: { file: new Blob(['a\n1']), name: 'Imported', sourceKind: 'csv' } },
+      { type: 'dataset.import', payload: { file: new Blob(['a\n1']), datasetId } },
       { actor: 'human', signal: controller.signal },
     );
 
     expect(result.ok).toBe(false);
-    expect(Object.keys(harness.workspace().datasets)).toHaveLength(1);
-    expect(harness.workspace().revision).toBe(0);
-    expect(harness.history()).toHaveLength(0);
+
+    // The placeholder commit stands; only the aborted resolution is abandoned.
+    expect(harness.workspace().datasets[datasetId]?.importStatus).toBe('loading');
+    expect(harness.workspace().revision).toBe(1);
+    expect(harness.history()).toHaveLength(1);
   });
 });
 

@@ -27,15 +27,32 @@ export type Actor = 'human' | 'agent' | 'system';
  * caller, so an agent cannot choose an entity's ID or forge its origin.
  */
 
+export interface BeginDatasetImportInput {
+  /** Display name shown in the UI. Rendered as plain text and never used to build SQL identifiers. */
+  name: string;
+  sourceKind: DatasetSourceKind;
+  byteSize: number;
+}
+
 export interface ImportDatasetInput {
   /**
    * The chosen local file. Typed as `unknown` at this boundary because `File` is a DOM type and the
    * application layer must not assume a browser; the data engine adapter narrows it.
    */
   file: unknown;
-  /** Display name shown in the UI. Rendered as plain text and never used to build SQL identifiers. */
-  name: string;
-  sourceKind: DatasetSourceKind;
+  /**
+   * The dataset committed by `dataset.beginImport`, whose status this action resolves.
+   *
+   * Supplied rather than generated because the placeholder already exists in the workspace: a fresh
+   * ID here would leave the `loading` row stranded forever.
+   */
+  datasetId: EntityId;
+}
+
+export interface FailDatasetImportInput {
+  datasetId: EntityId;
+  /** Corrective text for the user. Must contain no file contents; see `DomainError`. */
+  reason: string;
 }
 
 export interface SetActiveDatasetInput {
@@ -134,12 +151,19 @@ export interface UpdateLayoutInput {
  * This union is the single mutation vocabulary. React commands and WebMCP tools both construct
  * members of it and hand them to the dispatcher; neither has a private path to the store.
  *
- * `dataset.import` and `dataset.setActive` extend the set beyond the visualization/filter operations
- * because import is itself a state change that must be attributable and revisioned. Leaving it
- * outside the dispatcher would create the second mutation path this architecture exists to prevent.
+ * The dataset actions extend the set beyond the visualization/filter operations because import is
+ * itself a state change that must be attributable and revisioned. Leaving it outside the dispatcher
+ * would create the second mutation path this architecture exists to prevent.
+ *
+ * Import spans three actions rather than one because ingestion is slow enough to be visible.
+ * `beginImport` commits a `loading` placeholder immediately, then `import` resolves it to `ready`
+ * or `failImport` to `error`. Each transition is separately revisioned and attributable, so a
+ * half-finished import is an observable workspace state rather than a gap.
  */
 export type ApplicationAction =
+  | { type: 'dataset.beginImport'; payload: BeginDatasetImportInput }
   | { type: 'dataset.import'; payload: ImportDatasetInput }
+  | { type: 'dataset.failImport'; payload: FailDatasetImportInput }
   | { type: 'dataset.setActive'; payload: SetActiveDatasetInput }
   | { type: 'filter.apply'; payload: ApplyFilterInput }
   | { type: 'filter.remove'; payload: RemoveFilterInput }
@@ -159,7 +183,9 @@ export type ApplicationActionType = ApplicationAction['type'];
 
 /** Every action type, used by exhaustiveness tests and by handler-coverage assertions. */
 export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
+  'dataset.beginImport',
   'dataset.import',
+  'dataset.failImport',
   'dataset.setActive',
   'filter.apply',
   'filter.remove',
