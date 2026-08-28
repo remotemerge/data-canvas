@@ -80,3 +80,29 @@ describe('domain boundary', () => {
     expect(violations).toEqual([]);
   });
 });
+const imports = (source: string): string[] =>
+  [...source.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gu)].map(
+    (match) => match[1] ?? '',
+  );
+
+const sourceFiles = async (pattern: string): Promise<{ path: string; source: string }[]> => {
+  const files: { path: string; source: string }[] = [];
+  for await (const path of new Bun.Glob(pattern).scan('.')) files.push({ path, source: await Bun.file(path).text() });
+  return files;
+};
+
+describe('WebMCP boundaries', () => {
+  test('WebMCP handlers cannot import the store or DuckDB engine', async () => {
+    for (const file of await sourceFiles('src/webmcp/**/*.{ts,tsx}')) {
+      const specifiers = imports(file.source);
+      expect(specifiers, file.path).not.toContain('@/state/workspace-store.ts');
+      expect(specifiers, file.path).not.toContain('@/data/duckdb/data-engine.ts');
+    }
+  });
+
+  test('domain modules cannot import WebMCP types', async () => {
+    for (const file of await sourceFiles('src/domain/**/*.ts')) {
+      expect(imports(file.source), file.path).not.toContain('@mcp-b/webmcp-types');
+    }
+  });
+});
