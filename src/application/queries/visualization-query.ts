@@ -7,6 +7,7 @@ import type { Visualization } from '@/domain/visualization/visualization.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { ok } from '@/shared/result/result.ts';
+import { measureAsync, recordRowsReturned } from '@/shared/perf/performance-marks.ts';
 import type { Result } from '@/shared/result/result.ts';
 
 export interface ChartResult {
@@ -44,10 +45,11 @@ export const executeVisualizationQuery = async (
   visualization: Visualization,
   workspace: Workspace,
 ): Promise<Result<ChartResult, DomainError>> => {
-  const result: Result<AnalysisResult, DomainError> = await registeredDataEngine.executeAnalysis(
-    resolveVisualizationQuery(visualization, workspace),
+  const result: Result<AnalysisResult, DomainError> = await measureAsync('visualization-query', () =>
+    registeredDataEngine.executeAnalysis(resolveVisualizationQuery(visualization, workspace)),
   );
   if (!result.ok) return result;
+  recordRowsReturned('visualization-query', result.value.rows.length);
   const bounded = boundChartRows(result.value.rows);
   return ok({
     columns: result.value.columns,

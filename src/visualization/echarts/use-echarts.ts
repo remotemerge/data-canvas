@@ -1,6 +1,7 @@
 import { getInstanceByDom, init, type EChartsCoreOption, type EChartsType } from 'echarts/core';
 import { useEffect, useRef } from 'react';
 import '@/visualization/echarts/echarts-modules.ts';
+import { recordRenderCompletion } from '@/shared/perf/performance-marks.ts';
 
 export const useECharts = (
   option: EChartsCoreOption,
@@ -48,6 +49,7 @@ export const useECharts = (
     if (chart === null) return;
     chart.setOption(option, { notMerge: previousKind.current !== kind });
     previousKind.current = kind;
+    recordRenderCompletion('chart-render');
   }, [kind, option]);
 
   return elementRef;

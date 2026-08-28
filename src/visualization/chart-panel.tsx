@@ -8,6 +8,7 @@ import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
 import { buildEChartsOption, type ChartTheme } from '@/visualization/echarts/build-echarts-option.ts';
 import { useECharts } from '@/visualization/echarts/use-echarts.ts';
 import { formatValue } from '@/visualization/formatting.ts';
+import { measureSync } from '@/shared/perf/performance-marks.ts';
 import {
   categorySelectionFromClick,
   isSameSelection,
@@ -31,7 +32,10 @@ const EChart = ({ visualization, result }: { visualization: Visualization; resul
   const selection = useWorkspace((state) =>
     Object.values(state.workspace.selections).find((item) => item.datasetId === visualization.datasetId),
   );
-  const option = useMemo(() => buildEChartsOption(visualization, result, readTheme()), [result, visualization]);
+  const option = useMemo(
+    () => measureSync('chart-conversion', () => buildEChartsOption(visualization, result, readTheme())),
+    [result, visualization],
+  );
   const onClick = useCallback(
     (event: unknown) => {
       const predicate = categorySelectionFromClick(visualization, event as never);

@@ -219,6 +219,16 @@ select:focus-visible {
   border-left: 1px solid var(--dc-color-border);
 }
 
+.privacy-notice {
+  margin-top: auto;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.privacy-notice p {
+  margin: 0 0 var(--dc-space-2);
+}
+
 .workspace__panel-heading {
   margin: 0 0 var(--dc-space-3);
   color: var(--dc-color-text-muted);
