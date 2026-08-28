@@ -25,7 +25,11 @@
     "format:fix": "oxfmt",
     "dev": "vite --host 0.0.0.0",
     "preview": "vite preview",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:unit": "bun test tests/unit",
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
