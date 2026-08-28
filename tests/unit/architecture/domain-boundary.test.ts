@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
 /**
- * Defense in depth for the domain boundary.
+ * The domain boundary guard.
  *
- * `oxlint.config.ts` already bans these specifiers under `src/domain/**` via `no-restricted-imports`.
- * This test re-checks the same invariant independently, so the boundary still breaks the build if
- * the lint override is edited away, renamed, or silenced with a disable comment.
+ * This test is the sole enforcement of the rule. The shared `oxlint.config.ts` stays as authored and
+ * carries no path-scoped `no-restricted-imports` override, so nothing else catches a leaked adapter
+ * import. Keep this test passing rather than relaxing it.
  */
 const BANNED_SPECIFIERS = [
   'react',
