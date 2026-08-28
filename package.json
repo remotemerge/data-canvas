@@ -1,0 +1,50 @@
+{
+  "name": "@remotemerge/data-canvas",
+  "description": "The shared visual workspace for humans and AI to explore data together.",
+  "homepage": "https://data-canvas.madansapkota.com",
+  "bugs": {
+    "url": "https://github.com/remotemerge/data-canvas/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Madan Sapkota",
+    "email": "developermadan+dc@gmail.com",
+    "url": "https://madansapkota.com",
+    "role": "Maintainer"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/remotemerge/data-canvas.git"
+  },
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt",
+    "dev": "vite --host 0.0.0.0",
+    "preview": "vite preview",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-icons": "^5.7.0",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
+    "sass": "^1.103.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "engines": {
+    "bun": ">=1.4.0 <2.0.0"
+  }
+}
