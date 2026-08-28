@@ -4,6 +4,7 @@ import { validateImportFile } from '@/data/import/import-dataset.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { selectEngineStatus, useEngineStatus } from '@/state/use-engine-status.ts';
+import { measureAsync } from '@/shared/perf/performance-marks.ts';
 
 interface DatasetImportButtonProps {
   onError: (error: DomainError | null) => void;
@@ -52,7 +53,7 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
 
     if (datasetId === undefined) return;
 
-    const imported = await importDataset({ file, datasetId });
+    const imported = await measureAsync('dataset-import', () => importDataset({ file, datasetId }));
 
     if (imported.ok) {
       onError(null);
