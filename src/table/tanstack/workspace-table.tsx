@@ -16,11 +16,25 @@ const EMPTY_SORT: SortSpec[] = [];
 
 export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Element => {
   const filterRecord = useWorkspace(selectFilters);
+  const selectionRecord = useWorkspace((state) => state.workspace.selections);
   const tableSorts = useWorkspace((state) => state.workspace.tableSorts);
-  const filters = useMemo(
-    () => Object.values(filterRecord).filter((filter) => filter.datasetId === dataset.id),
-    [dataset.id, filterRecord],
-  );
+  const filters = useMemo(() => {
+    const stored = Object.values(filterRecord).filter((filter) => filter.datasetId === dataset.id);
+    const predicate = Object.values(selectionRecord).find((selection) => selection.datasetId === dataset.id)?.predicate;
+    if (predicate?.kind !== 'comparison') return stored;
+    return [
+      ...stored,
+      {
+        id: `selection_${dataset.id}`,
+        datasetId: dataset.id,
+        columnId: predicate.columnId,
+        operator: predicate.operator,
+        ...(predicate.value === undefined ? {} : { value: predicate.value }),
+        enabled: true,
+        origin: 'system' as const,
+      },
+    ];
+  }, [dataset.id, filterRecord, selectionRecord]);
   const sort = tableSorts[dataset.id] ?? EMPTY_SORT;
   const { clearFilters, setTableSort } = useActions();
   const [offset, setOffset] = useState(0);

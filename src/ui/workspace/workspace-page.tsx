@@ -15,6 +15,7 @@ import { FilterPanel } from '@/ui/dataset/filter-panel.tsx';
 import { DatasetSchemaPanel } from '@/ui/dataset/dataset-schema-panel.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
+import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
 
 /**
  * The workspace shell.
@@ -90,7 +91,10 @@ export const WorkspacePage = (): React.JSX.Element => {
               <p>Import a CSV or JSON file to explore its schema and rows.</p>
             </div>
           ) : (
-            <WorkspaceTable dataset={activeDataset} />
+            <>
+              <WorkspaceCanvas onError={setActionError} />
+              <WorkspaceTable dataset={activeDataset} />
+            </>
           )}
         </main>
 
