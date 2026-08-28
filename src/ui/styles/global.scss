@@ -54,14 +54,22 @@ body {
 
 .workspace__body {
   display: grid;
-  grid-template-columns: var(--dc-panel-width) 1fr;
+  grid-template-columns: var(--dc-panel-width) 1fr var(--dc-panel-width);
   min-height: 0;
 }
 
 .workspace__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-6);
   padding: var(--dc-space-4) var(--dc-space-4);
   border-right: 1px solid var(--dc-color-border);
   overflow-y: auto;
+}
+
+.workspace__panel--right {
+  border-right: 0;
+  border-left: 1px solid var(--dc-color-border);
 }
 
 .workspace__panel-heading {
@@ -74,8 +82,11 @@ body {
 }
 
 .workspace__canvas {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dc-space-4);
   padding: var(--dc-space-8);
   min-height: 0;
   overflow: auto;
@@ -99,4 +110,125 @@ body {
   place-items: center;
   height: 100%;
   text-align: center;
+}
+
+.density__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dc-space-2);
+}
+
+.density__option {
+  padding: var(--dc-space-1) var(--dc-space-3);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.density__option:hover {
+  color: var(--dc-color-text);
+  border-color: var(--dc-color-accent);
+}
+
+.density__option[aria-pressed="true"] {
+  border-color: var(--dc-color-accent);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text);
+}
+
+.density__value {
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history__entry {
+  padding-bottom: var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-color-border);
+}
+
+.history__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+}
+
+.history__actor {
+  padding: 0 var(--dc-space-2);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Actor colour is the fastest way to scan who changed what once agents write to the workspace. */
+.history__actor--human {
+  color: var(--dc-color-accent);
+}
+
+.history__actor--agent {
+  color: #7ad9a5;
+}
+
+.history__actor--system {
+  color: var(--dc-color-text-muted);
+}
+
+.history__revision {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.history__summary {
+  margin: var(--dc-space-1) 0 0;
+  font-size: var(--dc-text-sm);
+}
+
+.action-error {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-3);
+  padding: var(--dc-space-3) var(--dc-space-4);
+  width: 100%;
+  max-width: 40rem;
+  border: 1px solid #7f3b3b;
+  border-radius: var(--dc-radius);
+  background: #2a1618;
+}
+
+.action-error__code {
+  color: #ff9d9d;
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.action-error__message {
+  flex: 1;
+  font-size: var(--dc-text-sm);
+}
+
+.action-error__dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-lg);
+  line-height: 1;
+  cursor: pointer;
 }

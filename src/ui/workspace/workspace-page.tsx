@@ -1,6 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { selectDatasets, selectRevision, selectWorkspaceName } from '@/state/selectors/workspace-selectors.ts';
+import { ActionErrorBanner } from '@/ui/components/action-error-banner.tsx';
+import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
+import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
 
 /**
  * The workspace shell.
@@ -11,11 +15,18 @@ import { selectDatasets, selectRevision, selectWorkspaceName } from '@/state/sel
  *
  * The header shows the revision counter on purpose. It makes the optimistic-concurrency model
  * observable when a human and an agent edit the workspace at the same time.
+ *
+ * No component here mutates the store. Every change goes through `useActions`, the same dispatcher
+ * the WebMCP adapter calls.
  */
 export const WorkspacePage = (): React.JSX.Element => {
   const name = useWorkspace(selectWorkspaceName);
   const revision = useWorkspace(selectRevision);
   const datasets = useWorkspace(selectDatasets);
+
+  // The most recent dispatch failure. Held locally rather than in the store: a rejected action is
+  // this view's transient concern, not shared workspace state.
+  const [actionError, setActionError] = useState<DomainError | null>(null);
 
   // Selectors stay referentially stable by returning the stored record; arrays are derived here.
   const datasetList = useMemo(() => Object.values(datasets), [datasets]);
@@ -39,14 +50,22 @@ export const WorkspacePage = (): React.JSX.Element => {
               ))}
             </ul>
           )}
+
+          <CanvasDensityControl onError={setActionError} />
         </aside>
 
         <main className="workspace__canvas">
+          <ActionErrorBanner error={actionError} onDismiss={() => setActionError(null)} />
+
           <div className="workspace__empty">
             <p className="workspace__empty-title">Nothing on the canvas yet</p>
             <p>Dataset import and visualizations arrive in later plans.</p>
           </div>
         </main>
+
+        <aside className="workspace__panel workspace__panel--right">
+          <ActionHistoryPanel />
+        </aside>
       </div>
     </div>
   );
