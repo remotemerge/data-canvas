@@ -3,6 +3,7 @@ import ehWasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import ehWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 import mvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
+import { databasePath, type DatabaseStorage } from '@/data/persistence/opfs-database.ts';
 
 /**
  * Brings up DuckDB-Wasm in a worker.
@@ -68,14 +69,7 @@ const SECURITY_STATEMENTS: readonly string[] = [
  */
 const REQUIRED_EXTENSIONS: readonly string[] = [];
 
-/**
- * Instantiates DuckDB and opens an in-memory database.
- *
- * `:memory:` is the locked decision for this stage. Durable OPFS storage is a later, separate
- * concern with its own schema versioning and migration requirements, and adopting it early would
- * create a second source of truth before there is a migration story for it.
- */
-export const openDuckDB = async (): Promise<DuckDBHandle> => {
+export const openDuckDB = async (storage: DatabaseStorage = 'opfs'): Promise<DuckDBHandle> => {
   const bundle = await duckdb.selectBundle(BUNDLES);
 
   if (bundle.mainWorker === null) {
@@ -89,7 +83,8 @@ export const openDuckDB = async (): Promise<DuckDBHandle> => {
   await database.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
   await database.open({
-    path: ':memory:',
+    path: databasePath(storage),
+    accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
     query: {
       /**
        * Integers stay `BIGINT` rather than being cast to double on the way out. The conversion

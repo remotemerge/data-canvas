@@ -10,10 +10,6 @@ import { createEntityId, ID_PREFIX, type EntityId } from '@/shared/ids/entity-id
 /** Monotonic counter, incremented exactly once per committed action. */
 export type WorkspaceRevision = number;
 
-/**
- * Persisted domain shape version. The migration runner walks this chain in order, so bump the
- * value only alongside a matching migration.
- */
 export const CURRENT_SCHEMA_VERSION = 1;
 
 export interface WorkspaceLayoutItem {

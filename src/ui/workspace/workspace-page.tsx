@@ -17,6 +17,7 @@ import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
 import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
 import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx';
+import { StoragePanel } from '@/ui/workspace/storage-panel.tsx';
 
 /**
  * The workspace shell.
@@ -102,6 +103,7 @@ export const WorkspacePage = (): React.JSX.Element => {
 
         <aside className="workspace__panel workspace__panel--right">
           <ActionHistoryPanel />
+          <StoragePanel />
           <section className="privacy-notice" aria-labelledby="privacy-notice-title">
             <h2 id="privacy-notice-title" className="workspace__panel-heading">
               Privacy

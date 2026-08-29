@@ -1,5 +1,11 @@
 import { registerDataEngine } from '@/application/ports/engine-registry.ts';
 import { engineStore, setEngineFailed, setEngineReady, setEngineStarting } from '@/state/engine-status.ts';
+import { createCheckpointScheduler, writeCheckpoint } from '@/data/persistence/checkpoint.ts';
+import { hydrateWorkspace } from '@/data/persistence/hydrate-workspace.ts';
+import { createMetadataTables } from '@/data/persistence/schema/metadata-tables.ts';
+import { hydrateWorkspaceState, workspaceStore } from '@/state/workspace-store.ts';
+
+let stopPersistence: (() => void) | null = null;
 
 /**
  * Brings DuckDB up and installs it as the application's engine.
@@ -30,6 +36,34 @@ export const startEngine = async (): Promise<void> => {
 
       return;
     }
+
+    const database = dataEngine.persistenceDatabase();
+    if (database === null) throw new Error('DuckDB opened without a persistence connection.');
+    await createMetadataTables(database);
+    const hydrated = await hydrateWorkspace(database);
+    if (hydrated !== null && hydrated.warnings.length === 0) {
+      hydrateWorkspaceState(hydrated.workspace, hydrated.history);
+      dataEngine.restoreDatasets(hydrated.workspace.datasets);
+    }
+    const scheduler = createCheckpointScheduler(
+      (state) => writeCheckpoint(database, state),
+      500,
+      () => window.dispatchEvent(new CustomEvent('data-canvas:persistence-error')),
+    );
+    const unsubscribe = workspaceStore.subscribe((state) => scheduler.schedule(state));
+    const flushOnLeave = (): void => {
+      if (document.visibilityState === 'hidden') void scheduler.flush();
+    };
+    const flushOnPageHide = (): void => void scheduler.flush();
+    document.addEventListener('visibilitychange', flushOnLeave);
+    window.addEventListener('pagehide', flushOnPageHide);
+    stopPersistence?.();
+    stopPersistence = () => {
+      unsubscribe();
+      scheduler.dispose();
+      document.removeEventListener('visibilitychange', flushOnLeave);
+      window.removeEventListener('pagehide', flushOnPageHide);
+    };
 
     // Registered only after a successful start, so the dispatcher never routes an action to an
     // engine that failed to come up.
