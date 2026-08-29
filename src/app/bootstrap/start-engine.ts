@@ -45,12 +45,18 @@ export const startEngine = async (): Promise<void> => {
       hydrateWorkspaceState(hydrated.workspace, hydrated.history, hydrated.undoStack, hydrated.redoStack);
       dataEngine.restoreDatasets(hydrated.workspace.datasets);
     }
+    dataEngine.setRelationships(workspaceStore.getState().workspace.relationships);
     const scheduler = createCheckpointScheduler(
       (state) => writeCheckpoint(database, state),
       500,
       () => window.dispatchEvent(new CustomEvent('data-canvas:persistence-error')),
     );
-    const unsubscribe = workspaceStore.subscribe((state) => scheduler.schedule(state));
+    const unsubscribe = workspaceStore.subscribe((state) => {
+      // The engine compiles joins and so needs the current graph, but must not read the store
+      // itself. Pushing on every commit keeps its copy in step without that dependency.
+      dataEngine.setRelationships(state.workspace.relationships);
+      scheduler.schedule(state);
+    });
     const flushOnLeave = (): void => {
       if (document.visibilityState === 'hidden') void scheduler.flush();
     };
