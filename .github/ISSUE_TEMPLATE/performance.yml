@@ -1,0 +1,67 @@
+name: Performance report
+description: Report a measured performance problem or budget change.
+title: '[Performance]: '
+labels: ['performance']
+body:
+  - type: input
+    id: fixture
+    attributes:
+      label: Fixture
+    validations:
+      required: true
+  - type: input
+    id: dimensions
+    attributes:
+      label: Dataset dimensions
+      placeholder: Rows and columns
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+    validations:
+      required: true
+  - type: textarea
+    id: operation
+    attributes:
+      label: Operation
+    validations:
+      required: true
+  - type: input
+    id: baseline
+    attributes:
+      label: Baseline
+    validations:
+      required: true
+  - type: input
+    id: observed
+    attributes:
+      label: Observed
+    validations:
+      required: true
+  - type: input
+    id: budget
+    attributes:
+      label: Expected budget
+    validations:
+      required: true
+  - type: input
+    id: query_cardinality
+    attributes:
+      label: Query result cardinality
+    validations:
+      required: true
+  - type: input
+    id: rendered_cardinality
+    attributes:
+      label: Rendered cardinality
+    validations:
+      required: true
+  - type: textarea
+    id: profile
+    attributes:
+      label: Profile evidence
+      description: Link or paste measurements without dataset contents.
+    validations:
+      required: true
