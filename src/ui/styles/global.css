@@ -201,13 +201,84 @@ textarea:focus-visible,
 .chart-panel__header {
   display: flex;
   align-items: center;
+  gap: var(--dc-space-2);
   justify-content: space-between;
   padding-right: 4.5rem;
 }
 
+/* The title and its provenance disclosure share one line. Without this the `details` keeps its
+   block default and wraps under the title, growing the header until it collides with the controls. */
+.chart-panel__header h3 {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--dc-space-2);
+}
+
+/* Chart titles are user- or agent-supplied and must truncate rather than push the controls away. */
+.chart-panel__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provenance {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--dc-space-1);
+}
+
+.provenance details {
+  position: relative;
+  font-weight: 400;
+}
+
+.provenance summary {
+  color: var(--muted-foreground);
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+/* The history list is a transient disclosure, so it floats over the chart rather than displacing
+   it — expanding it must not resize the plot underneath. */
+.provenance details[open] > :not(summary) {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + var(--dc-space-1));
+  left: 0;
+  width: max-content;
+  max-width: 20rem;
+  margin: 0;
+  padding: var(--dc-space-2) var(--dc-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 8%);
+  color: var(--popover-foreground);
+  font-size: var(--dc-text-sm);
+  list-style-position: inside;
+}
+
 .chart-panel__controls {
   display: flex;
+  flex: none;
   gap: var(--dc-space-2);
+}
+
+/* On a narrow card the selection control would otherwise squeeze the title down to a few
+   characters. The label is redundant next to the dropdown's own values, so it drops out first and
+   the title keeps the room. */
+@container (max-width: 30rem) {
+  .chart-panel .link-mode-control__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .chart-panel__chart {
@@ -508,7 +579,10 @@ textarea:focus-visible,
 .workspace__canvas {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* The canvas is the workspace's primary surface and takes the width it is given; centring here
+     would leave charts and tables floating in a narrow column. Individual notices constrain
+     themselves instead. */
+  align-items: stretch;
   /* Content-first rather than centred: a preview table must start at the top and grow downwards. */
   justify-content: flex-start;
   gap: var(--dc-space-4);
@@ -518,14 +592,23 @@ textarea:focus-visible,
   overflow: auto;
 }
 
-.workspace__canvas > .workspace__empty {
-  margin-block: auto;
+/* Banners stay readable rather than stretching the full canvas width. */
+.workspace__canvas > .engine-status,
+.workspace__canvas > .action-error {
+  align-self: center;
 }
 
+.workspace__canvas > .workspace__empty {
+  margin-block: auto;
+  margin-inline: auto;
+  text-align: center;
+}
+
+/* The canvas hero centres itself (above); in a side panel the same placeholder is one compact row
+   of prose in a column of left-aligned controls, so it stays left-aligned and full width. */
 .workspace__empty {
   max-width: 32rem;
   color: var(--dc-color-text-muted);
-  text-align: center;
 }
 
 .workspace__empty-icon {
@@ -1090,12 +1173,33 @@ textarea:focus-visible,
   list-style: none;
 }
 
+/* An explorer row is a fixed three-slot grid rather than wrapping flex: with five items competing
+   for a ~240px panel, flex-wrap broke each column across two ragged lines of differing height. The
+   name takes the free space, the type and the stats toggle keep their intrinsic width, and the
+   quieter metadata drops to a second line that is the same for every row. */
 .schema__column {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--dc-space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--dc-space-1) var(--dc-space-2);
+  padding-block: var(--dc-space-1);
   font-size: var(--dc-text-sm);
+}
+
+/* The metadata line spans the row and lays its own items out, so it stays one line whether or not
+   the optional `nullable` marker is present. */
+.schema__meta {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+}
+
+.schema__nullable,
+.schema__physical {
+  margin: 0;
+  font-size: 0.6875rem;
 }
 
 /* Column headers come from the imported file and can be arbitrarily long or unbroken. */
@@ -1121,10 +1225,6 @@ textarea:focus-visible,
   color: var(--dc-color-text-muted);
   font-family: var(--dc-font-mono);
   font-size: var(--dc-text-sm);
-}
-
-.schema__physical {
-  margin-left: auto;
 }
 
 .schema__profile-toggle {
@@ -1353,6 +1453,20 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
+/* Numeric columns align right so magnitudes line up digit by digit. Tabular figures are what make
+   that alignment hold: proportional digits vary in width and leave the columns ragged. */
+.data-table__table th[data-align="end"],
+.data-table__table td[data-align="end"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The header's sort control fills the cell, so it carries the alignment rather than the cell. */
+.data-table__table th[data-align="end"] .data-table__sort {
+  width: 100%;
+  text-align: right;
+}
+
 .filter-editor,
 .filter-list {
   display: flex;
@@ -1401,13 +1515,17 @@ textarea:focus-visible,
   background: var(--panel);
 }
 
+/* The panel is the query container for its own header: a chart is narrow because of its column
+   span, not because the viewport is small, so a media query would be the wrong signal here. */
 .chart-panel {
+  container-type: inline-size;
   padding: var(--dc-space-3);
 }
 
 .chart-panel__header {
   min-height: 2rem;
-  padding-right: 4rem;
+  /* Clears the resize control that floats over the panel's top-right corner. */
+  padding-right: 4.75rem;
 }
 
 .chart-panel__header h3 {
@@ -1469,6 +1587,16 @@ textarea:focus-visible,
   background: var(--primary-hover);
 }
 
+.import__button[data-emphasis="secondary"] {
+  border-color: var(--input);
+  background: var(--panel);
+  color: var(--foreground);
+}
+
+.import__button[data-emphasis="secondary"]:hover:not(:disabled) {
+  background: var(--secondary);
+}
+
 @media (max-width: 1023px) {
   .workspace__body {
     grid-template-columns: minmax(0, 1fr);
@@ -1513,9 +1641,11 @@ textarea:focus-visible,
     min-height: 18rem;
   }
 
+  /* The reserve must clear the floating resize control, which is two 32px buttons plus their gap;
+     3.5rem left the narrower button underneath the delete action and untappable. */
   .chart-panel__header {
-    align-items: flex-start;
-    padding-right: 3.5rem;
+    align-items: center;
+    padding-right: 4.75rem;
   }
 
   .chart-panel__controls {
