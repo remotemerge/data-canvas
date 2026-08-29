@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ command }) => {
@@ -15,6 +16,7 @@ export default defineConfig(({ command }) => {
     envPrefix: ['VITE_'],
     plugins: [
       react(),
+      tailwindcss(),
       VitePWA({
         includeAssets: ['icon.svg', 'icon-maskable.svg'],
         injectRegister: null,
@@ -25,8 +27,8 @@ export default defineConfig(({ command }) => {
           start_url: '/',
           scope: '/',
           display: 'standalone',
-          background_color: '#0f1117',
-          theme_color: '#5b8cff',
+          background_color: '#f8fafc',
+          theme_color: '#f8fafc',
           orientation: 'any',
           icons: [
             {
