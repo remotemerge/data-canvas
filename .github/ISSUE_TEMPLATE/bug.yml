@@ -1,0 +1,73 @@
+name: Bug report
+description: Report incorrect or regressed behavior.
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: List the smallest reliable sequence of steps.
+    validations:
+      required: true
+  - type: input
+    id: fixture
+    attributes:
+      label: Dataset fixture
+      description: Name a committed fixture.
+  - type: textarea
+    id: workspace
+    attributes:
+      label: Workspace revision and state
+      description: Include the revision and relevant metadata, but no dataset rows.
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: Chrome version and operating system
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: Affected path
+      options:
+        - Human interaction
+        - WebMCP interaction
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: errors
+    attributes:
+      label: Console or worker errors
+      description: Remove dataset values that are unrelated to the bug.
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy impact
+      description: State whether data was exposed, persisted, or sent over the network.
+    validations:
+      required: true
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Regression
+      options:
+        - Yes
+        - No
+        - Unknown
+    validations:
+      required: true
