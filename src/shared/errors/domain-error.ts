@@ -15,6 +15,14 @@ export type DomainErrorCode =
   | 'RELATIONSHIP_CYCLE'
   | 'DATASET_IN_USE'
   | 'STALE_WORKSPACE_REVISION'
+  /**
+   * A persisted workspace cannot be brought to the current schema version — it was written by a
+   * newer build, its version is unreadable, or no migration covers its version.
+   *
+   * Distinct from `UNSUPPORTED_OPERATION` because the corrective action differs: the workspace must
+   * be left on disk untouched rather than retried or overwritten by a checkpoint.
+   */
+  | 'WORKSPACE_VERSION_UNSUPPORTED'
   | 'RESULT_LIMIT_EXCEEDED'
   | 'UNSUPPORTED_OPERATION'
   | 'IMPORT_FAILED'
