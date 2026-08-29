@@ -7,6 +7,9 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
+/** Aggregates whose result is only defined over numbers. `min`/`max` order text and dates too. */
+const NUMERIC_ONLY = new Set<AggregateFunction>(['sum', 'avg', 'median', 'stddev']);
+
 /**
  * Compiles an aggregate over one column.
  *
@@ -21,7 +24,7 @@ export const compileAggregate = (
   if (aggregate === 'count') return ok('COUNT(*)');
   if (column === undefined) return err(domainError('COLUMN_NOT_FOUND', 'This aggregate requires a column.'));
 
-  if ((aggregate === 'sum' || aggregate === 'avg' || aggregate === 'median') && !isNumericType(column.logicalType)) {
+  if (NUMERIC_ONLY.has(aggregate) && !isNumericType(column.logicalType)) {
     return err(
       domainError('INCOMPATIBLE_COLUMN', `Aggregate '${aggregate}' requires a numeric column.`, {
         columnId: column.id,
@@ -32,5 +35,8 @@ export const compileAggregate = (
 
   const identifier = reference ?? quoteIdentifier(column.physicalName);
   if (aggregate === 'count_distinct') return ok(`COUNT(DISTINCT ${identifier})`);
+  // `stddev` maps to the sample estimator explicitly rather than to DuckDB's `stddev` alias, so the
+  // emitted statement states which of the two definitions it means.
+  if (aggregate === 'stddev') return ok(`stddev_samp(${identifier})`);
   return ok(`${aggregate.toUpperCase()}(${identifier})`);
 };
