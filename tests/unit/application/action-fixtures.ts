@@ -5,6 +5,8 @@ import type { DispatcherDeps } from '@/application/actions/dispatcher.ts';
 import type { ApplicationActions } from '@/application/actions/action-types.ts';
 import { unavailableDataEngine } from '@/application/ports/data-engine-port.ts';
 import type { DataEnginePort, ImportedRelation } from '@/application/ports/data-engine-port.ts';
+import { getColumnProfile } from '@/application/queries/column-statistics.ts';
+import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 import { ok } from '@/shared/result/result.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
@@ -35,6 +37,9 @@ export const SALES_COLUMNS: Column[] = [
   column('col_region', 'region', 'category'),
   column('col_notes', 'notes', 'string'),
   column('col_revenue', 'revenue', 'number'),
+  // A second numeric column, so a derived expression can divide one measure by another and the
+  // zero-denominator case has somewhere to come from.
+  column('col_units', 'units', 'number'),
   column('col_returned', 'returned', 'boolean'),
 ];
 
@@ -150,11 +155,25 @@ export const stubDataEngine = (
     Promise.resolve(ok({ rows: [], columnIds: [], columns: [], totalRowCount: 0, offset: 0, stale: false })),
   executeAnalysis: () => Promise.resolve(ok({ rows: [], columns: [] })),
   getDistinctValues: () => Promise.resolve(ok({ values: [], truncated: false })),
+  getColumnStatistics: () =>
+    Promise.resolve(ok({ rowCount: 0, nullCount: 0, distinctCount: 0, distinctCountCapped: false })),
+  getColumnRange: () => Promise.resolve(ok({ min: 0, max: 0 })),
   // A unique key by default, so a relationship created in a test carries no fan-out warning unless
   // the test deliberately overrides this to measure one.
   measureKeyQuality: () => Promise.resolve(ok({ sampledRows: 100, distinctKeys: 100 })),
   dropDataset: () => Promise.resolve(ok(undefined)),
 });
+
+/**
+ * Wires the column-statistics dependency the tool surface needs.
+ *
+ * Shared so the six call sites that build `ToolDependencies` do not each restate how the profile
+ * reaches the engine, which is the application query's job rather than each test's.
+ */
+export const stubColumnStatistics =
+  (engine: DataEnginePort, workspace: () => Workspace): ToolDependencies['fetchColumnStatistics'] =>
+  (request) =>
+    getColumnProfile(engine, workspace(), request.datasetId, request.columnId, request.topValueLimit);
 
 export interface TestHarness {
   store: StoreApi<WorkspaceState>;

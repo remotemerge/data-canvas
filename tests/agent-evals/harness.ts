@@ -1,5 +1,6 @@
 import {
   createHarness,
+  stubColumnStatistics,
   stubDataEngine,
   visualization,
   workspaceWithDataset,
@@ -25,7 +26,8 @@ export const runScenario = async (scenario: EvalScenario) => {
   const existing = visualization('viz_existing', 'ds_sales');
   const workspace =
     scenario.fixture === 'sales-with-chart' ? { ...initial, visualizations: { [existing.id]: existing } } : initial;
-  const harness = createHarness(workspace, stubDataEngine());
+  const engine = stubDataEngine();
+  const harness = createHarness(workspace, engine);
   const tools = createToolDefinitions({
     dispatcher: harness.dispatcher,
     getWorkspace: harness.workspace,
@@ -35,6 +37,7 @@ export const runScenario = async (scenario: EvalScenario) => {
         value: { rows: [], columns: [], columnIds: [], totalRowCount: 0, offset: 0, stale: false },
       }),
     executeAnalysis: () => Promise.resolve({ ok: true, value: { rows: [], columns: [] } }),
+    fetchColumnStatistics: stubColumnStatistics(engine, harness.workspace),
   });
   const outputs: string[] = [];
   for (const call of scenario.transcript) {

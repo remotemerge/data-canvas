@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createHarness, stubDataEngine } from '../unit/application/action-fixtures.ts';
+import { createHarness, stubColumnStatistics, stubDataEngine } from '../unit/application/action-fixtures.ts';
 import { createToolDefinitions } from '@/webmcp/registry/tool-registry.ts';
 
 test('an agent write based on a stale revision cannot mutate human state', async () => {
@@ -10,6 +10,7 @@ test('an agent write based on a stale revision cannot mutate human state', async
     getWorkspace: harness.workspace,
     fetchTableWindow: engine.fetchTableWindow,
     executeAnalysis: engine.executeAnalysis,
+    fetchColumnStatistics: stubColumnStatistics(engine, harness.workspace),
   });
   const revision = harness.workspace().revision;
   await harness.dispatcher.execute({ type: 'layout.update', payload: { columns: 6 } }, { actor: 'human' });

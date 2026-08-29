@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createHarness, stubDataEngine } from '../unit/application/action-fixtures.ts';
+import { createHarness, stubColumnStatistics, stubDataEngine } from '../unit/application/action-fixtures.ts';
 import { createToolDefinitions } from '@/webmcp/registry/tool-registry.ts';
 
 test('invalid agent references leave state unchanged', async () => {
@@ -10,6 +10,7 @@ test('invalid agent references leave state unchanged', async () => {
     getWorkspace: harness.workspace,
     fetchTableWindow: engine.fetchTableWindow,
     executeAnalysis: engine.executeAnalysis,
+    fetchColumnStatistics: stubColumnStatistics(engine, harness.workspace),
   });
   const before = structuredClone(harness.store.getState());
   const result = await tools

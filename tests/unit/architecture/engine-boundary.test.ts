@@ -97,11 +97,15 @@ describe('data engine boundary', () => {
       .filter(([, source]) => /\b(?:SELECT|CREATE TABLE|DESCRIBE)\b/.test(source))
       .map(([file]) => file);
 
-    expect(sqlFiles).toEqual([
-      'src/data/compiler/compile-analysis-query.ts',
-      'src/data/duckdb/data-engine.ts',
-      'src/data/persistence/hydrate-workspace.ts',
-      'src/data/persistence/schema/metadata-tables.ts',
-    ]);
+    expect(sqlFiles.toSorted()).toEqual(
+      [
+        'src/data/compiler/compile-analysis-query.ts',
+        'src/data/compiler/compile-derived-expression.ts',
+        'src/data/compiler/compile-time-spine.ts',
+        'src/data/duckdb/data-engine.ts',
+        'src/data/persistence/hydrate-workspace.ts',
+        'src/data/persistence/schema/metadata-tables.ts',
+      ].toSorted(),
+    );
   });
 });

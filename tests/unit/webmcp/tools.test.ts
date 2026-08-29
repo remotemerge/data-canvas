@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { ModelContext } from '@mcp-b/webmcp-types';
-import { createHarness, stubDataEngine, workspaceWithDataset } from '../application/action-fixtures.ts';
+import {
+  createHarness,
+  stubColumnStatistics,
+  stubDataEngine,
+  workspaceWithDataset,
+} from '../application/action-fixtures.ts';
 import { createToolDefinitions, createToolRegistry } from '@/webmcp/registry/tool-registry.ts';
 import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 
@@ -12,6 +17,7 @@ const setup = () => {
     getWorkspace: harness.workspace,
     fetchTableWindow: (request) => engine.fetchTableWindow(request),
     executeAnalysis: (query) => engine.executeAnalysis(query),
+    fetchColumnStatistics: stubColumnStatistics(engine, harness.workspace),
   };
   const tools = createToolDefinitions(deps);
   const tool = (name: string) => {
