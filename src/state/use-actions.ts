@@ -23,6 +23,8 @@ import type {
 import { dispatcher } from '@/application/actions/dispatcher.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { Result } from '@/shared/result/result.ts';
+import { createUndoRedo } from '@/application/history/undo-redo.ts';
+import { workspaceStore } from '@/state/workspace-store.ts';
 
 type Command<TInput> = (input: TInput) => Promise<Result<ActionResult, DomainError>>;
 
@@ -45,7 +47,11 @@ export interface WorkspaceCommands {
   addAnnotation: Command<AddAnnotationInput>;
   removeAnnotation: Command<RemoveAnnotationInput>;
   updateLayout: Command<UpdateLayoutInput>;
+  undo: () => Promise<Result<ActionResult, DomainError>>;
+  redo: () => Promise<Result<ActionResult, DomainError>>;
 }
+
+const historyCommands = createUndoRedo({ dispatcher, store: workspaceStore });
 
 /*
  * Human commands are attributed `actor: 'human'` and omit `expectedRevision`: the person issuing
@@ -75,6 +81,8 @@ const humanCommands: WorkspaceCommands = {
   addAnnotation: (input) => dispatcher.execute({ type: 'annotation.add', payload: input }, { actor: 'human' }),
   removeAnnotation: (input) => dispatcher.execute({ type: 'annotation.remove', payload: input }, { actor: 'human' }),
   updateLayout: (input) => dispatcher.execute({ type: 'layout.update', payload: input }, { actor: 'human' }),
+  undo: historyCommands.undo,
+  redo: historyCommands.redo,
 };
 
 /**

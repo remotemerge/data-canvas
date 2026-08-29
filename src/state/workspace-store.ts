@@ -12,6 +12,8 @@ export interface WorkspaceState {
    * here respects the rule that only metadata belongs in the store.
    */
   history: ActionHistoryEntry[];
+  undoStack: string[];
+  redoStack: string[];
 }
 
 /**
@@ -31,11 +33,18 @@ export interface WorkspaceState {
 export const workspaceStore = createStore<WorkspaceState>()(() => ({
   workspace: createEmptyWorkspace(),
   history: [],
+  undoStack: [],
+  redoStack: [],
 }));
 
 /** Narrow read accessor for non-React consumers (services, WebMCP adapter, tests). */
 export const getWorkspace = (): Workspace => workspaceStore.getState().workspace;
 
-export const hydrateWorkspaceState = (workspace: Workspace, history: ActionHistoryEntry[]): void => {
-  workspaceStore.setState({ workspace, history });
+export const hydrateWorkspaceState = (
+  workspace: Workspace,
+  history: ActionHistoryEntry[],
+  undoStack: string[] = [],
+  redoStack: string[] = [],
+): void => {
+  workspaceStore.setState({ workspace, history, undoStack, redoStack });
 };

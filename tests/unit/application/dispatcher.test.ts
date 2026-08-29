@@ -73,6 +73,8 @@ describe('dispatcher handler coverage', () => {
         return { type, payload: { annotationId: 'ann_missing' } };
       case 'layout.update':
         return { type, payload: { columns: 8 } };
+      case 'history.restore':
+        return { type, payload: { state: {}, changedEntityIds: [] } };
     }
   };
 
@@ -93,7 +95,7 @@ describe('dispatcher handler coverage', () => {
 
   test('every action type in the union is listed in APPLICATION_ACTION_TYPES', () => {
     expect(new Set(APPLICATION_ACTION_TYPES).size).toBe(APPLICATION_ACTION_TYPES.length);
-    expect(APPLICATION_ACTION_TYPES).toHaveLength(18);
+    expect(APPLICATION_ACTION_TYPES).toHaveLength(19);
   });
 });
 
