@@ -45,6 +45,17 @@ export const startEngine = async (): Promise<void> => {
       hydrateWorkspaceState(hydrated.workspace, hydrated.history, hydrated.undoStack, hydrated.redoStack);
       dataEngine.restoreDatasets(hydrated.workspace.datasets);
     }
+
+    // A workspace this build cannot migrate stays readable on disk. Registering the checkpoint
+    // subscription would let the empty in-memory workspace be written over a file saved by a newer
+    // build on the very first action, so the session continues in memory without persistence.
+    if (hydrated?.blocked === true) {
+      window.dispatchEvent(new CustomEvent('data-canvas:persistence-blocked'));
+      registerDataEngine(dataEngine);
+      setEngineReady();
+
+      return;
+    }
     dataEngine.setRelationships(workspaceStore.getState().workspace.relationships);
     dataEngine.setDerivedColumns(workspaceStore.getState().workspace.derivedColumns);
     const scheduler = createCheckpointScheduler(

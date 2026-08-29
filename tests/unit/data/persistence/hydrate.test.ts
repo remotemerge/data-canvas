@@ -3,7 +3,7 @@ import type { ActionHistoryEntry } from '@/application/history/action-history.ts
 import { hydrateWorkspace } from '@/data/persistence/hydrate-workspace.ts';
 import type { PersistenceDatabase } from '@/data/persistence/persistence-database.ts';
 import { serializeEntity } from '@/data/persistence/schema/entity-serialization.ts';
-import { createEmptyWorkspace } from '@/domain/workspace/workspace.ts';
+import { CURRENT_SCHEMA_VERSION, createEmptyWorkspace } from '@/domain/workspace/workspace.ts';
 
 /*
  * Hydration takes the database as a parameter so the stored-metadata paths stay reachable under
@@ -87,5 +87,31 @@ describe('workspace hydration', () => {
 
   test('returns null when no workspace has been checkpointed', async () => {
     expect(await hydrateWorkspace(databaseReturning([]))).toBeNull();
+  });
+
+  test('upgrades a stored pre-versioning workspace before validating it', async () => {
+    // The migration must run before the domain guard, otherwise a merely-old workspace is reported
+    // as corrupt and the user silently starts from an empty canvas.
+    const legacy = await Bun.file('tests/fixtures/workspaces/v1/minimal.json').json();
+    const database = databaseReturning([{ payload: serializeEntity(legacy) }]);
+
+    const hydrated = await hydrateWorkspace(database);
+
+    expect(hydrated?.warnings).toEqual([]);
+    expect(hydrated?.blocked).toBeUndefined();
+    expect(hydrated?.workspace.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(hydrated?.workspace.name).toBe('Legacy workspace');
+    expect(hydrated?.workspace.relationships).toEqual({});
+  });
+
+  test('blocks a workspace saved by a newer build instead of hydrating it', async () => {
+    const workspace = { ...createEmptyWorkspace('Future'), schemaVersion: CURRENT_SCHEMA_VERSION + 1 };
+    const database = databaseReturning([{ payload: serializeEntity(workspace) }]);
+
+    const hydrated = await hydrateWorkspace(database);
+
+    // `blocked` is what stops bootstrap from checkpointing an empty workspace over the newer file.
+    expect(hydrated?.blocked).toBe(true);
+    expect(hydrated?.warnings.length).toBe(1);
   });
 });
