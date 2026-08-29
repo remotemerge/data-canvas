@@ -1,6 +1,5 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AppRoutes } from '@/app/routing/app-routes.tsx';
 import { startEngine } from '@/app/bootstrap/start-engine.ts';
 import { dispatcher } from '@/application/actions/dispatcher.ts';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
@@ -9,6 +8,7 @@ import { getWorkspace, workspaceStore } from '@/state/workspace-store.ts';
 import { startToolLifecycle } from '@/webmcp/registry/tool-lifecycle.ts';
 import type { ToolLifecycleDependencies } from '@/webmcp/registry/tool-lifecycle.ts';
 import { installTestHooks } from '@/app/bootstrap/test-hooks.ts';
+import { WorkspacePage } from '@/ui/workspace/workspace-page.tsx';
 import '@/ui/styles/global.scss';
 
 const container = document.getElementById('root');
@@ -39,6 +39,6 @@ installTestHooks(toolDependencies);
 
 createRoot(container).render(
   <StrictMode>
-    <AppRoutes />
+    <WorkspacePage />
   </StrictMode>,
 );

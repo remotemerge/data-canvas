@@ -10,7 +10,6 @@ import { describe, expect, test } from 'bun:test';
 const BANNED_SPECIFIERS = [
   'react',
   'react-dom',
-  'react-router-dom',
   'echarts',
   '@tanstack/react-table',
   '@tanstack/react-virtual',
