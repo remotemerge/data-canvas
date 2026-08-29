@@ -11,9 +11,13 @@ import { formatValue } from '@/visualization/formatting.ts';
 import { measureSync } from '@/shared/perf/performance-marks.ts';
 import {
   categorySelectionFromClick,
+  isAdditiveClick,
   isSameSelection,
   rangeSelection,
+  rowMatchesPredicate,
 } from '@/visualization/interaction/chart-events.ts';
+import { propagateSelection } from '@/application/selection/propagate-selection.ts';
+import { LinkModeControl } from '@/ui/canvas/link-mode-control.tsx';
 import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
 import { AnnotationEditor } from '@/ui/canvas/annotation-editor.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
@@ -47,9 +51,30 @@ const EChart = ({
   const selection = useWorkspace((state) =>
     Object.values(state.workspace.selections).find((item) => item.datasetId === visualization.datasetId),
   );
+  const workspace = useWorkspace((state) => state.workspace);
+  const propagated = propagateSelection(workspace, visualization);
+  // Only `highlight` dims here. `filter` already removed the excluded rows from `result`, so dimming
+  // as well would fade every remaining mark.
+  const highlightPredicate = useMemo(() => {
+    if (propagated.effect !== 'highlight' || propagated.predicate === undefined) return undefined;
+
+    // `key` carries the column ID for dimension columns, which is what a selection predicate
+    // references; measure columns key on their alias and simply never match.
+    const columnIndexById = new Map(result.columns.map((column, index) => [column.key, index]));
+    const predicate = propagated.predicate;
+
+    return (rowIndex: number): boolean => {
+      const row = result.rows[rowIndex];
+
+      return row === undefined ? true : rowMatchesPredicate(predicate, row, columnIndexById);
+    };
+  }, [propagated.effect, propagated.predicate, result]);
   const option = useMemo(
-    () => measureSync('chart-conversion', () => buildEChartsOption(visualization, result, readTheme(), annotations)),
-    [annotations, result, visualization],
+    () =>
+      measureSync('chart-conversion', () =>
+        buildEChartsOption(visualization, result, readTheme(), annotations, highlightPredicate),
+      ),
+    [annotations, highlightPredicate, result, visualization],
   );
   const onClick = useCallback(
     (event: unknown) => {
@@ -59,6 +84,17 @@ const EChart = ({
       }
       const predicate = categorySelectionFromClick(visualization, event as never);
       if (predicate === null) return;
+      // Ctrl/cmd-click adds to the selection; a plain click replaces it, and clicking the current
+      // selection again clears it.
+      if (isAdditiveClick(clicked as { event?: { ctrlKey?: boolean; metaKey?: boolean } })) {
+        void actions.extendSelection({
+          datasetId: visualization.datasetId,
+          mode: 'predicate',
+          predicate,
+          origin: 'chart',
+        });
+        return;
+      }
       if (isSameSelection(selection?.predicate, predicate))
         void actions.clearSelection({ datasetId: visualization.datasetId });
       else
@@ -142,13 +178,6 @@ export const ChartPanel = ({
     const outcome = await actions.removeVisualization({ visualizationId: visualization.id });
     if (!outcome.ok) onError(outcome.error);
   };
-  const toggleLinked = async () => {
-    const outcome = await actions.updateVisualization({
-      visualizationId: visualization.id,
-      linkedSelection: !visualization.linkedSelection,
-    });
-    if (!outcome.ok) onError(outcome.error);
-  };
 
   return (
     <article className="chart-panel">
@@ -158,9 +187,7 @@ export const ChartPanel = ({
           <Provenance entityId={visualization.id} createdBy={visualization.createdBy} />
         </h3>
         <div className="chart-panel__controls">
-          <button type="button" aria-pressed={visualization.linkedSelection} onClick={() => void toggleLinked()}>
-            Link
-          </button>
+          <LinkModeControl visualizationId={visualization.id} linkMode={visualization.linkMode} onError={onError} />
           <button type="button" onClick={() => void remove()}>
             Remove
           </button>

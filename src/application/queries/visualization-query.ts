@@ -1,6 +1,7 @@
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { AnalysisResult } from '@/application/ports/data-engine-port.ts';
 import { boundChartRows, MAX_CHART_POINTS } from '@/application/queries/sampling-policy.ts';
+import { propagateSelection } from '@/application/selection/propagate-selection.ts';
 import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { FilterExpression } from '@/domain/filter/filter.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
@@ -26,17 +27,15 @@ export const resolveVisualizationQuery = (visualization: Visualization, workspac
       operator: filter.operator,
       ...(filter.value === undefined ? {} : { value: filter.value }),
     }));
-  const selection = visualization.linkedSelection
-    ? Object.values(workspace.selections).find((item) => item.datasetId === visualization.datasetId)
-    : undefined;
+  // Only `filter` mode changes the query. `highlight` keeps the full result and dims unselected
+  // marks in the renderer, so the chart's totals stay stable while showing what is selected.
+  const propagated = propagateSelection(workspace, visualization);
+  const selectionFilter =
+    propagated.effect === 'filter' && propagated.predicate !== undefined ? [propagated.predicate] : [];
 
   return {
     ...visualization.query,
-    filters: [
-      ...visualization.query.filters,
-      ...filters,
-      ...(selection?.predicate === undefined ? [] : [selection.predicate]),
-    ],
+    filters: [...visualization.query.filters, ...filters, ...selectionFilter],
     limit: Math.min(visualization.query.limit ?? MAX_CHART_POINTS + 1, MAX_CHART_POINTS + 1),
   };
 };

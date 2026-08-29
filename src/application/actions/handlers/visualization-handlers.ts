@@ -1,6 +1,7 @@
 import type {
   CreateVisualizationInput,
   RemoveVisualizationInput,
+  SetVisualizationLinkModeInput,
   UpdateVisualizationInput,
 } from '@/application/actions/action-types.ts';
 import { omitKeys } from '@/application/actions/handlers/handler-types.ts';
@@ -10,6 +11,7 @@ import { resolveDataset, resolveVisualization } from '@/application/validation/v
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { VisualBinding, Visualization, VisualizationPresentation } from '@/domain/visualization/visualization.ts';
+import { DEFAULT_SELECTION_LINK_MODE } from '@/domain/visualization/selection-link-mode.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
@@ -77,7 +79,7 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
     query: payload.query ?? deriveQuery(dataset.value.id, payload.binding),
     binding: payload.binding,
     presentation: { ...DEFAULT_PRESENTATION, ...payload.presentation },
-    linkedSelection: payload.linkedSelection ?? true,
+    linkMode: payload.linkMode ?? DEFAULT_SELECTION_LINK_MODE,
     createdBy: deps.actor,
   };
 
@@ -137,7 +139,7 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
     query:
       payload.query ?? (payload.binding === undefined ? existing.value.query : deriveQuery(dataset.value.id, binding)),
     presentation: { ...existing.value.presentation, ...payload.presentation },
-    linkedSelection: payload.linkedSelection ?? existing.value.linkedSelection,
+    linkMode: payload.linkMode ?? existing.value.linkMode,
   };
 
   return ok({
@@ -147,6 +149,31 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
     },
     changedEntityIds: [updated.id],
     summary: `Updated ${updated.kind} visualization '${updated.title}'.`,
+  });
+};
+
+/**
+ * Sets how one visualization responds to selection.
+ *
+ * Separate from `visualization.update` because it is a single-field toggle a user flips repeatedly
+ * from the chart header. Routing it through the general update would re-validate the binding on
+ * every click, and would make an undo entry that reads as "updated visualization" rather than
+ * naming what changed.
+ */
+export const handleSetVisualizationLinkMode: ActionHandler<SetVisualizationLinkModeInput> = (workspace, payload) => {
+  const existing = resolveVisualization(workspace, payload.visualizationId);
+
+  if (!existing.ok) return existing;
+
+  const updated: Visualization = { ...existing.value, linkMode: payload.linkMode };
+
+  return ok({
+    workspace: {
+      ...workspace,
+      visualizations: { ...workspace.visualizations, [updated.id]: updated },
+    },
+    changedEntityIds: [updated.id],
+    summary: `Set '${updated.title}' to ${payload.linkMode} selection linking.`,
   });
 };
 

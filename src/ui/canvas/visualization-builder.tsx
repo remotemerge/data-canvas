@@ -138,7 +138,6 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
       title,
       kind,
       binding,
-      linkedSelection: true,
       query,
     });
     if (!result.ok) {
