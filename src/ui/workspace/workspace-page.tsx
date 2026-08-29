@@ -1,18 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
-import {
-  selectActiveDataset,
-  selectDatasets,
-  selectRevision,
-  selectWorkspaceName,
-} from '@/state/selectors/workspace-selectors.ts';
+import { selectActiveDataset, selectRevision, selectWorkspaceName } from '@/state/selectors/workspace-selectors.ts';
 import { ActionErrorBanner } from '@/ui/components/action-error-banner.tsx';
 import { EngineStatusBanner } from '@/ui/components/engine-status-banner.tsx';
 import { DatasetImportButton } from '@/ui/dataset/dataset-import-button.tsx';
 import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
 import { FilterPanel } from '@/ui/dataset/filter-panel.tsx';
+import { DatasetList } from '@/ui/dataset/dataset-list.tsx';
 import { DatasetSchemaPanel } from '@/ui/dataset/dataset-schema-panel.tsx';
+import { RelationshipEditor } from '@/ui/dataset/relationship-editor.tsx';
+import { RelationshipGraph } from '@/ui/dataset/relationship-graph.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
 import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
@@ -36,15 +34,11 @@ import { UndoRedoControls } from '@/ui/workspace/undo-redo-controls.tsx';
 export const WorkspacePage = (): React.JSX.Element => {
   const name = useWorkspace(selectWorkspaceName);
   const revision = useWorkspace(selectRevision);
-  const datasets = useWorkspace(selectDatasets);
   const activeDataset = useWorkspace(selectActiveDataset);
 
   // The most recent dispatch failure. Held locally rather than in the store: a rejected action is
   // this view's transient concern, not shared workspace state.
   const [actionError, setActionError] = useState<DomainError | null>(null);
-
-  // Selectors stay referentially stable by returning the stored record; arrays are derived here.
-  const datasetList = useMemo(() => Object.values(datasets), [datasets]);
 
   return (
     <div className="workspace">
@@ -61,26 +55,15 @@ export const WorkspacePage = (): React.JSX.Element => {
 
           <DatasetImportButton onError={setActionError} />
 
-          {datasetList.length === 0 ? (
-            <p className="workspace__empty">No datasets yet.</p>
-          ) : (
-            <ul className="dataset-list">
-              {datasetList.map((dataset) => (
-                <li key={dataset.id} className="dataset-list__item">
-                  {/* The filename is untrusted display text and renders as a text child only. */}
-                  <span className="dataset-list__name">{dataset.name}</span>
-                  <span className="dataset-list__status" data-status={dataset.importStatus}>
-                    {dataset.importStatus}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <DatasetList onError={setActionError} />
 
           <section>
             <h2 className="workspace__panel-heading">Schema</h2>
             <DatasetSchemaPanel dataset={activeDataset} />
           </section>
+
+          <RelationshipEditor onError={setActionError} />
+          <RelationshipGraph onError={setActionError} />
 
           <CanvasDensityControl onError={setActionError} />
           {activeDataset === undefined ? null : <FilterPanel dataset={activeDataset} onError={setActionError} />}

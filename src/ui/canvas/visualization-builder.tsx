@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
+import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
+import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import {
   VISUALIZATION_KINDS,
@@ -12,9 +14,30 @@ import { useWorkspace } from '@/state/use-workspace.ts';
 
 const CHART_KINDS = VISUALIZATION_KINDS.filter((kind) => kind !== 'table');
 
+/** A column offered by the builder, tagged with the dataset it came from so provenance stays visible. */
+interface ScopedColumn {
+  column: Column;
+  dataset: Dataset;
+}
+
+/** Groups scoped columns by dataset, preserving the anchor-first order the caller supplied. */
+const groupByDataset = (columns: readonly ScopedColumn[]): { dataset: Dataset; columns: Column[] }[] => {
+  const groups: { dataset: Dataset; columns: Column[] }[] = [];
+
+  for (const scoped of columns) {
+    const existing = groups.find((group) => group.dataset.id === scoped.dataset.id);
+
+    if (existing === undefined) groups.push({ dataset: scoped.dataset, columns: [scoped.column] });
+    else existing.columns.push(scoped.column);
+  }
+
+  return groups;
+};
+
 export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError) => void }) => {
-  const datasets = useWorkspace((state) => state.workspace.datasets);
-  const layoutItems = useWorkspace((state) => state.workspace.layout.items);
+  const workspace = useWorkspace((state) => state.workspace);
+  const datasets = workspace.datasets;
+  const layoutItems = workspace.layout.items;
   const actions = useActions();
   const datasetList = useMemo(
     () => Object.values(datasets).filter((item) => item.importStatus === 'ready'),
@@ -27,16 +50,32 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const [y, setY] = useState('');
   const [aggregate, setAggregate] = useState<AggregateFunction>('sum');
   const dataset = datasets[datasetId];
-  const numericColumns = dataset?.columns.filter((column) => column.logicalType === 'number') ?? [];
-  const validationMeasure = y === '' ? numericColumns[0]?.id : y;
-  const dimensionColumns =
-    dataset?.columns.filter((column) => {
-      if (kind === 'kpi' || validationMeasure === undefined) return false;
-      return validateVisualization(dataset, kind, { x: column.id, y: [validationMeasure] }).ok;
-    }) ?? [];
+
+  // Columns from datasets joinable to the anchor become selectable, anchor first. The same
+  // reachability helper the handler validates against, so the form cannot offer an unreachable
+  // column that the dispatcher would then reject.
+  const related = useMemo(
+    () => (dataset === undefined ? [] : reachableDatasets(workspace, dataset.id)),
+    [workspace, dataset],
+  );
+
+  const scopedColumns = useMemo<ScopedColumn[]>(
+    () =>
+      dataset === undefined
+        ? []
+        : [dataset, ...related].flatMap((source) => source.columns.map((column) => ({ column, dataset: source }))),
+    [dataset, related],
+  );
+
+  const numericColumns = scopedColumns.filter((scoped) => scoped.column.logicalType === 'number');
+  const validationMeasure = y === '' ? numericColumns[0]?.column.id : y;
+  const dimensionColumns = scopedColumns.filter((scoped) => {
+    if (dataset === undefined || kind === 'kpi' || validationMeasure === undefined) return false;
+    return validateVisualization(dataset, kind, { x: scoped.column.id, y: [validationMeasure] }, related).ok;
+  });
   const binding: VisualBinding =
     kind === 'kpi' ? { y: y === '' ? [] : [y] } : { ...(x === '' ? {} : { x }), ...(y === '' ? {} : { y: [y] }) };
-  const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding);
+  const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding, related);
 
   const create = async () => {
     if (dataset === undefined || validation === null || !validation.ok) return;
@@ -122,10 +161,16 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           Dimension
           <select value={x} onChange={(event) => setX(event.target.value)}>
             <option value="">Choose</option>
-            {dimensionColumns.map((column) => (
-              <option key={column.id} value={column.id}>
-                {column.name}
-              </option>
+            {groupByDataset(dimensionColumns).map((group) => (
+              // Grouped by source dataset so a column's provenance is legible when a chart spans a
+              // join and two datasets contribute similarly named columns.
+              <optgroup key={group.dataset.id} label={group.dataset.name}>
+                {group.columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -134,10 +179,14 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
         Measure
         <select value={y} onChange={(event) => setY(event.target.value)}>
           <option value="">Choose</option>
-          {numericColumns.map((column) => (
-            <option key={column.id} value={column.id}>
-              {column.name}
-            </option>
+          {groupByDataset(numericColumns).map((group) => (
+            <optgroup key={group.dataset.id} label={group.dataset.name}>
+              {group.columns.map((column) => (
+                <option key={column.id} value={column.id}>
+                  {column.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </label>
