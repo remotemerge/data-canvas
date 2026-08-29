@@ -53,6 +53,13 @@ export interface TableWindow {
 export interface AnalysisResult {
   rows: readonly (string | number | boolean | null)[][];
   columns: ResultColumn[];
+  /**
+   * Advisory text about the result's trustworthiness, currently join fan-out.
+   *
+   * Value-free by contract, since it is shown in the UI and returned to agents. Present only when
+   * there is something to say, so callers can treat its absence as "nothing detected".
+   */
+  warning?: string;
 }
 
 export interface DistinctValuesRequest {
@@ -74,6 +81,24 @@ export interface DistinctValuesResult {
 }
 
 /**
+ * A bounded uniqueness measurement over a candidate join key.
+ *
+ * Sampled rather than exhaustive so relationship creation stays interactive on a large dataset. The
+ * result is evidence for a warning, never grounds for rejecting a join.
+ */
+export interface KeyQualityRequest {
+  datasetId: EntityId;
+  columnIds: EntityId[];
+  sampleRows: number;
+  signal?: AbortSignal;
+}
+
+export interface KeyQualityResult {
+  sampledRows: number;
+  distinctKeys: number;
+}
+
+/**
  * The application's view of the analytical engine.
  *
  * Declared here, in the application layer, so handlers depend on a port rather than on DuckDB-Wasm.
@@ -88,6 +113,9 @@ export interface DataEnginePort {
   fetchTableWindow(request: TableWindowRequest): Promise<Result<TableWindow, DomainError>>;
   executeAnalysis(query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>>;
   getDistinctValues(request: DistinctValuesRequest): Promise<Result<DistinctValuesResult, DomainError>>;
+  measureKeyQuality(request: KeyQualityRequest): Promise<Result<KeyQualityResult, DomainError>>;
+  /** Drops a dataset's relation and its cached counts. Idempotent: an unknown dataset succeeds. */
+  dropDataset(datasetId: EntityId): Promise<Result<void, DomainError>>;
 }
 
 /**
@@ -106,4 +134,6 @@ export const unavailableDataEngine: DataEnginePort = {
   fetchTableWindow: () => Promise.resolve(unavailable()),
   executeAnalysis: () => Promise.resolve(unavailable()),
   getDistinctValues: () => Promise.resolve(unavailable()),
+  measureKeyQuality: () => Promise.resolve(unavailable()),
+  dropDataset: () => Promise.resolve(unavailable()),
 };

@@ -32,4 +32,6 @@ export const registeredDataEngine: DataEnginePort = {
   fetchTableWindow: (request) => installed.fetchTableWindow(request),
   executeAnalysis: (query) => installed.executeAnalysis(query),
   getDistinctValues: (request) => installed.getDistinctValues(request),
+  measureKeyQuality: (request) => installed.measureKeyQuality(request),
+  dropDataset: (datasetId) => installed.dropDataset(datasetId),
 };
