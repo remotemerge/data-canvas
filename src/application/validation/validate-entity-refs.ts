@@ -1,4 +1,5 @@
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
+import type { DerivedColumn } from '@/domain/dataset/derived-column.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
@@ -94,6 +95,21 @@ export const resolveMetric = (workspace: Workspace, metricId: EntityId): Result<
   return metric === undefined
     ? err(domainError('UNSUPPORTED_OPERATION', `No metric with id '${metricId}' exists.`, { metricId }))
     : ok(metric);
+};
+
+export const resolveDerivedColumn = (
+  workspace: Workspace,
+  derivedColumnId: EntityId,
+): Result<DerivedColumn, DomainError> => {
+  const derived = workspace.derivedColumns[derivedColumnId];
+
+  return derived === undefined
+    ? err(
+        domainError('COLUMN_NOT_FOUND', `No derived column with id '${derivedColumnId}' exists.`, {
+          derivedColumnId,
+        }),
+      )
+    : ok(derived);
 };
 
 export const resolveAnnotation = (workspace: Workspace, annotationId: EntityId): Result<Annotation, DomainError> => {
