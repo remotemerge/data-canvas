@@ -32,6 +32,7 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
         ...(predicate.value === undefined ? {} : { value: predicate.value }),
         enabled: true,
         origin: 'system' as const,
+        createdBy: 'system' as const,
       },
     ];
   }, [dataset.id, filterRecord, selectionRecord]);

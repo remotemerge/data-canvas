@@ -29,7 +29,7 @@ const NUMERIC_ONLY_AGGREGATES = new Set(['sum', 'avg', 'median']);
  * Metric *evaluation* needs the analytical engine, but its definition is metadata, so creation is
  * complete here. Evaluating a stored definition happens when a consumer requests its value.
  */
-export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, payload) => {
+export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, payload, deps) => {
   const name = payload.name.trim();
 
   if (name.length === 0 || name.length > MAX_METRIC_NAME_LENGTH) {
@@ -99,6 +99,7 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
     ...(payload.columnId === undefined ? {} : { columnId: payload.columnId }),
     filters: payload.filters ?? [],
     ...(payload.format === undefined ? {} : { format: payload.format }),
+    createdBy: deps.actor,
   };
 
   return ok({

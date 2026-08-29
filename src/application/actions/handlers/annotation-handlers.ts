@@ -15,7 +15,7 @@ import { err, ok } from '@/shared/result/result.ts';
  */
 export const MAX_ANNOTATION_TEXT_LENGTH = 280;
 
-export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace, payload) => {
+export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace, payload, deps) => {
   const visualization = resolveVisualization(workspace, payload.visualizationId);
 
   if (!visualization.ok) return visualization;
@@ -38,6 +38,7 @@ export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace
     text,
     anchor: payload.anchor,
     origin: payload.origin,
+    createdBy: deps.actor,
   };
 
   return ok({

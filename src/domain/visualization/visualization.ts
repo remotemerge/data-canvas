@@ -48,6 +48,7 @@ export interface Visualization {
   presentation: VisualizationPresentation;
   /** When true, this chart participates in workspace-wide cross-filtering. */
   linkedSelection: boolean;
+  createdBy: 'human' | 'agent' | 'system';
 }
 
 /*

@@ -16,4 +16,5 @@ export interface Annotation {
   text: string;
   anchor: AnnotationAnchor;
   origin: 'human' | 'agent';
+  createdBy: 'human' | 'agent' | 'system';
 }

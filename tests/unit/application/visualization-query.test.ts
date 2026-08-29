@@ -15,6 +15,7 @@ describe('visualization query resolution', () => {
       value: 'West',
       enabled: true,
       origin: 'human',
+      createdBy: 'human',
     };
     workspace.selections['selection_region'] = {
       id: 'selection_region',

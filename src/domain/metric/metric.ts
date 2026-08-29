@@ -31,4 +31,5 @@ export interface Metric {
   columnId?: EntityId;
   filters: EntityId[];
   format?: MetricFormat;
+  createdBy: 'human' | 'agent' | 'system';
 }
