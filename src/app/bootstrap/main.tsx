@@ -9,7 +9,7 @@ import { startToolLifecycle } from '@/webmcp/registry/tool-lifecycle.ts';
 import type { ToolLifecycleDependencies } from '@/webmcp/registry/tool-lifecycle.ts';
 import { installTestHooks } from '@/app/bootstrap/test-hooks.ts';
 import { WorkspacePage } from '@/ui/workspace/workspace-page.tsx';
-import '@/ui/styles/global.scss';
+import '@/ui/styles/global.css';
 
 const container = document.getElementById('root');
 
