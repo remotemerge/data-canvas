@@ -1,12 +1,18 @@
 import { expect, test } from 'bun:test';
-import { createHarness, stubDataEngine, workspaceWithDataset } from '../application/action-fixtures.ts';
+import {
+  createHarness,
+  stubDataEngine,
+  workspaceWithDataset,
+  workspaceWithJoinableDatasets,
+} from '../application/action-fixtures.ts';
+import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { createToolDefinitions } from '@/webmcp/registry/tool-registry.ts';
 
 const stripGeneratedIds = (value: unknown): unknown => {
   const ids = new Map<string, string>();
   let next = 0;
   const visit = (item: unknown): unknown => {
-    if (typeof item === 'string' && /^(flt|viz|sel)_[\w-]+$/u.test(item)) {
+    if (typeof item === 'string' && /^(flt|viz|sel|rel)_[\w-]+$/u.test(item)) {
       if (!ids.has(item)) ids.set(item, `generated_${next++}`);
       return ids.get(item);
     }
@@ -27,8 +33,7 @@ const stripGeneratedIds = (value: unknown): unknown => {
   return visit(value);
 };
 
-const pair = () => {
-  const initial = workspaceWithDataset();
+const pair = (initial: Workspace = workspaceWithDataset()) => {
   const engine = stubDataEngine();
   const human = createHarness(structuredClone(initial), engine);
   const agent = createHarness(structuredClone(initial), engine);
@@ -94,5 +99,53 @@ test('human and agent selection paths produce the same workspace', async () => {
     values: ['Europe'],
     expectedRevision: 0,
   });
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
+test('human and agent relationship paths produce the same workspace', async () => {
+  const { human, agent, tool } = pair(workspaceWithJoinableDatasets());
+  const payload = {
+    leftDatasetId: 'ds_orders',
+    rightDatasetId: 'ds_customers',
+    on: [{ leftColumnId: 'col_order_customer', rightColumnId: 'col_customer_id' }],
+    kind: 'many_to_one' as const,
+    join: 'inner' as const,
+  };
+
+  await human.dispatcher.execute({ type: 'relationship.create', payload }, { actor: 'human' });
+  await tool('create_relationship').handler({ ...payload, expectedRevision: 0 });
+
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
+test('an agent can chart across a relationship it created, matching the human path', async () => {
+  const { human, agent, tool } = pair(workspaceWithJoinableDatasets());
+  const relationship = {
+    leftDatasetId: 'ds_orders',
+    rightDatasetId: 'ds_customers',
+    on: [{ leftColumnId: 'col_order_customer', rightColumnId: 'col_customer_id' }],
+    kind: 'many_to_one' as const,
+    join: 'inner' as const,
+  };
+  const chart = {
+    datasetId: 'ds_orders',
+    title: 'Revenue by region',
+    kind: 'bar' as const,
+    binding: { x: 'col_customer_region', y: ['col_order_revenue'] },
+  };
+
+  await human.dispatcher.execute({ type: 'relationship.create', payload: relationship }, { actor: 'human' });
+  await human.dispatcher.execute({ type: 'visualization.create', payload: chart }, { actor: 'human' });
+
+  await tool('create_relationship').handler({ ...relationship, expectedRevision: 0 });
+  await tool('create_visualization').handler({
+    datasetId: 'ds_orders',
+    title: 'Revenue by region',
+    kind: 'bar',
+    xColumnId: 'col_customer_region',
+    yColumnIds: ['col_order_revenue'],
+    expectedRevision: 1,
+  });
+
   expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
 });

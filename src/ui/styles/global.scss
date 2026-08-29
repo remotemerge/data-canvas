@@ -458,9 +458,38 @@ select:focus-visible {
 
 .dataset-list__item {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--dc-space-2);
+  padding: var(--dc-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius);
+}
+
+.dataset-list__item[data-active="true"] {
+  border-color: var(--dc-color-accent);
+  background: var(--dc-color-surface-raised);
+}
+
+.dataset-list__select {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dataset-list__select:disabled {
+  color: var(--dc-color-text-muted);
+  cursor: not-allowed;
 }
 
 /* Long filenames are user-supplied and must not push the panel wider than its column. */
@@ -469,14 +498,168 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.dataset-list__rows,
 .dataset-list__status {
   flex: none;
   color: var(--dc-color-text-muted);
   font-size: var(--dc-text-sm);
 }
 
+.dataset-list__rows {
+  font-family: var(--dc-font-mono);
+}
+
 .dataset-list__status[data-status="error"] {
   color: #ff9d9d;
+}
+
+.dataset-list__remove {
+  flex: none;
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.dataset-list__remove:hover {
+  border-color: #7f3b3b;
+  color: #ff9d9d;
+}
+
+/* The cascade confirmation states what else would be deleted, so it must not be truncated. */
+.dataset-list__warning {
+  flex-basis: 100%;
+  margin: var(--dc-space-1) 0 0;
+  color: #ff9d9d;
+  font-size: var(--dc-text-sm);
+}
+
+.relationship-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+}
+
+.relationship-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.relationship-editor select,
+.relationship-editor button {
+  min-height: 2rem;
+  min-width: 0;
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: var(--dc-color-surface);
+  color: var(--dc-color-text);
+  font: inherit;
+}
+
+.relationship-editor button:disabled {
+  color: var(--dc-color-text-muted);
+  cursor: not-allowed;
+}
+
+.relationship-editor__hint,
+.relationship-editor__notice,
+.relationship-editor__reason,
+.relationship-editor__suggestions-note {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+/* The fan-out measurement arrives here; it is the one message the user must not miss. */
+.relationship-editor__notice {
+  color: var(--dc-color-accent);
+}
+
+.relationship-editor__suggestions h3 {
+  margin: var(--dc-space-3) 0 var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.relationship-editor__suggestions ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: var(--dc-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relationship-editor__suggestions li {
+  display: grid;
+  gap: var(--dc-space-1);
+}
+
+.relationship-graph__canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.relationship-graph__edge {
+  stroke: var(--dc-color-border);
+  stroke-width: 1.5;
+}
+
+/* A left join keeps unmatched rows, so it is drawn dashed to distinguish it from an inner join. */
+.relationship-graph__edge[data-join="left"] {
+  stroke-dasharray: 4 3;
+}
+
+.relationship-graph__node circle {
+  fill: var(--dc-color-surface-raised);
+  stroke: var(--dc-color-accent);
+  stroke-width: 1.5;
+}
+
+.relationship-graph__node text {
+  fill: var(--dc-color-text-muted);
+  font-size: 11px;
+}
+
+.relationship-graph__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: var(--dc-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--dc-text-sm);
+}
+
+.relationship-graph__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+}
+
+.relationship-graph__meta {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+}
+
+.relationship-graph__list button {
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
 }
 
 .schema__summary {

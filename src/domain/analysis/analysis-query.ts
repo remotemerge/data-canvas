@@ -24,7 +24,16 @@ export interface SortSpec {
  * validation and never becomes SQL text directly.
  */
 export interface AnalysisQuery {
+  /** The anchor dataset. Joined datasets are reached through `relationshipIds`. */
   datasetId: EntityId;
+  /**
+   * Relationships to traverse from the anchor.
+   *
+   * Omitted lets the compiler resolve the path from the referenced columns, which is what keeps an
+   * agent from having to name a join it only implied. Supplied, it constrains the path.
+   */
+  relationshipIds?: EntityId[];
+  /** Column IDs may belong to the anchor dataset or to any dataset reachable through a join. */
   dimensions: EntityId[];
   measures: MeasureSpec[];
   filters: FilterExpression[];

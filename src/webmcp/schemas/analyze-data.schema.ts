@@ -4,6 +4,16 @@ export const analyzeDataSchema = {
   type: 'object',
   properties: {
     datasetId: { type: 'string', minLength: 1, maxLength: 100 },
+    /**
+     * Relationships to traverse. Omitted, the join path is resolved from the columns named below,
+     * so an agent that already knows the column IDs need not name the joins connecting them.
+     */
+    relationshipIds: {
+      type: 'array',
+      items: { type: 'string', minLength: 1, maxLength: 100 },
+      maxItems: 4,
+      uniqueItems: true,
+    },
     dimensions: {
       type: 'array',
       items: { type: 'string', minLength: 1, maxLength: 100 },

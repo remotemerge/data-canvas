@@ -7,7 +7,17 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-export const compileAggregate = (aggregate: AggregateFunction, column?: Column): Result<string, DomainError> => {
+/**
+ * Compiles an aggregate over one column.
+ *
+ * `reference` lets a joined query supply an alias-qualified identifier. Omitted, the column's own
+ * physical name is quoted, which is correct for a query over a single relation.
+ */
+export const compileAggregate = (
+  aggregate: AggregateFunction,
+  column?: Column,
+  reference?: string,
+): Result<string, DomainError> => {
   if (aggregate === 'count') return ok('COUNT(*)');
   if (column === undefined) return err(domainError('COLUMN_NOT_FOUND', 'This aggregate requires a column.'));
 
@@ -20,7 +30,7 @@ export const compileAggregate = (aggregate: AggregateFunction, column?: Column):
     );
   }
 
-  const identifier = quoteIdentifier(column.physicalName);
+  const identifier = reference ?? quoteIdentifier(column.physicalName);
   if (aggregate === 'count_distinct') return ok(`COUNT(DISTINCT ${identifier})`);
   return ok(`${aggregate.toUpperCase()}(${identifier})`);
 };

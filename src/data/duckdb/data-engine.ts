@@ -5,6 +5,8 @@ import type {
   DistinctValuesRequest,
   DistinctValuesResult,
   ImportedRelation,
+  KeyQualityRequest,
+  KeyQualityResult,
   TableWindow,
   TableWindowRequest,
 } from '@/application/ports/data-engine-port.ts';
@@ -33,6 +35,7 @@ import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
+import type { Relationship } from '@/domain/relationship/relationship.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
@@ -72,6 +75,14 @@ export interface DataEngine extends DataEnginePort {
   dispose(): Promise<void>;
   persistenceDatabase(): PersistenceDatabase | null;
   restoreDatasets(datasets: Record<EntityId, Dataset>): void;
+  /**
+   * Publishes the workspace's relationships to the engine.
+   *
+   * The engine compiles queries and therefore needs the join graph, but it must not read the store:
+   * that would make the data layer depend on application state. The bootstrap pushes the current
+   * relationships instead, the same way it pushes restored datasets.
+   */
+  setRelationships(relationships: Record<EntityId, Relationship>): void;
 }
 
 /**
@@ -196,6 +207,22 @@ const queryDataset = (datasetId: EntityId, relation: RelationEntry): QueryDatase
   columns: relation.columns,
 });
 
+/**
+ * Compares the joined row count against the anchor's own, to catch a join that multiplied rows.
+ *
+ * A `many_to_one` relationship misdeclared as `one_to_one` fans out and silently inflates a `sum`.
+ * The creation-time key sample is the first defence; this is the second, measured on the query that
+ * actually ran, so a fan-out introduced by data imported after the relationship was created is still
+ * caught. Only a ratio is reported — never a row value.
+ */
+const FAN_OUT_QUERY_TOLERANCE = 1.05;
+
+export const describeQueryFanOut = (anchorRows: number, joinedRows: number): string | undefined => {
+  if (anchorRows <= 0 || joinedRows <= anchorRows * FAN_OUT_QUERY_TOLERANCE) return undefined;
+
+  return `This join produced about ${(joinedRows / anchorRows).toFixed(2)} rows per source row, so aggregate totals may be inflated by duplicate key matches.`;
+};
+
 const executeCompiled = async (connection: AsyncDuckDBConnection, compiled: CompiledQuery): Promise<ArrowRowSource> => {
   const statement = await connection.prepare(compiled.sql);
   try {
@@ -223,6 +250,9 @@ export const createDataEngine = (): DataEngine => {
 
   /** Relation metadata by dataset ID. Rebuilt per session; the workspace store holds the durable copy. */
   const relations = new Map<EntityId, RelationEntry>();
+
+  /** The join graph, pushed in by the application. The engine never reads the workspace store. */
+  const relationshipGraph = new Map<EntityId, Relationship>();
   const countCache = createQueryCache<number>();
 
   const requireConnection = (): Result<AsyncDuckDBConnection, DomainError> =>
@@ -331,6 +361,45 @@ export const createDataEngine = (): DataEngine => {
    * bound as parameters because DuckDB does not accept placeholders in `LIMIT`/`OFFSET`; they are
    * coerced through `Math.trunc` and clamped, so no caller-controlled text reaches the SQL.
    */
+  /** Every relation this session knows about, so the compiler can resolve a joined column. */
+  const queryContext = (): { datasets: QueryDataset[]; relationships: Relationship[] } => ({
+    datasets: [...relations.entries()].map(([datasetId, relation]) => queryDataset(datasetId, relation)),
+    relationships: [...relationshipGraph.values()],
+  });
+
+  /**
+   * Counts the rows a joined query reads, to compare against the anchor's own row count.
+   *
+   * Runs only for aggregate queries that cross a join, since an ungrouped query returns its rows to
+   * the caller anyway and a single-relation query cannot fan out.
+   */
+  const measureJoinFanOut = async (
+    connection: AsyncDuckDBConnection,
+    query: AnalysisQuery,
+  ): Promise<string | undefined> => {
+    const context = queryContext();
+    const joined = compileAnalysisQuery(
+      { ...query, dimensions: [], measures: [{ aggregate: 'count' }], orderBy: [], limit: 1 },
+      context,
+    );
+    const anchor = compileAnalysisQuery(
+      { datasetId: query.datasetId, dimensions: [], measures: [{ aggregate: 'count' }], filters: [], limit: 1 },
+      context,
+    );
+
+    if (!joined.ok || !anchor.ok) return undefined;
+
+    try {
+      const joinedRows = readScalarCount(await executeCompiled(connection, joined.value));
+      const anchorRows = readScalarCount(await executeCompiled(connection, anchor.value));
+
+      return describeQueryFanOut(anchorRows, joinedRows);
+    } catch {
+      // The warning is advisory. Failing to measure it must not fail the query it describes.
+      return undefined;
+    }
+  };
+
   const executeAnalysis = async (query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>> => {
     const connectionResult = requireConnection();
     if (!connectionResult.ok) return connectionResult;
@@ -338,20 +407,90 @@ export const createDataEngine = (): DataEngine => {
     if (relation === undefined) {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
-    const compiled = compileAnalysisQuery(query, queryDataset(query.datasetId, relation));
+    const compiled = compileAnalysisQuery(query, queryContext());
     if (!compiled.ok) return compiled;
     try {
       const table = await executeCompiled(connectionResult.value, compiled.value);
+      const fanOut =
+        compiled.value.joined && query.measures.length > 0
+          ? await measureJoinFanOut(connectionResult.value, query)
+          : undefined;
       return ok({
         rows: readArrowRows(
           table,
           compiled.value.resultColumns.map((column) => column.logicalType),
         ).rows,
         columns: compiled.value.resultColumns,
+        ...(fanOut === undefined ? {} : { warning: fanOut }),
       });
     } catch {
       return err(engineFailure('QUERY_FAILED'));
     }
+  };
+
+  /**
+   * Measures how many sampled rows share each key value.
+   *
+   * The sample is taken with a bounded subquery rather than a full scan, so creating a relationship
+   * on a large dataset stays interactive. Composite keys are counted as a tuple, which is the same
+   * grouping the join itself performs.
+   */
+  const measureKeyQuality = async (request: KeyQualityRequest): Promise<Result<KeyQualityResult, DomainError>> => {
+    const connectionResult = requireConnection();
+    if (!connectionResult.ok) return connectionResult;
+
+    const relation = relations.get(request.datasetId);
+    if (relation === undefined) {
+      return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
+    }
+
+    const identifiers: string[] = [];
+    for (const columnId of request.columnIds) {
+      const column = relation.columns.find((candidate) => candidate.id === columnId);
+      if (column === undefined) {
+        return err(domainError('COLUMN_NOT_FOUND', 'The key-quality check references a column that does not exist.'));
+      }
+      identifiers.push(quoteIdentifier(column.physicalName));
+    }
+
+    if (identifiers.length === 0) {
+      return err(domainError('INVALID_TOOL_ARGUMENTS', 'A key-quality check needs at least one column.'));
+    }
+
+    const sampleRows = Math.min(Math.max(Math.trunc(request.sampleRows) || 0, 1), 100_000);
+
+    try {
+      const sample = `(SELECT ${identifiers.join(', ')} FROM ${quoteIdentifier(relation.relationName)} WHERE ${identifiers.map((identifier) => `${identifier} IS NOT NULL`).join(' AND ')} LIMIT ${sampleRows})`;
+      const counted = await connectionResult.value.query(
+        `SELECT count(*) AS ${quoteIdentifier('sampled')}, count(DISTINCT (${identifiers.join(', ')})) AS ${quoteIdentifier('distinct_keys')} FROM ${sample}`,
+      );
+      const [row] = readArrowRows(counted as unknown as ArrowRowSource, ['number', 'number']).rows;
+
+      return ok({ sampledRows: Number(row?.[0] ?? 0), distinctKeys: Number(row?.[1] ?? 0) });
+    } catch {
+      return err(engineFailure('QUERY_FAILED'));
+    }
+  };
+
+  const dropDataset = async (datasetId: EntityId): Promise<Result<void, DomainError>> => {
+    const relation = relations.get(datasetId);
+
+    // Idempotent by design: a dataset that failed to import has no relation, and removing it must
+    // still succeed rather than stranding its metadata in the workspace.
+    if (relation === undefined) {
+      countCache.clear();
+
+      return ok(undefined);
+    }
+
+    const connectionResult = requireConnection();
+    if (!connectionResult.ok) return connectionResult;
+
+    await dropRelation(connectionResult.value, relation.relationName);
+    relations.delete(datasetId);
+    countCache.clear();
+
+    return ok(undefined);
   };
 
   const fetchTableWindow = async (request: TableWindowRequest): Promise<Result<TableWindow, DomainError>> => {
@@ -490,6 +629,7 @@ export const createDataEngine = (): DataEngine => {
   const dispose = async (): Promise<void> => {
     scheduler.abortAll();
     relations.clear();
+    relationshipGraph.clear();
     countCache.clear();
 
     const opened = handle;
@@ -506,6 +646,8 @@ export const createDataEngine = (): DataEngine => {
     fetchTableWindow,
     executeAnalysis,
     getDistinctValues,
+    measureKeyQuality,
+    dropDataset,
     dispose,
     persistenceDatabase: () => handle?.connection ?? null,
     restoreDatasets: (datasets) => {
@@ -515,6 +657,10 @@ export const createDataEngine = (): DataEngine => {
           relations.set(dataset.id, { relationName: dataset.relationId, columns: dataset.columns, revision: 1 });
         }
       }
+    },
+    setRelationships: (relationships) => {
+      relationshipGraph.clear();
+      for (const relationship of Object.values(relationships)) relationshipGraph.set(relationship.id, relationship);
     },
   };
 };

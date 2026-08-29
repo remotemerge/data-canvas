@@ -7,12 +7,15 @@ import type {
   ClearFiltersInput,
   ClearSelectionInput,
   CreateMetricInput,
+  CreateRelationshipInput,
   CreateVisualizationInput,
   FailDatasetImportInput,
   ImportDatasetInput,
   RemoveAnnotationInput,
+  RemoveDatasetInput,
   RemoveFilterInput,
   RemoveMetricInput,
+  RemoveRelationshipInput,
   RemoveVisualizationInput,
   SetActiveDatasetInput,
   SetSelectionInput,
@@ -33,6 +36,9 @@ export interface WorkspaceCommands {
   importDataset: Command<ImportDatasetInput>;
   failDatasetImport: Command<FailDatasetImportInput>;
   setActiveDataset: Command<SetActiveDatasetInput>;
+  removeDataset: Command<RemoveDatasetInput>;
+  createRelationship: Command<CreateRelationshipInput>;
+  removeRelationship: Command<RemoveRelationshipInput>;
   applyFilter: Command<ApplyFilterInput>;
   removeFilter: Command<RemoveFilterInput>;
   clearFilters: Command<ClearFiltersInput>;
@@ -64,6 +70,11 @@ const humanCommands: WorkspaceCommands = {
   importDataset: (input) => dispatcher.execute({ type: 'dataset.import', payload: input }, { actor: 'human' }),
   failDatasetImport: (input) => dispatcher.execute({ type: 'dataset.failImport', payload: input }, { actor: 'human' }),
   setActiveDataset: (input) => dispatcher.execute({ type: 'dataset.setActive', payload: input }, { actor: 'human' }),
+  removeDataset: (input) => dispatcher.execute({ type: 'dataset.remove', payload: input }, { actor: 'human' }),
+  createRelationship: (input) =>
+    dispatcher.execute({ type: 'relationship.create', payload: input }, { actor: 'human' }),
+  removeRelationship: (input) =>
+    dispatcher.execute({ type: 'relationship.remove', payload: input }, { actor: 'human' }),
   applyFilter: (input) => dispatcher.execute({ type: 'filter.apply', payload: input }, { actor: 'human' }),
   removeFilter: (input) => dispatcher.execute({ type: 'filter.remove', payload: input }, { actor: 'human' }),
   clearFilters: (input) => dispatcher.execute({ type: 'filters.clear', payload: input }, { actor: 'human' }),

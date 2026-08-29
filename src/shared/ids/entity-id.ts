@@ -17,6 +17,7 @@ export const ID_PREFIX = {
   selection: 'sel',
   metric: 'mtr',
   annotation: 'ann',
+  relationship: 'rel',
   action: 'act',
 } as const;
 

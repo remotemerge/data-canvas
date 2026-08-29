@@ -5,6 +5,7 @@ import type {
 } from '@/application/actions/action-types.ts';
 import { omitKeys } from '@/application/actions/handlers/handler-types.ts';
 import type { ActionHandler } from '@/application/actions/handlers/handler-types.ts';
+import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { resolveDataset, resolveVisualization } from '@/application/validation/validate-entity-refs.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
@@ -59,7 +60,12 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
 
   if (!dataset.ok) return dataset;
 
-  const compatible = validateVisualization(dataset.value, payload.kind, payload.binding);
+  const compatible = validateVisualization(
+    dataset.value,
+    payload.kind,
+    payload.binding,
+    reachableDatasets(workspace, dataset.value.id),
+  );
 
   if (!compatible.ok) return compatible;
 
@@ -113,7 +119,12 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
 
   const kind = payload.kind ?? existing.value.kind;
   const binding = payload.binding ?? existing.value.binding;
-  const compatible = validateVisualization(dataset.value, kind, binding);
+  const compatible = validateVisualization(
+    dataset.value,
+    kind,
+    binding,
+    reachableDatasets(workspace, dataset.value.id),
+  );
 
   if (!compatible.ok) return compatible;
 
