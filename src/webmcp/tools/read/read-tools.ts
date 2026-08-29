@@ -3,6 +3,7 @@ import type { AnalysisQuery, MeasureSpec } from '@/domain/analysis/analysis-quer
 import { relatedDatasetId } from '@/domain/relationship/relationship.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
+import { createGetColumnStatisticsTool } from '@/webmcp/tools/read/get-column-statistics.ts';
 import { createListRelationshipsTool } from '@/webmcp/tools/read/list-relationships.ts';
 import { asInput, boundedCell, failure, invalidEntity, success } from '@/webmcp/tools/tool-helpers.ts';
 
@@ -11,6 +12,7 @@ const filtersFor = (deps: ToolDependencies, datasetId: string): Filter[] =>
 
 export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   createListRelationshipsTool(deps),
+  createGetColumnStatisticsTool(deps),
   {
     name: 'get_workspace',
     description:

@@ -4,9 +4,11 @@ import { addAnnotationSchema } from './add-annotation.schema.ts';
 import { analyzeDataSchema } from './analyze-data.schema.ts';
 import { applyFilterSchema } from './apply-filter.schema.ts';
 import { clearFiltersSchema } from './clear-filters.schema.ts';
+import { createDerivedColumnSchema } from './create-derived-column.schema.ts';
 import { createMetricSchema } from './create-metric.schema.ts';
 import { createRelationshipSchema } from './create-relationship.schema.ts';
 import { createVisualizationSchema } from './create-visualization.schema.ts';
+import { getColumnStatisticsSchema } from './get-column-statistics.schema.ts';
 import { getDatasetSchemaSchema } from './get-dataset-schema.schema.ts';
 import { getWorkspaceSchema } from './get-workspace.schema.ts';
 import { highlightSelectionSchema } from './highlight-selection.schema.ts';
@@ -20,6 +22,7 @@ export const toolSchemas = {
   get_dataset_schema: getDatasetSchemaSchema,
   preview_data: previewDataSchema,
   analyze_data: analyzeDataSchema,
+  get_column_statistics: getColumnStatisticsSchema,
   list_relationships: listRelationshipsSchema,
   create_relationship: createRelationshipSchema,
   create_visualization: createVisualizationSchema,
@@ -29,6 +32,7 @@ export const toolSchemas = {
   clear_filters: clearFiltersSchema,
   highlight_selection: highlightSelectionSchema,
   create_metric: createMetricSchema,
+  create_derived_column: createDerivedColumnSchema,
   add_annotation: addAnnotationSchema,
 } as const;
 
