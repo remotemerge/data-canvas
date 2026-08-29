@@ -1,7 +1,7 @@
 import { useTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createTableColumns, workspaceTableFeatures } from '@/table/tanstack/table-columns.ts';
+import { columnAlignment, createTableColumns, workspaceTableFeatures } from '@/table/tanstack/table-columns.ts';
 import { useTableWindow } from '@/table/tanstack/use-table-window.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { SortSpec } from '@/domain/analysis/analysis-query.ts';
@@ -112,7 +112,7 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
               {table.getHeaderGroups().map((group) => (
                 <tr key={group.id}>
                   {group.headers.map((header, index) => (
-                    <th key={header.id}>
+                    <th key={header.id} data-align={columnAlignment(dataset.columns[index]!)}>
                       <SortControls
                         column={dataset.columns[index] as NonNullable<(typeof dataset.columns)[number]>}
                         sort={sort}
@@ -129,8 +129,8 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
                 if (row === undefined) return null;
                 return (
                   <tr key={virtualRow.key} style={{ transform: `translateY(${virtualRow.start}px)` }}>
-                    {row.getAllCells().map((cell) => (
-                      <td key={cell.id}>
+                    {row.getAllCells().map((cell, index) => (
+                      <td key={cell.id} data-align={columnAlignment(dataset.columns[index]!)}>
                         <table.FlexRender cell={cell} />
                       </td>
                     ))}
