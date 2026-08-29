@@ -17,6 +17,11 @@ import {
 } from '@/application/actions/handlers/filter-handlers.ts';
 import type { HandlerDeps, HandlerOutcome } from '@/application/actions/handlers/handler-types.ts';
 import { handleUpdateLayout } from '@/application/actions/handlers/layout-handlers.ts';
+import {
+  handleCreateRelationship,
+  handleRemoveDataset,
+  handleRemoveRelationship,
+} from '@/application/actions/handlers/relationship-handlers.ts';
 import { handleSetTableSort } from '@/application/actions/handlers/table-handlers.ts';
 import { handleCreateMetric, handleRemoveMetric } from '@/application/actions/handlers/metric-handlers.ts';
 import { handleAddAnnotation, handleRemoveAnnotation } from '@/application/actions/handlers/annotation-handlers.ts';
@@ -69,6 +74,12 @@ const runHandler = (
       return handleFailDatasetImport(workspace, action.payload, deps);
     case 'dataset.setActive':
       return handleSetActiveDataset(workspace, action.payload, deps);
+    case 'dataset.remove':
+      return handleRemoveDataset(workspace, action.payload, deps);
+    case 'relationship.create':
+      return handleCreateRelationship(workspace, action.payload, deps);
+    case 'relationship.remove':
+      return handleRemoveRelationship(workspace, action.payload, deps);
     case 'filter.apply':
       return handleApplyFilter(workspace, action.payload, deps);
     case 'filter.remove':

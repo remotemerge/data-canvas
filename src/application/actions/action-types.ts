@@ -2,6 +2,7 @@ import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
 import type { DatasetSourceKind } from '@/domain/dataset/dataset.ts';
 import type { FilterExpression, FilterOperator } from '@/domain/filter/filter.ts';
 import type { AggregateFunction, MetricFormat } from '@/domain/metric/metric.ts';
+import type { JoinKind, RelationshipKeyPair, RelationshipKind } from '@/domain/relationship/relationship.ts';
 import type {
   VisualBinding,
   VisualizationKind,
@@ -145,6 +146,29 @@ export interface RemoveAnnotationInput {
   annotationId: EntityId;
 }
 
+export interface CreateRelationshipInput {
+  leftDatasetId: EntityId;
+  rightDatasetId: EntityId;
+  on: RelationshipKeyPair[];
+  kind: RelationshipKind;
+  join: JoinKind;
+}
+
+export interface RemoveRelationshipInput {
+  relationshipId: EntityId;
+}
+
+export interface RemoveDatasetInput {
+  datasetId: EntityId;
+  /**
+   * Removes the entities referencing this dataset along with it.
+   *
+   * Omitted, the action refuses and reports what still references the dataset. Cascading is opt-in
+   * because silently deleting a human's charts is worse than a refusal they can act on.
+   */
+  cascade?: boolean;
+}
+
 export interface UpdateLayoutInput {
   columns?: number;
   items?: WorkspaceLayoutItem[];
@@ -156,6 +180,7 @@ export interface RestoreWorkspaceInput {
     Pick<
       Workspace,
       | 'activeDatasetId'
+      | 'relationships'
       | 'visualizations'
       | 'filters'
       | 'tableSorts'
@@ -188,6 +213,9 @@ export type ApplicationAction =
   | { type: 'dataset.import'; payload: ImportDatasetInput }
   | { type: 'dataset.failImport'; payload: FailDatasetImportInput }
   | { type: 'dataset.setActive'; payload: SetActiveDatasetInput }
+  | { type: 'dataset.remove'; payload: RemoveDatasetInput }
+  | { type: 'relationship.create'; payload: CreateRelationshipInput }
+  | { type: 'relationship.remove'; payload: RemoveRelationshipInput }
   | { type: 'filter.apply'; payload: ApplyFilterInput }
   | { type: 'filter.remove'; payload: RemoveFilterInput }
   | { type: 'filters.clear'; payload: ClearFiltersInput }
@@ -212,6 +240,9 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'dataset.import',
   'dataset.failImport',
   'dataset.setActive',
+  'dataset.remove',
+  'relationship.create',
+  'relationship.remove',
   'filter.apply',
   'filter.remove',
   'filters.clear',

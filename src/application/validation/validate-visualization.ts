@@ -32,8 +32,18 @@ const wrongType = (kind: VisualizationKind, channel: string, column: Column, req
     { kind, channel, columnId: column.id, logicalType: column.logicalType },
   );
 
-/** Resolves every bound channel so an unknown column ID cannot survive into a stored visualization. */
-const resolveBoundColumns = (dataset: Dataset, binding: VisualBinding): Result<Map<EntityId, Column>, DomainError> => {
+/**
+ * Resolves every bound channel so an unknown column ID cannot survive into a stored visualization.
+ *
+ * `related` carries datasets reachable from the anchor through a relationship. A chart may bind a
+ * dimension from one dataset and a measure from another, so resolution spans them — but only over
+ * datasets the caller has already established are joinable, never the whole workspace.
+ */
+const resolveBoundColumns = (
+  dataset: Dataset,
+  binding: VisualBinding,
+  related: readonly Dataset[],
+): Result<Map<EntityId, Column>, DomainError> => {
   const referenced: EntityId[] = [
     ...(binding.x === undefined ? [] : [binding.x]),
     ...(binding.y ?? []),
@@ -48,6 +58,15 @@ const resolveBoundColumns = (dataset: Dataset, binding: VisualBinding): Result<M
   for (const columnId of referenced) {
     if (resolved.has(columnId)) continue;
 
+    const fromRelated = related.flatMap((candidate) => candidate.columns).find((column) => column.id === columnId);
+
+    if (fromRelated !== undefined) {
+      resolved.set(columnId, fromRelated);
+      continue;
+    }
+
+    // Falls back to the anchor last, so its error message names the anchor — the dataset the caller
+    // actually chose — rather than whichever related dataset happened to be checked first.
     const column = resolveColumn(dataset, columnId);
 
     if (!column.ok) return column;
@@ -195,17 +214,19 @@ const validateTable = (binding: VisualBinding, columns: Map<EntityId, Column>): 
     : ok(undefined);
 
 /**
- * Checks a visualization's binding against its kind and the dataset's columns.
+ * Checks a visualization's binding against its kind and the available columns.
  *
  * Runs after the dataset is resolved. Resolves every referenced column itself, so callers do not
- * need a separate reference check for the binding.
+ * need a separate reference check for the binding. `related` is the datasets joinable to the anchor;
+ * omitting it restricts the binding to the anchor's own columns.
  */
 export const validateVisualization = (
   dataset: Dataset,
   kind: VisualizationKind,
   binding: VisualBinding,
+  related: readonly Dataset[] = [],
 ): Result<void, DomainError> => {
-  const columns = resolveBoundColumns(dataset, binding);
+  const columns = resolveBoundColumns(dataset, binding, related);
 
   if (!columns.ok) return columns;
 

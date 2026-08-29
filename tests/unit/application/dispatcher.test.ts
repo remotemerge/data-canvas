@@ -29,6 +29,21 @@ describe('dispatcher handler coverage', () => {
         return { type, payload: { datasetId: DATASET_ID, reason: 'unreadable' } };
       case 'dataset.setActive':
         return { type, payload: { datasetId: DATASET_ID } };
+      case 'dataset.remove':
+        return { type, payload: { datasetId: DATASET_ID, cascade: true } };
+      case 'relationship.create':
+        return {
+          type,
+          payload: {
+            leftDatasetId: DATASET_ID,
+            rightDatasetId: 'ds_missing',
+            on: [{ leftColumnId: 'col_region', rightColumnId: 'col_other' }],
+            kind: 'many_to_one',
+            join: 'inner',
+          },
+        };
+      case 'relationship.remove':
+        return { type, payload: { relationshipId: 'rel_missing' } };
       case 'filter.apply':
         return { type, payload: { datasetId: DATASET_ID, columnId: 'col_revenue', operator: 'gt', value: 10 } };
       case 'filter.remove':
@@ -95,7 +110,7 @@ describe('dispatcher handler coverage', () => {
 
   test('every action type in the union is listed in APPLICATION_ACTION_TYPES', () => {
     expect(new Set(APPLICATION_ACTION_TYPES).size).toBe(APPLICATION_ACTION_TYPES.length);
-    expect(APPLICATION_ACTION_TYPES).toHaveLength(19);
+    expect(APPLICATION_ACTION_TYPES).toHaveLength(22);
   });
 });
 

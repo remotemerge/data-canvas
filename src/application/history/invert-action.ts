@@ -40,6 +40,9 @@ export const invertAction = (
       return restore({ tableSorts: before.tableSorts }, changedEntityIds);
     case 'dataset.setActive':
       return restore({ activeDatasetId: before.activeDatasetId }, changedEntityIds);
+    case 'relationship.create':
+    case 'relationship.remove':
+      return restore({ relationships: before.relationships }, changedEntityIds);
     case 'history.restore': {
       const inverse: RestoreWorkspaceInput['state'] = {};
       for (const key of Object.keys(action.payload.state) as (keyof RestoreWorkspaceInput['state'])[]) {
@@ -47,9 +50,13 @@ export const invertAction = (
       }
       return restore(inverse, action.payload.changedEntityIds);
     }
+    // Dataset lifecycle actions are non-invertible: the browser may no longer hold the source file,
+    // and `dataset.remove` has already dropped the DuckDB relation that the metadata describes.
+    // Restoring the metadata alone would leave every view querying a relation that does not exist.
     case 'dataset.beginImport':
     case 'dataset.import':
     case 'dataset.failImport':
+    case 'dataset.remove':
       return undefined;
   }
 };
