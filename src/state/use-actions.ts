@@ -6,6 +6,7 @@ import type {
   BeginDatasetImportInput,
   ClearFiltersInput,
   ClearSelectionInput,
+  CreateDerivedColumnInput,
   CreateMetricInput,
   CreateRelationshipInput,
   CreateVisualizationInput,
@@ -13,6 +14,7 @@ import type {
   ImportDatasetInput,
   RemoveAnnotationInput,
   RemoveDatasetInput,
+  RemoveDerivedColumnInput,
   RemoveFilterInput,
   RemoveMetricInput,
   RemoveRelationshipInput,
@@ -21,6 +23,7 @@ import type {
   SetSelectionInput,
   SetTableSortInput,
   UpdateLayoutInput,
+  UpdateMetricInput,
   UpdateVisualizationInput,
 } from '@/application/actions/action-types.ts';
 import { dispatcher } from '@/application/actions/dispatcher.ts';
@@ -49,7 +52,10 @@ export interface WorkspaceCommands {
   setSelection: Command<SetSelectionInput>;
   clearSelection: Command<ClearSelectionInput>;
   createMetric: Command<CreateMetricInput>;
+  updateMetric: Command<UpdateMetricInput>;
   removeMetric: Command<RemoveMetricInput>;
+  createDerivedColumn: Command<CreateDerivedColumnInput>;
+  removeDerivedColumn: Command<RemoveDerivedColumnInput>;
   addAnnotation: Command<AddAnnotationInput>;
   removeAnnotation: Command<RemoveAnnotationInput>;
   updateLayout: Command<UpdateLayoutInput>;
@@ -88,7 +94,12 @@ const humanCommands: WorkspaceCommands = {
   setSelection: (input) => dispatcher.execute({ type: 'selection.set', payload: input }, { actor: 'human' }),
   clearSelection: (input) => dispatcher.execute({ type: 'selection.clear', payload: input }, { actor: 'human' }),
   createMetric: (input) => dispatcher.execute({ type: 'metric.create', payload: input }, { actor: 'human' }),
+  updateMetric: (input) => dispatcher.execute({ type: 'metric.update', payload: input }, { actor: 'human' }),
   removeMetric: (input) => dispatcher.execute({ type: 'metric.remove', payload: input }, { actor: 'human' }),
+  createDerivedColumn: (input) =>
+    dispatcher.execute({ type: 'derivedColumn.create', payload: input }, { actor: 'human' }),
+  removeDerivedColumn: (input) =>
+    dispatcher.execute({ type: 'derivedColumn.remove', payload: input }, { actor: 'human' }),
   addAnnotation: (input) => dispatcher.execute({ type: 'annotation.add', payload: input }, { actor: 'human' }),
   removeAnnotation: (input) => dispatcher.execute({ type: 'annotation.remove', payload: input }, { actor: 'human' }),
   updateLayout: (input) => dispatcher.execute({ type: 'layout.update', payload: input }, { actor: 'human' }),
