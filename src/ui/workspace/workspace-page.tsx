@@ -18,6 +18,7 @@ import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx'
 import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
 import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx';
 import { StoragePanel } from '@/ui/workspace/storage-panel.tsx';
+import { UndoRedoControls } from '@/ui/workspace/undo-redo-controls.tsx';
 
 /**
  * The workspace shell.
@@ -51,6 +52,7 @@ export const WorkspacePage = (): React.JSX.Element => {
         <h1 className="workspace__title">{name}</h1>
         <span className="workspace__revision">revision {revision}</span>
         <AgentStatusIndicator />
+        <UndoRedoControls onError={setActionError} />
       </header>
 
       <div className="workspace__body">
