@@ -1,0 +1,93 @@
+name: WebMCP tool change
+description: Propose a new tool or a contract change to an existing tool.
+title: '[WebMCP]: '
+labels: ['webmcp']
+body:
+  - type: input
+    id: tool_name
+    attributes:
+      label: Tool name
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: Why existing tools cannot express this capability
+    validations:
+      required: true
+  - type: dropdown
+    id: classification
+    attributes:
+      label: Read or write classification
+      options:
+        - Read
+        - Write
+    validations:
+      required: true
+  - type: textarea
+    id: schema
+    attributes:
+      label: Input schema
+      description: Include bounds for every array, string, and result-size control.
+    validations:
+      required: true
+  - type: textarea
+    id: action
+    attributes:
+      label: Domain action mapping
+      description: Name the shared action or explain why this is a read-only query.
+    validations:
+      required: true
+  - type: textarea
+    id: returned_data
+    attributes:
+      label: Returned data
+      description: List fields and state the maximum result size.
+    validations:
+      required: true
+  - type: dropdown
+    id: untrusted
+    attributes:
+      label: untrustedContentHint
+      options:
+        - 'true'
+        - 'false'
+        - Not applicable
+    validations:
+      required: true
+  - type: dropdown
+    id: readonly
+    attributes:
+      label: readOnlyHint
+      options:
+        - 'true'
+        - 'false'
+    validations:
+      required: true
+  - type: input
+    id: output_budget
+    attributes:
+      label: Output budget
+      description: Give an exact byte, row, or item limit.
+    validations:
+      required: true
+  - type: textarea
+    id: failures
+    attributes:
+      label: Failure modes
+    validations:
+      required: true
+  - type: textarea
+    id: injection
+    attributes:
+      label: Prompt-injection considerations
+      description: Explain how dataset-derived text remains untrusted.
+    validations:
+      required: true
+  - type: textarea
+    id: evals
+    attributes:
+      label: Agent-evaluation cases
+      description: Describe observable outcomes, not expected prose.
+    validations:
+      required: true
