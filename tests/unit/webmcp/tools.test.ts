@@ -28,6 +28,29 @@ const setup = () => {
   return { harness, deps, tool };
 };
 
+describe('WebMCP tool surface exclusions', () => {
+  /*
+   * No agent-triggered export or import. A tool that writes a file containing the workspace's data
+   * has data-exfiltration shape and serves no analytical scenario, so its absence is asserted rather
+   * than left to review. See docs/decisions/0012-no-agent-export-tool.md.
+   */
+  test('registers no export or import tool', () => {
+    const { deps } = setup();
+    const names = createToolDefinitions(deps).map((tool) => tool.name);
+
+    for (const name of names) {
+      expect(name).not.toMatch(/export|import|download|save_file|archive/i);
+    }
+  });
+
+  test('exposes no tool that replaces the whole workspace', () => {
+    const { deps } = setup();
+    const names = createToolDefinitions(deps).map((tool) => tool.name);
+    expect(names).not.toContain('import_workspace');
+    expect(names).not.toContain('export_workspace');
+  });
+});
+
 describe('WebMCP semantic tool behavior', () => {
   test('unknown entities return stable corrective codes', async () => {
     const { tool } = setup();

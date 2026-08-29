@@ -9,6 +9,7 @@ import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
 import type { FilterOperator } from '@/domain/filter/filter.ts';
 import type { VisualizationKind, VisualBinding } from '@/domain/visualization/visualization.ts';
+import type { SelectionLinkMode } from '@/domain/visualization/selection-link-mode.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
@@ -180,6 +181,7 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
                 (input.kind as VisualizationKind | undefined) ?? existing.kind,
               ),
             }),
+        ...(input.linkMode === undefined ? {} : { linkMode: input.linkMode as SelectionLinkMode }),
       };
       return dispatch(
         deps,
@@ -248,7 +250,8 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'highlight_selection',
-    description: 'Highlight a bounded set of values using a semantic selection predicate.',
+    description:
+      'Highlight a bounded set of values using a semantic selection predicate. Set additive to add to the current selection.',
     schema: toolSchemas.highlight_selection,
     annotations: { readOnlyHint: false },
     needsDataset: true,
@@ -257,7 +260,9 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
       return dispatch(
         deps,
         {
-          type: 'selection.set',
+          // Both actions take the same payload, so an agent extending a selection reaches exactly
+          // the handler a ctrl-clicking human does.
+          type: input.additive === true ? 'selection.extend' : 'selection.set',
           payload: {
             datasetId: input.datasetId as string,
             mode: 'predicate',

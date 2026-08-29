@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { APPLICATION_ACTION_TYPES } from '@/application/actions/action-types.ts';
 import type { ApplicationAction } from '@/application/actions/action-types.ts';
+import { createEmptyWorkspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import {
@@ -68,8 +69,14 @@ describe('dispatcher handler coverage', () => {
         return { type, payload: { visualizationId: 'viz_missing' } };
       case 'selection.set':
         return { type, payload: { datasetId: DATASET_ID, mode: 'keys', keys: ['1'], origin: 'table' } };
+      case 'selection.extend':
+        return { type, payload: { datasetId: DATASET_ID, mode: 'keys', keys: ['2'], origin: 'table' } };
       case 'selection.clear':
         return { type, payload: {} };
+      case 'visualization.setLinkMode':
+        return { type, payload: { visualizationId: 'viz_missing', linkMode: 'filter' } };
+      case 'workspace.import':
+        return { type, payload: { workspace: createEmptyWorkspace('Imported'), missingDatasetNames: [] } };
       case 'metric.create':
         return { type, payload: { datasetId: DATASET_ID, name: 'Total', aggregate: 'sum', columnId: 'col_revenue' } };
       case 'metric.update':
@@ -128,7 +135,7 @@ describe('dispatcher handler coverage', () => {
 
   test('every action type in the union is listed in APPLICATION_ACTION_TYPES', () => {
     expect(new Set(APPLICATION_ACTION_TYPES).size).toBe(APPLICATION_ACTION_TYPES.length);
-    expect(APPLICATION_ACTION_TYPES).toHaveLength(25);
+    expect(APPLICATION_ACTION_TYPES).toHaveLength(28);
   });
 });
 

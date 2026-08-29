@@ -22,6 +22,11 @@ export const updateVisualizationSchema = {
       type: 'string',
       enum: ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'median', 'stddev'],
     },
+    linkMode: {
+      type: 'string',
+      enum: ['none', 'highlight', 'filter'],
+      description: 'How this chart reacts to a selection: ignore it, dim outside it, or filter to it.',
+    },
     expectedRevision: { type: 'integer', minimum: 0 },
   },
   required: ['visualizationId'],

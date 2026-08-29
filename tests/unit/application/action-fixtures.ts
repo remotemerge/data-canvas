@@ -67,7 +67,7 @@ export const visualization = (id: string, datasetId: string): Visualization => (
   },
   binding: { x: 'col_date', y: ['col_revenue'] },
   presentation: { showLegend: true, showGrid: true, stacked: false },
-  linkedSelection: true,
+  linkMode: 'highlight',
   createdBy: 'human',
 });
 
@@ -149,8 +149,32 @@ export const stubDataEngine = (
         columns: [column('col_a', 'a', 'number')],
       }),
     ),
+  /**
+   * The columns a Parquet export should report per dataset.
+   *
+   * Supplied by portability tests so a round trip reproduces the schema it started with. Handler
+   * tests never reach the Parquet path and can leave it at the default.
+   */
+  exportedColumns: (datasetId: string) => Column[] = () => [column('col_a', 'a', 'number')],
 ): DataEnginePort => ({
   importFile,
+  // Stand-in Parquet bytes carrying the schema the export was asked for. Portability tests assert
+  // the archive plumbing — which datasets are written, and that import routes each file back
+  // through the engine — not DuckDB's encoding. Echoing the schema back is what lets the import's
+  // column-match check be exercised: real DuckDB reads these names out of the Parquet file.
+  exportDatasetParquet: (datasetId) =>
+    Promise.resolve(ok(new TextEncoder().encode(JSON.stringify({ datasetId, columns: exportedColumns(datasetId) })))),
+  importDatasetParquet: (datasetId, bytes) => {
+    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as { columns?: Column[] };
+
+    return Promise.resolve(
+      ok<ImportedRelation>({
+        relationId: `dataset_${datasetId.slice(-4)}`,
+        rowCount: 42,
+        columns: decoded.columns ?? [column('col_a', 'a', 'number')],
+      }),
+    );
+  },
   fetchTableWindow: () =>
     Promise.resolve(ok({ rows: [], columnIds: [], columns: [], totalRowCount: 0, offset: 0, stale: false })),
   executeAnalysis: () => Promise.resolve(ok({ rows: [], columns: [] })),
