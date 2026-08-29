@@ -225,7 +225,7 @@ export const ChartPanel = ({
     <article className="chart-panel">
       <header className="chart-panel__header">
         <h3>
-          {visualization.title}
+          <span className="chart-panel__title">{visualization.title}</span>
           <Provenance entityId={visualization.id} createdBy={visualization.createdBy} />
         </h3>
         <div className="chart-panel__controls">
