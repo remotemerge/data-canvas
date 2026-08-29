@@ -13,6 +13,7 @@ import type {
 import type { SelectionLinkMode } from '@/domain/visualization/selection-link-mode.ts';
 import type { Workspace, WorkspaceLayoutItem } from '@/domain/workspace/workspace.ts';
 import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
+import type { ImportProgress } from '@/application/ports/data-engine-port.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import type { Result } from '@/shared/result/result.ts';
@@ -51,6 +52,14 @@ export interface ImportDatasetInput {
    * ID here would leave the `loading` row stranded forever.
    */
   datasetId: EntityId;
+  /**
+   * Progress callback for the ingestion phases.
+   *
+   * Not part of the workspace and never persisted or replayed: progress is a property of one running
+   * import, not of the state it produces. Only the UI supplies it; an agent-initiated import simply
+   * omits it.
+   */
+  onProgress?: (progress: ImportProgress) => void;
 }
 
 export interface FailDatasetImportInput {

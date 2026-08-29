@@ -87,7 +87,7 @@ export const handleImportDataset: ActionHandler<ImportDatasetInput> = async (wor
     return err(domainError('IMPORT_FAILED', 'No file was supplied for import.'));
   }
 
-  const imported = await deps.dataEngine.importFile(payload.file, existing.value.id);
+  const imported = await deps.dataEngine.importFile(payload.file, existing.value.id, payload.onProgress);
 
   if (!imported.ok) return imported;
 

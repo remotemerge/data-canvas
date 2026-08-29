@@ -1,5 +1,6 @@
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import type {
+  AnalysisExecutionOptions,
   AnalysisResult,
   ColumnRangeRequest,
   ColumnStatistics,
@@ -8,6 +9,7 @@ import type {
   DistinctValuesRequest,
   DistinctValuesResult,
   ImportedRelation,
+  ImportProgress,
   KeyQualityRequest,
   KeyQualityResult,
   TableWindow,
@@ -29,8 +31,11 @@ import {
   virtualImportPath,
 } from '@/data/duckdb/identifier-safety.ts';
 import { CATEGORY_DISTINCT_THRESHOLD, normalizeLogicalType, refineTextType } from '@/data/duckdb/type-normalization.ts';
-import { createQueryScheduler } from '@/data/duckdb/query-scheduler.ts';
+import { createQueryScheduler, QueryAbortedError } from '@/data/duckdb/query-scheduler.ts';
 import type { QueryScheduler } from '@/data/duckdb/query-scheduler.ts';
+import { planQuery } from '@/data/compiler/query-planner.ts';
+import { createStatisticsCache } from '@/application/queries/statistics-cache.ts';
+import type { DatasetCardinality } from '@/data/compiler/join-ordering.ts';
 import { ingestionFailure, validateColumnCount, validateImportFile } from '@/data/import/import-dataset.ts';
 import type { ValidatedFile } from '@/data/import/import-dataset.ts';
 import { jsonToCsvBytes } from '@/data/import/json-to-csv.ts';
@@ -67,6 +72,14 @@ interface RelationEntry {
   relationName: string;
   columns: Column[];
   revision: number;
+  /**
+   * Rows at import time, kept so the planner can order joins without a query per plan.
+   *
+   * Absent means unknown rather than empty — a restored session may have no recorded count, and the
+   * planner must decline to order rather than treat the relation as having no rows. Exact when
+   * present, since a relation is replaced wholesale rather than mutated.
+   */
+  rowCount?: number;
 }
 
 /** One row of DuckDB's `DESCRIBE` output. Only the two fields the engine uses are declared. */
@@ -247,13 +260,84 @@ export const describeQueryFanOut = (anchorRows: number, joinedRows: number): str
   return `This join produced about ${(joinedRows / anchorRows).toFixed(2)} rows per source row, so aggregate totals may be inflated by duplicate key matches.`;
 };
 
-const executeCompiled = async (connection: AsyncDuckDBConnection, compiled: CompiledQuery): Promise<ArrowRowSource> => {
+/**
+ * Prepares and runs a compiled statement.
+ *
+ * The abort check happens twice — before preparing and before executing — because DuckDB-Wasm's
+ * connection API takes no `AbortSignal`, so a query already inside the worker cannot be interrupted
+ * mid-execution. Checking at both boundaries is what makes cancellation real rather than cosmetic:
+ * a superseded query that has not yet reached the engine never runs at all, which is the common case
+ * when a user drags a filter. The statement is closed either way, so an aborted query leaves no
+ * prepared statement behind.
+ */
+const executeCompiled = async (
+  connection: AsyncDuckDBConnection,
+  compiled: CompiledQuery,
+  signal?: AbortSignal,
+): Promise<ArrowRowSource> => {
+  if (signal?.aborted) throw new QueryAbortedError();
+
   const statement = await connection.prepare(compiled.sql);
   try {
+    if (signal?.aborted) throw new QueryAbortedError();
+
     return (await statement.query(...compiled.parameters)) as unknown as ArrowRowSource;
   } finally {
     await statement.close();
   }
+};
+
+/**
+ * Reads a file into memory, reporting real byte progress.
+ *
+ * `stream()` rather than `arrayBuffer()` so a 400 MB import shows a bar that moves instead of an
+ * indeterminate spinner that looks indistinguishable from a hang. The chunks are concatenated once
+ * at the end, which costs one extra copy of the file; that is acceptable because DuckDB needs a
+ * contiguous buffer to register anyway.
+ *
+ * Falls back to `arrayBuffer()` where `stream()` is unavailable, so the read never depends on the
+ * progress feature being supported.
+ */
+const readFileBytes = async (file: File, onProgress?: (progress: ImportProgress) => void): Promise<Uint8Array> => {
+  const totalBytes = file.size;
+
+  if (typeof file.stream !== 'function') {
+    onProgress?.({ phase: 'reading', bytesRead: 0, totalBytes });
+
+    const buffer = new Uint8Array(await file.arrayBuffer());
+
+    onProgress?.({ phase: 'reading', bytesRead: totalBytes, totalBytes });
+
+    return buffer;
+  }
+
+  const reader = file.stream().getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesRead = 0;
+
+  onProgress?.({ phase: 'reading', bytesRead, totalBytes });
+
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop -- a stream is read one chunk at a time by definition.
+    const { done, value } = await reader.read();
+
+    if (done) break;
+    if (value === undefined) continue;
+
+    chunks.push(value);
+    bytesRead += value.byteLength;
+    onProgress?.({ phase: 'reading', bytesRead, totalBytes });
+  }
+
+  const bytes = new Uint8Array(bytesRead);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return bytes;
 };
 
 const enabledExpressions = (filters: readonly Filter[]) =>
@@ -282,6 +366,21 @@ export const createDataEngine = (): DataEngine => {
   let derivedColumnDefinitions: Record<EntityId, DerivedColumn> = {};
   const countCache = createQueryCache<number>();
 
+  /** Row counts and column extents, keyed by dataset revision. Backs the planner and sampling. */
+  const statisticsCache = createStatisticsCache();
+
+  /**
+   * Row-count estimates for the planner's join ordering.
+   *
+   * Read from what import already measured rather than queried: a `COUNT` per dataset per plan would
+   * cost more than the ordering saves, which is the whole reason the statistics cache exists.
+   */
+  const datasetCardinalities = (): DatasetCardinality[] =>
+    [...relations.entries()].map(([datasetId, relation]) => ({
+      datasetId,
+      ...(relation.rowCount === undefined ? {} : { rowCount: relation.rowCount }),
+    }));
+
   const requireConnection = (): Result<AsyncDuckDBConnection, DomainError> =>
     handle === null
       ? err(domainError('ENGINE_UNAVAILABLE', 'The analytical engine is not available yet.'))
@@ -303,9 +402,12 @@ export const createDataEngine = (): DataEngine => {
     connection: AsyncDuckDBConnection,
     validated: ValidatedFile,
     stagingName: string,
+    onProgress?: (progress: ImportProgress) => void,
   ): Promise<readonly string[]> => {
-    const raw = new Uint8Array(await validated.file.arrayBuffer());
+    const raw = await readFileBytes(validated.file, onProgress);
     const isJson = validated.sourceKind === 'json';
+
+    onProgress?.({ phase: 'ingesting' });
     const buffer = isJson ? jsonToCsvBytes(new TextDecoder().decode(raw)) : raw;
     const virtualPath = virtualImportPath(stagingName);
 
@@ -333,7 +435,11 @@ export const createDataEngine = (): DataEngine => {
     }
   };
 
-  const importFile = async (file: unknown, datasetId: EntityId): Promise<Result<ImportedRelation, DomainError>> => {
+  const importFile = async (
+    file: unknown,
+    datasetId: EntityId,
+    onProgress?: (progress: ImportProgress) => void,
+  ): Promise<Result<ImportedRelation, DomainError>> => {
     const connectionResult = requireConnection();
 
     if (!connectionResult.ok) return connectionResult;
@@ -347,7 +453,7 @@ export const createDataEngine = (): DataEngine => {
     const stagingName = stagingRelationName(relationName);
 
     try {
-      const displayNames = await ingestStaging(connection, validated.value, stagingName);
+      const displayNames = await ingestStaging(connection, validated.value, stagingName, onProgress);
 
       const columnCount = validateColumnCount(displayNames.length);
 
@@ -360,6 +466,10 @@ export const createDataEngine = (): DataEngine => {
       await materializeRelation(connection, stagingName, relationName, displayNames.length);
       await dropRelation(connection, stagingName);
 
+      // Column profiling runs a bounded distinct count per text column, which on a wide file is the
+      // longest phase after ingestion. Naming it stops the progress readout from appearing stuck.
+      onProgress?.({ phase: 'profiling' });
+
       const described = await describeRelation(connection, relationName);
       const columns = await buildColumns(connection, relationName, described, displayNames);
 
@@ -367,8 +477,9 @@ export const createDataEngine = (): DataEngine => {
       const rowCount = readScalarCount(counted as unknown as ArrowRowSource);
 
       const revision = (relations.get(datasetId)?.revision ?? 0) + 1;
-      relations.set(datasetId, { relationName, columns, revision });
+      relations.set(datasetId, { relationName, columns, revision, rowCount });
       countCache.clear();
+      statisticsCache.setDatasetStatistics(datasetId, revision, { rowCount });
 
       return ok({ relationId: relationName, rowCount, columns });
     } catch {
@@ -462,8 +573,9 @@ export const createDataEngine = (): DataEngine => {
       const rowCount = readScalarCount(counted as unknown as ArrowRowSource);
 
       const revision = (relations.get(datasetId)?.revision ?? 0) + 1;
-      relations.set(datasetId, { relationName, columns, revision });
+      relations.set(datasetId, { relationName, columns, revision, rowCount });
       countCache.clear();
+      statisticsCache.setDatasetStatistics(datasetId, revision, { rowCount });
 
       return ok({ relationId: relationName, rowCount, columns });
     } catch {
@@ -527,32 +639,69 @@ export const createDataEngine = (): DataEngine => {
     }
   };
 
-  const executeAnalysis = async (query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>> => {
+  /**
+   * Runs an analysis query, optionally under the scheduler.
+   *
+   * A `key` opts the query into supersession: a newer request under the same key aborts the
+   * in-flight one and its result is discarded. Without a key the query runs directly, which is what
+   * the engine's own internal reads (fan-out measurement, column profiling) need — they are already
+   * nested inside a scheduled call, and scheduling them again would deadlock behind their own parent.
+   */
+  const executeAnalysis = async (
+    query: AnalysisQuery,
+    options?: AnalysisExecutionOptions,
+  ): Promise<Result<AnalysisResult, DomainError>> => {
     const connectionResult = requireConnection();
     if (!connectionResult.ok) return connectionResult;
     const relation = relations.get(query.datasetId);
     if (relation === undefined) {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
-    const compiled = compileAnalysisQuery(query, queryContext());
+    const planned = planQuery(query, { ...queryContext(), cardinalities: datasetCardinalities() });
+    const compiled = compileAnalysisQuery(planned.query, {
+      ...queryContext(),
+      ...(planned.joinOrder === undefined ? {} : { joinOrder: planned.joinOrder }),
+    });
     if (!compiled.ok) return compiled;
-    try {
-      const table = await executeCompiled(connectionResult.value, compiled.value);
+
+    const run = async (signal?: AbortSignal): Promise<AnalysisResult> => {
+      const table = await executeCompiled(connectionResult.value, compiled.value, signal);
       const fanOut =
         compiled.value.joined && query.measures.length > 0
-          ? await measureJoinFanOut(connectionResult.value, query)
+          ? await measureJoinFanOut(connectionResult.value, planned.query)
           : undefined;
-      return ok({
+      return {
         rows: readArrowRows(
           table,
           compiled.value.resultColumns.map((column) => column.logicalType),
         ).rows,
         columns: compiled.value.resultColumns,
         ...(fanOut === undefined ? {} : { warning: fanOut }),
-      });
-    } catch {
-      return err(engineFailure('QUERY_FAILED'));
+      };
+    };
+
+    if (options?.key === undefined) {
+      try {
+        return ok(await run(options?.signal));
+      } catch {
+        return err(engineFailure('QUERY_FAILED'));
+      }
     }
+
+    const scheduled = await scheduler
+      .schedule((signal) => run(signal), {
+        key: options.key,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
+      .catch(() => null);
+
+    if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
+
+    // A superseded analysis returns an empty result rather than an error: being overtaken is normal
+    // interaction, and the caller keeps whatever it already shows.
+    if (scheduled.stale) return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+
+    return ok(scheduled.value);
   };
 
   /**
@@ -614,6 +763,10 @@ export const createDataEngine = (): DataEngine => {
     if (!connectionResult.ok) return connectionResult;
 
     await dropRelation(connectionResult.value, relation.relationName);
+    statisticsCache.invalidateDataset(
+      datasetId,
+      relation.columns.map((column) => column.id),
+    );
     relations.delete(datasetId);
     countCache.clear();
 
@@ -717,6 +870,16 @@ export const createDataEngine = (): DataEngine => {
    * size. Callers cache it against the dataset revision rather than calling per render.
    */
   const getColumnRange = async (request: ColumnRangeRequest): Promise<Result<ColumnRange, DomainError>> => {
+    const relation = relations.get(request.datasetId);
+
+    // The cached extent applies only to the unfiltered column. A filter narrows the range, and
+    // reusing the wider one would place histogram bucket boundaries outside the data on screen.
+    if (relation !== undefined && request.filters.length === 0) {
+      const cached = statisticsCache.columnStatistics(request.columnId, relation.revision);
+
+      if (cached?.min !== undefined && cached.max !== undefined) return ok({ min: cached.min, max: cached.max });
+    }
+
     const result = await executeAnalysis({
       datasetId: request.datasetId,
       dimensions: [],
@@ -736,7 +899,21 @@ export const createDataEngine = (): DataEngine => {
 
     // An empty or all-null column has no extent. Reporting a degenerate zero-width range lets the
     // bin compiler fall back to its single-bucket path instead of dividing by zero.
-    return ok({ min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 0 });
+    const range = { min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 0 };
+
+    // Only the unfiltered extent is cached, matching what the lookup above will accept.
+    if (relation !== undefined && request.filters.length === 0) {
+      const existing = statisticsCache.columnStatistics(request.columnId, relation.revision);
+
+      statisticsCache.setColumnStatistics(request.columnId, relation.revision, {
+        distinctCount: existing?.distinctCount ?? 0,
+        distinctCountCapped: existing?.distinctCountCapped ?? false,
+        min: range.min,
+        max: range.max,
+      });
+    }
+
+    return ok(range);
   };
 
   /**
@@ -792,6 +969,15 @@ export const createDataEngine = (): DataEngine => {
     const rowCount = Number(row?.[0] ?? 0);
     const nonNull = Number(row?.[1] ?? 0);
     const distinctCount = Number(row?.[2] ?? 0);
+
+    // Recorded for the planner and the sampling policy, which need the distinct count and extent but
+    // not the frequent values. Both are exact for this revision, so a later query reuses them rather
+    // than re-profiling the column.
+    statisticsCache.setColumnStatistics(column.id, relation.revision, {
+      distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
+      distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
+      ...(numeric ? { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) } : {}),
+    });
 
     const statistics: ColumnStatistics = {
       rowCount,
@@ -877,6 +1063,7 @@ export const createDataEngine = (): DataEngine => {
     relations.clear();
     relationshipGraph.clear();
     countCache.clear();
+    statisticsCache.clear();
 
     const opened = handle;
 
@@ -902,9 +1089,15 @@ export const createDataEngine = (): DataEngine => {
     persistenceDatabase: () => handle?.connection ?? null,
     restoreDatasets: (datasets) => {
       relations.clear();
+      statisticsCache.clear();
       for (const dataset of Object.values(datasets)) {
         if (dataset.importStatus === 'ready') {
-          relations.set(dataset.id, { relationName: dataset.relationId, columns: dataset.columns, revision: 1 });
+          relations.set(dataset.id, {
+            relationName: dataset.relationId,
+            columns: dataset.columns,
+            revision: 1,
+            ...(dataset.rowCount === null ? {} : { rowCount: dataset.rowCount }),
+          });
         }
       }
     },
