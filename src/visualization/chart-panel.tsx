@@ -14,6 +14,9 @@ import {
   isSameSelection,
   rangeSelection,
 } from '@/visualization/interaction/chart-events.ts';
+import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
+import { AnnotationEditor } from '@/ui/canvas/annotation-editor.tsx';
+import { Provenance } from '@/ui/workspace/provenance.tsx';
 
 const readTheme = (): ChartTheme => {
   const styles = getComputedStyle(document.documentElement);
@@ -27,17 +30,33 @@ const readTheme = (): ChartTheme => {
   };
 };
 
-const EChart = ({ visualization, result }: { visualization: Visualization; result: ChartResult }) => {
+const EChart = ({
+  visualization,
+  result,
+  onError,
+}: {
+  visualization: Visualization;
+  result: ChartResult;
+  onError: (error: DomainError) => void;
+}) => {
   const actions = useActions();
+  const [annotationAnchor, setAnnotationAnchor] = useState<AnnotationAnchor | null>(null);
+  const annotations = useWorkspace((state) =>
+    Object.values(state.workspace.annotations).filter((item) => item.visualizationId === visualization.id),
+  );
   const selection = useWorkspace((state) =>
     Object.values(state.workspace.selections).find((item) => item.datasetId === visualization.datasetId),
   );
   const option = useMemo(
-    () => measureSync('chart-conversion', () => buildEChartsOption(visualization, result, readTheme())),
-    [result, visualization],
+    () => measureSync('chart-conversion', () => buildEChartsOption(visualization, result, readTheme(), annotations)),
+    [annotations, result, visualization],
   );
   const onClick = useCallback(
     (event: unknown) => {
+      const clicked = event as { value?: unknown[]; name?: unknown };
+      if (Array.isArray(clicked.value) && clicked.value.length >= 2) {
+        setAnnotationAnchor({ kind: 'point', x: clicked.value[0], y: clicked.value[1] });
+      }
       const predicate = categorySelectionFromClick(visualization, event as never);
       if (predicate === null) return;
       if (isSameSelection(selection?.predicate, predicate))
@@ -75,7 +94,19 @@ const EChart = ({ visualization, result }: { visualization: Visualization; resul
     [actions, visualization.binding.x, visualization.datasetId],
   );
   const ref = useECharts(option, visualization.kind, onClick, onBrush);
-  return <div ref={ref} className="chart-panel__chart" role="img" aria-label={visualization.title} />;
+  return (
+    <>
+      <div ref={ref} className="chart-panel__chart" role="img" aria-label={visualization.title} />
+      {annotationAnchor === null ? null : (
+        <AnnotationEditor
+          visualizationId={visualization.id}
+          anchor={annotationAnchor}
+          onClose={() => setAnnotationAnchor(null)}
+          onError={onError}
+        />
+      )}
+    </>
+  );
 };
 
 export const ChartPanel = ({
@@ -86,14 +117,6 @@ export const ChartPanel = ({
   onError: (error: DomainError) => void;
 }) => {
   const workspace = useWorkspace((state) => state.workspace);
-  const agentCreated = useWorkspace((state) =>
-    state.history.some(
-      (entry) =>
-        entry.actor === 'agent' &&
-        entry.type === 'visualization.create' &&
-        entry.changedEntityIds.includes(visualization.id),
-    ),
-  );
   const actions = useActions();
   const [result, setResult] = useState<ChartResult | null>(null);
   const [error, setError] = useState<DomainError | null>(null);
@@ -132,7 +155,7 @@ export const ChartPanel = ({
       <header className="chart-panel__header">
         <h3>
           {visualization.title}
-          {agentCreated ? <span className="agent-created-badge">agent</span> : null}
+          <Provenance entityId={visualization.id} createdBy={visualization.createdBy} />
         </h3>
         <div className="chart-panel__controls">
           <button type="button" aria-pressed={visualization.linkedSelection} onClick={() => void toggleLinked()}>
@@ -164,7 +187,7 @@ export const ChartPanel = ({
       ) : visualization.kind === 'table' ? (
         <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />
       ) : (
-        <EChart visualization={visualization} result={result} />
+        <EChart visualization={visualization} result={result} onError={onError} />
       )}
     </article>
   );
