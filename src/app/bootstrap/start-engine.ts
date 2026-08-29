@@ -46,15 +46,18 @@ export const startEngine = async (): Promise<void> => {
       dataEngine.restoreDatasets(hydrated.workspace.datasets);
     }
     dataEngine.setRelationships(workspaceStore.getState().workspace.relationships);
+    dataEngine.setDerivedColumns(workspaceStore.getState().workspace.derivedColumns);
     const scheduler = createCheckpointScheduler(
       (state) => writeCheckpoint(database, state),
       500,
       () => window.dispatchEvent(new CustomEvent('data-canvas:persistence-error')),
     );
     const unsubscribe = workspaceStore.subscribe((state) => {
-      // The engine compiles joins and so needs the current graph, but must not read the store
-      // itself. Pushing on every commit keeps its copy in step without that dependency.
+      // The engine compiles joins and derived expressions and so needs both definitions, but must
+      // not read the store itself. Pushing on every commit keeps its copy in step without that
+      // dependency.
       dataEngine.setRelationships(state.workspace.relationships);
+      dataEngine.setDerivedColumns(state.workspace.derivedColumns);
       scheduler.schedule(state);
     });
     const flushOnLeave = (): void => {

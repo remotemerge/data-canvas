@@ -4,6 +4,7 @@ import { AppRoutes } from '@/app/routing/app-routes.tsx';
 import { startEngine } from '@/app/bootstrap/start-engine.ts';
 import { dispatcher } from '@/application/actions/dispatcher.ts';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
+import { getColumnProfile } from '@/application/queries/column-statistics.ts';
 import { getWorkspace, workspaceStore } from '@/state/workspace-store.ts';
 import { startToolLifecycle } from '@/webmcp/registry/tool-lifecycle.ts';
 import type { ToolLifecycleDependencies } from '@/webmcp/registry/tool-lifecycle.ts';
@@ -29,6 +30,8 @@ const toolDependencies: ToolLifecycleDependencies = {
   getWorkspace,
   fetchTableWindow: (request) => registeredDataEngine.fetchTableWindow(request),
   executeAnalysis: (query) => registeredDataEngine.executeAnalysis(query),
+  fetchColumnStatistics: (request) =>
+    getColumnProfile(registeredDataEngine, getWorkspace(), request.datasetId, request.columnId, request.topValueLimit),
   subscribeWorkspace: (listener) => workspaceStore.subscribe(listener),
 };
 void startToolLifecycle(toolDependencies);
