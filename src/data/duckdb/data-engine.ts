@@ -31,6 +31,7 @@ import { jsonToCsvBytes } from '@/data/import/json-to-csv.ts';
 import { MAX_TABLE_WINDOW_ROWS } from '@/data/import/import-limits.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
+import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -38,6 +39,7 @@ import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
+import type { PersistenceDatabase } from '@/data/persistence/persistence-database.ts';
 
 /**
  * The DuckDB-Wasm implementation of `DataEnginePort`.
@@ -68,6 +70,8 @@ interface DescribedColumn {
 export interface DataEngine extends DataEnginePort {
   initialize(): Promise<Result<void, DomainError>>;
   dispose(): Promise<void>;
+  persistenceDatabase(): PersistenceDatabase | null;
+  restoreDatasets(datasets: Record<EntityId, Dataset>): void;
 }
 
 /**
@@ -496,7 +500,23 @@ export const createDataEngine = (): DataEngine => {
     if (opened !== null) await closeDuckDB(opened);
   };
 
-  return { initialize, importFile, fetchTableWindow, executeAnalysis, getDistinctValues, dispose };
+  return {
+    initialize,
+    importFile,
+    fetchTableWindow,
+    executeAnalysis,
+    getDistinctValues,
+    dispose,
+    persistenceDatabase: () => handle?.connection ?? null,
+    restoreDatasets: (datasets) => {
+      relations.clear();
+      for (const dataset of Object.values(datasets)) {
+        if (dataset.importStatus === 'ready') {
+          relations.set(dataset.id, { relationName: dataset.relationId, columns: dataset.columns, revision: 1 });
+        }
+      }
+    },
+  };
 };
 
 /**
