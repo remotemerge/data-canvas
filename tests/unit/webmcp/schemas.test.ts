@@ -14,6 +14,27 @@ const validInputs: Record<keyof typeof toolSchemas, { minimal: object; canonical
       limit: 100,
     },
   },
+  list_relationships: {
+    minimal: {},
+    canonical: { datasetId: 'ds_orders', includeSuggestions: true },
+  },
+  create_relationship: {
+    minimal: {
+      leftDatasetId: 'ds_orders',
+      rightDatasetId: 'ds_customers',
+      on: [{ leftColumnId: 'col_customer', rightColumnId: 'col_id' }],
+      kind: 'many_to_one',
+      join: 'inner',
+    },
+    canonical: {
+      leftDatasetId: 'ds_orders',
+      rightDatasetId: 'ds_customers',
+      on: [{ leftColumnId: 'col_customer', rightColumnId: 'col_id' }],
+      kind: 'many_to_one',
+      join: 'left',
+      expectedRevision: 3,
+    },
+  },
   create_visualization: {
     minimal: { datasetId: 'ds', kind: 'line', title: 'Chart' },
     canonical: {
