@@ -6,6 +6,8 @@ import type { Workspace } from '@/domain/workspace/workspace.ts';
 export interface CheckpointState {
   workspace: Workspace;
   history: ActionHistoryEntry[];
+  undoStack?: string[];
+  redoStack?: string[];
 }
 
 export const writeCheckpoint = async (db: PersistenceDatabase, state: CheckpointState): Promise<void> => {
@@ -19,7 +21,12 @@ export const writeCheckpoint = async (db: PersistenceDatabase, state: Checkpoint
         state.workspace.id,
         state.workspace.schemaVersion,
         state.workspace.revision,
-        serializeEntity({ ...state.workspace, history: state.history }),
+        serializeEntity({
+          ...state.workspace,
+          history: state.history,
+          undoStack: state.undoStack ?? [],
+          redoStack: state.redoStack ?? [],
+        }),
       );
     } finally {
       await statement.close();
