@@ -35,3 +35,7 @@ export const workspaceStore = createStore<WorkspaceState>()(() => ({
 
 /** Narrow read accessor for non-React consumers (services, WebMCP adapter, tests). */
 export const getWorkspace = (): Workspace => workspaceStore.getState().workspace;
+
+export const hydrateWorkspaceState = (workspace: Workspace, history: ActionHistoryEntry[]): void => {
+  workspaceStore.setState({ workspace, history });
+};
