@@ -9,6 +9,12 @@ import { measureAsync } from '@/shared/perf/performance-marks.ts';
 
 interface DatasetImportButtonProps {
   onError: (error: DomainError | null) => void;
+  /**
+   * Import is the primary action only where it is the one thing to do — the empty canvas. In the
+   * always-present sidebar it is one tool among many, so it renders quietly and leaves the screen
+   * with a single blue call to action.
+   */
+  emphasis?: 'primary' | 'secondary';
 }
 
 /**
@@ -22,7 +28,7 @@ interface DatasetImportButtonProps {
  * or `error`. The `datasetId` from the first commit threads through the rest, so a failure always
  * has a specific dataset to mark rather than leaving a stranded placeholder.
  */
-export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): React.JSX.Element => {
+export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetImportButtonProps): React.JSX.Element => {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -92,6 +98,11 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
 
   return (
     <div className="import">
+      {/*
+        The visible button owns the interaction and forwards clicks here, so this input is hidden
+        from the accessibility tree: left exposed it was a second tab stop announcing an unnamed
+        "Choose File", duplicating the button that already carries the name.
+      */}
       <input
         ref={inputRef}
         id={inputId}
@@ -100,11 +111,14 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
         accept={FILE_INPUT_ACCEPT}
         onChange={handleChange}
         disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
       />
 
       <button
         type="button"
         className="import__button"
+        data-emphasis={emphasis}
         onClick={() => inputRef.current?.click()}
         disabled={disabled}
         aria-busy={busy}

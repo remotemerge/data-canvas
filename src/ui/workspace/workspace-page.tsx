@@ -40,7 +40,7 @@ const DatasetExplorer = ({ activeDataset, onError }: PanelProps): React.JSX.Elem
       <h2 className="workspace__panel-heading">Datasets</h2>
       <LuDatabase size={15} aria-hidden="true" />
     </div>
-    <DatasetImportButton onError={onError} />
+    <DatasetImportButton onError={onError} emphasis="secondary" />
     <DatasetList onError={onError} />
     <section>
       <h2 className="workspace__panel-heading">Columns</h2>
