@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { FILE_INPUT_ACCEPT } from '@/data/import/import-limits.ts';
 import { validateImportFile } from '@/data/import/import-dataset.ts';
+import type { ImportProgress } from '@/application/ports/data-engine-port.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { selectEngineStatus, useEngineStatus } from '@/state/use-engine-status.ts';
@@ -25,6 +26,7 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const engineStatus = useEngineStatus(selectEngineStatus);
   const { beginDatasetImport, importDataset, failDatasetImport } = useActions();
 
@@ -53,7 +55,9 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
 
     if (datasetId === undefined) return;
 
-    const imported = await measureAsync('dataset-import', () => importDataset({ file, datasetId }));
+    const imported = await measureAsync('dataset-import', () =>
+      importDataset({ file, datasetId, onProgress: setProgress }),
+    );
 
     if (imported.ok) {
       onError(null);
@@ -78,7 +82,10 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
     if (file === undefined) return;
 
     setBusy(true);
-    void runImport(file).finally(() => setBusy(false));
+    void runImport(file).finally(() => {
+      setBusy(false);
+      setProgress(null);
+    });
   };
 
   const disabled = busy || engineStatus !== 'ready';
@@ -105,7 +112,38 @@ export const DatasetImportButton = ({ onError }: DatasetImportButtonProps): Reac
         {busy ? 'Importing…' : 'Import data'}
       </button>
 
-      <p className="import__hint">CSV, TSV, JSON, or NDJSON</p>
+      {progress === null ? (
+        <p className="import__hint">CSV, TSV, JSON, or NDJSON</p>
+      ) : (
+        <ImportProgressReadout progress={progress} />
+      )}
     </div>
+  );
+};
+
+/**
+ * Reports import progress honestly per phase.
+ *
+ * Only the reading phase gets a determinate bar, because only it knows how much is left. DuckDB
+ * reports nothing during ingestion, so inventing a percentage there would produce the stalled-at-90%
+ * bar that teaches users to distrust progress indicators.
+ */
+const ImportProgressReadout = ({ progress }: { progress: ImportProgress }): React.JSX.Element => {
+  if (progress.phase !== 'reading' || progress.totalBytes === undefined || progress.totalBytes === 0) {
+    return (
+      <p className="import__progress" role="status" aria-live="polite">
+        {progress.phase === 'ingesting' ? 'Loading into the engine…' : 'Inspecting columns…'}
+      </p>
+    );
+  }
+
+  const readBytes = progress.bytesRead ?? 0;
+  const percent = Math.min(Math.round((readBytes / progress.totalBytes) * 100), 100);
+
+  return (
+    <p className="import__progress" role="status" aria-live="polite">
+      <progress className="import__progress-bar" value={readBytes} max={progress.totalBytes} />
+      Reading file — {percent}%
+    </p>
   );
 };

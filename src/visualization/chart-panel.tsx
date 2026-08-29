@@ -21,6 +21,8 @@ import { LinkModeControl } from '@/ui/canvas/link-mode-control.tsx';
 import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
 import { AnnotationEditor } from '@/ui/canvas/annotation-editor.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
+import { QueryProgress, QuerySkeleton } from '@/ui/components/query-progress.tsx';
+import { SamplingBadge } from '@/ui/components/sampling-badge.tsx';
 
 const readTheme = (): ChartTheme => {
   const styles = getComputedStyle(document.documentElement);
@@ -45,11 +47,21 @@ const EChart = ({
 }) => {
   const actions = useActions();
   const [annotationAnchor, setAnnotationAnchor] = useState<AnnotationAnchor | null>(null);
-  const annotations = useWorkspace((state) =>
-    Object.values(state.workspace.annotations).filter((item) => item.visualizationId === visualization.id),
+  // Selectors must return a stable reference. `Object.values(...).filter(...)` inside the selector
+  // allocates a new array on every store read, so `useSyncExternalStore` sees a changed snapshot
+  // each render and loops until React throws "Maximum update depth exceeded". The record itself is
+  // stable between mutations, so the derivation belongs in `useMemo` rather than in the selector.
+  const annotationRecord = useWorkspace((state) => state.workspace.annotations);
+  const annotations = useMemo(
+    () => Object.values(annotationRecord).filter((item) => item.visualizationId === visualization.id),
+    [annotationRecord, visualization.id],
   );
-  const selection = useWorkspace((state) =>
-    Object.values(state.workspace.selections).find((item) => item.datasetId === visualization.datasetId),
+  const selectionRecord = useWorkspace((state) => state.workspace.selections);
+  // `find` returns an element reference rather than a new object, so this one is already stable —
+  // but it is derived from the record for the same reason, keeping the rule uniform.
+  const selection = useMemo(
+    () => Object.values(selectionRecord).find((item) => item.datasetId === visualization.datasetId),
+    [selectionRecord, visualization.datasetId],
   );
   const workspace = useWorkspace((state) => state.workspace);
   const propagated = propagateSelection(workspace, visualization);
@@ -159,10 +171,15 @@ export const ChartPanel = ({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let current = true;
+    const controller = new AbortController();
+    // The previous result is deliberately left in place. Clearing it here would blank the canvas for
+    // the duration of every query, which on a multi-second one reads as the chart having broken.
     setLoading(true);
-    void executeVisualizationQuery(visualization, workspace).then((next) => {
-      if (!current) return;
+    void executeVisualizationQuery(visualization, workspace, undefined, controller.signal).then((next) => {
+      if (controller.signal.aborted) return;
+      // A superseded result carries no rows. Adopting it would replace a good chart with an empty
+      // one, so it is dropped and the newer query's result arrives instead.
+      if (next.ok && next.value.stale === true) return;
       if (next.ok) {
         setResult(next.value);
         setError(null);
@@ -170,7 +187,7 @@ export const ChartPanel = ({
       setLoading(false);
     });
     return () => {
-      current = false;
+      controller.abort();
     };
   }, [visualization, workspace.filters, workspace.selections, workspace.revision]);
 
@@ -193,22 +210,17 @@ export const ChartPanel = ({
           </button>
         </div>
       </header>
-      {loading ? (
-        <span className="chart-panel__loading" role="status">
-          Updating
-        </span>
-      ) : null}
+      {loading && result !== null ? <QueryProgress /> : null}
       {error === null ? null : (
         <div className="chart-panel__error" role="alert">
           <strong>{error.code}</strong> {error.message}
         </div>
       )}
-      {result?.sampled ? (
-        <span className="chart-panel__badge">Showing top {result.rows.length.toLocaleString()} points</span>
-      ) : null}
+      {result?.disclosure === undefined ? null : <SamplingBadge disclosure={result.disclosure} />}
       {result !== null && result.rows.length === 0 ? (
         <p className="chart-panel__empty">No data matches current filters.</p>
       ) : null}
+      {loading && result === null && error === null ? <QuerySkeleton label={visualization.title} /> : null}
       {result === null || result.rows.length === 0 ? null : visualization.kind === 'kpi' ? (
         <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>
       ) : visualization.kind === 'table' ? (

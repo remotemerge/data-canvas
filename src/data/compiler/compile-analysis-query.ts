@@ -51,6 +51,14 @@ export interface QueryContext {
    * physical name, so it reaches the compiler as a definition rather than as a `Column`.
    */
   derivedColumns?: Record<EntityId, DerivedColumn>;
+  /**
+   * Planner hint: non-anchor datasets in the order they should enter the FROM/JOIN chain.
+   *
+   * Only reorders the targets join resolution already had to reach; a dataset named here that the
+   * query does not reference is ignored, and one the query does reference but this omits is still
+   * joined. That containment is what makes the hint unable to change the result set.
+   */
+  joinOrder?: readonly EntityId[];
 }
 
 /**
@@ -170,7 +178,7 @@ export const compileAnalysisQuery = (
   query: AnalysisQuery,
   context: QueryDataset | QueryContext,
 ): Result<CompiledQuery, DomainError> => {
-  const { datasets, relationships = [], derivedColumns = {} } = normalizeContext(context);
+  const { datasets, relationships = [], derivedColumns = {}, joinOrder } = normalizeContext(context);
   const anchor = datasets.find((candidate) => candidate.id === query.datasetId);
 
   if (anchor === undefined) {
@@ -199,12 +207,20 @@ export const compileAnalysisQuery = (
     ...query.filters.flatMap(collectFilterColumnIds),
   ].flatMap(throughDerived);
 
-  const plan = resolveJoinPath(
-    anchor.id,
-    datasetIdsForColumns(referencedColumnIds, datasets),
-    relationships,
-    query.relationshipIds,
-  );
+  const requiredDatasetIds = datasetIdsForColumns(referencedColumnIds, datasets);
+
+  // The planner's hint only permutes datasets the query already requires. Restricting it to that
+  // intersection is what keeps a hint from widening the query: an unrecognized ID cannot add a join,
+  // and a required ID the hint omits is still appended.
+  const orderedDatasetIds =
+    joinOrder === undefined
+      ? requiredDatasetIds
+      : [
+          ...joinOrder.filter((datasetId) => requiredDatasetIds.includes(datasetId)),
+          ...requiredDatasetIds.filter((datasetId) => !joinOrder.includes(datasetId)),
+        ];
+
+  const plan = resolveJoinPath(anchor.id, orderedDatasetIds, relationships, query.relationshipIds);
 
   if (!plan.ok) return plan;
 

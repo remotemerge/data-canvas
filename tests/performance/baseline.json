@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "buildSha": null,
+  "device": "Apple Silicon 10-core / Chrome 151 / macOS 15",
+  "recordedAt": "2026-08-29T07:53:17.008Z",
+  "tiers": {
+    "tier:1M-import": {
+      "medianMs": 1715.6,
+      "samples": 1,
+      "maxRowsReturned": 1000000
+    },
+    "tier:wide200x200k-import": {
+      "medianMs": 8528,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-group-low-cardinality": {
+      "medianMs": 6.4,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-group-high-cardinality": {
+      "medianMs": 42.8,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-aggregate-full-scan": {
+      "medianMs": 2.8,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-count-distinct": {
+      "medianMs": 32.6,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-five-aggregates": {
+      "medianMs": 24.9,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-two-dimension-group": {
+      "medianMs": 17.8,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-temporal-day-bucket": {
+      "medianMs": 4.7,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-preview-window": {
+      "medianMs": 2.1,
+      "samples": 1,
+      "maxRowsReturned": 100
+    },
+    "tier:1M-column-statistics": {
+      "medianMs": 56.6,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:wide200x200k-full-projection": {
+      "medianMs": 9.8,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:wide200x200k-single-column-group": {
+      "medianMs": 1.1,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-group-by-customer-sorted": {
+      "medianMs": 42.6,
+      "samples": 1,
+      "maxRowsReturned": 0
+    },
+    "tier:1M-sampled-chart-topN": {
+      "medianMs": 42.8,
+      "samples": 1,
+      "maxRowsReturned": 500
+    }
+  }
+}

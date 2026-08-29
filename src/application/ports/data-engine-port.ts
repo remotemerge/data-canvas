@@ -61,6 +61,25 @@ export interface AnalysisResult {
    * there is something to say, so callers can treat its absence as "nothing detected".
    */
   warning?: string;
+  /**
+   * True when a newer request under the same scheduling key superseded this one.
+   *
+   * The rows are empty in that case and must be discarded rather than rendered, which is what stops
+   * a slow query from overwriting the newer result that replaced it.
+   */
+  stale?: boolean;
+}
+
+/**
+ * How an analysis query is scheduled.
+ *
+ * `key` opts the query into supersession: a newer request under the same key aborts the in-flight
+ * one. Without a key the query runs unscheduled, which is correct for reads nested inside another
+ * scheduled call.
+ */
+export interface AnalysisExecutionOptions {
+  key?: string;
+  signal?: AbortSignal;
 }
 
 export interface DistinctValuesRequest {
@@ -154,8 +173,27 @@ export interface KeyQualityResult {
  * value reads arrive with the plan that introduces their callers, keeping the port free of
  * speculative surface.
  */
+/**
+ * Import progress, reported as the file is read and ingested.
+ *
+ * `phase` rather than a single percentage because the two stages behave differently: reading a file
+ * yields byte-accurate progress, while DuckDB's ingestion reports nothing until it finishes. Naming
+ * the phase lets the UI show a real bar for the first and an honest indeterminate state for the
+ * second, instead of a fabricated percentage that stalls at 90%.
+ */
+export interface ImportProgress {
+  phase: 'reading' | 'ingesting' | 'profiling';
+  /** Bytes read so far. Present during `reading` only. */
+  bytesRead?: number;
+  totalBytes?: number;
+}
+
 export interface DataEnginePort {
-  importFile(file: unknown, datasetId: EntityId): Promise<Result<ImportedRelation, DomainError>>;
+  importFile(
+    file: unknown,
+    datasetId: EntityId,
+    onProgress?: (progress: ImportProgress) => void,
+  ): Promise<Result<ImportedRelation, DomainError>>;
   /**
    * Serializes one dataset's relation to Parquet bytes.
    *
@@ -173,7 +211,10 @@ export interface DataEnginePort {
    */
   importDatasetParquet(datasetId: EntityId, bytes: Uint8Array): Promise<Result<ImportedRelation, DomainError>>;
   fetchTableWindow(request: TableWindowRequest): Promise<Result<TableWindow, DomainError>>;
-  executeAnalysis(query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>>;
+  executeAnalysis(
+    query: AnalysisQuery,
+    options?: AnalysisExecutionOptions,
+  ): Promise<Result<AnalysisResult, DomainError>>;
   getDistinctValues(request: DistinctValuesRequest): Promise<Result<DistinctValuesResult, DomainError>>;
   getColumnStatistics(request: ColumnStatisticsRequest): Promise<Result<ColumnStatistics, DomainError>>;
   getColumnRange(request: ColumnRangeRequest): Promise<Result<ColumnRange, DomainError>>;
