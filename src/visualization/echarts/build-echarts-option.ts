@@ -7,6 +7,8 @@ import { buildBarSeries } from '@/visualization/echarts/kinds/bar.ts';
 import { buildDonutSeries } from '@/visualization/echarts/kinds/donut.ts';
 import { buildLineSeries } from '@/visualization/echarts/kinds/line.ts';
 import { buildScatterSeries } from '@/visualization/echarts/kinds/scatter.ts';
+import type { Annotation } from '@/domain/annotation/annotation.ts';
+import { buildAnnotationMarks } from '@/visualization/annotations/annotation-marks.ts';
 
 export interface ChartTheme {
   text: string;
@@ -21,6 +23,7 @@ export const buildEChartsOption = (
   visualization: Visualization,
   result: ChartResult,
   theme: ChartTheme,
+  annotations: readonly Annotation[] = [],
 ): EChartsCoreOption => {
   const dimensions = columnNames(result);
   const xName = dimensions[0];
@@ -32,13 +35,16 @@ export const buildEChartsOption = (
     tooltip: { trigger: 'item', formatter: (params: unknown) => escapeText(JSON.stringify(params)) },
   };
   if (visualization.kind === 'donut') {
+    const marks = buildAnnotationMarks(annotations, visualization, result);
     return {
       ...common,
       legend: { show: visualization.presentation.showLegend },
-      series: buildDonutSeries(xName, measureNames[0]),
+      series: buildDonutSeries(xName, measureNames[0]).map((item, index) =>
+        index === 0 ? { ...item, ...marks } : item,
+      ),
     };
   }
-  const series =
+  const baseSeries =
     visualization.kind === 'scatter'
       ? buildScatterSeries(measureNames, xName)
       : visualization.kind === 'bar'
@@ -46,6 +52,8 @@ export const buildEChartsOption = (
         : visualization.kind === 'area'
           ? buildAreaSeries(measureNames, xName, visualization.presentation.stacked)
           : buildLineSeries(measureNames, xName, visualization.presentation.stacked);
+  const marks = buildAnnotationMarks(annotations, visualization, result);
+  const series = baseSeries.map((item, index) => (index === 0 ? { ...item, ...marks } : item));
   return {
     ...common,
     legend: { show: visualization.presentation.showLegend },

@@ -1,0 +1,7 @@
+{
+  "name": "time series columns",
+  "prompt": "What columns are suitable for a time-series chart?",
+  "fixture": "sales",
+  "transcript": [{ "tool": "get_dataset_schema", "arguments": { "datasetId": "ds_sales" } }],
+  "expected": { "tools": ["get_dataset_schema"], "visualizations": 0 }
+}

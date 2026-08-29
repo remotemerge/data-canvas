@@ -37,6 +37,7 @@ export const handleApplyFilter: ActionHandler<ApplyFilterInput> = (workspace, pa
     ...(payload.value === undefined ? {} : { value: payload.value }),
     enabled: payload.enabled ?? true,
     origin: deps.actor,
+    createdBy: existing?.createdBy ?? deps.actor,
   };
 
   return ok({

@@ -3,6 +3,7 @@ import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { formatNumber, formatValue } from '@/visualization/formatting.ts';
+import { Provenance } from '@/ui/workspace/provenance.tsx';
 
 export const MetricCard = ({ metric }: { metric: Metric }) => {
   const workspace = useWorkspace((state) => state.workspace);
@@ -42,6 +43,7 @@ export const MetricCard = ({ metric }: { metric: Metric }) => {
   return (
     <article className="metric-card">
       <span>{metric.name}</span>
+      <Provenance entityId={metric.id} createdBy={metric.createdBy} />
       <strong>{typeof value === 'number' ? formatNumber(value, metric.format) : formatValue(value)}</strong>
     </article>
   );

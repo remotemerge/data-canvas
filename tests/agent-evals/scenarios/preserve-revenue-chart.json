@@ -1,0 +1,20 @@
+{
+  "name": "average order value without changing chart",
+  "prompt": "Show average order value by category, but don't change my current revenue chart.",
+  "fixture": "sales-with-chart",
+  "transcript": [
+    {
+      "tool": "create_visualization",
+      "arguments": {
+        "datasetId": "ds_sales",
+        "title": "Average order value by category",
+        "kind": "bar",
+        "xColumnId": "col_region",
+        "yColumnIds": ["col_revenue"],
+        "aggregate": "avg",
+        "expectedRevision": 0
+      }
+    }
+  ],
+  "expected": { "tools": ["create_visualization"], "visualizations": 2, "preserveExisting": true }
+}

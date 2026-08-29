@@ -232,7 +232,7 @@ describe('serialized execution', () => {
 /** Strips the two fields that must legitimately differ: generated identity and attribution. */
 const normalize = (workspace: Workspace) => ({
   revision: workspace.revision,
-  filters: Object.values(workspace.filters).map(({ id: _id, origin: _origin, ...rest }) => rest),
+  filters: Object.values(workspace.filters).map(({ id: _id, origin: _origin, createdBy: _createdBy, ...rest }) => rest),
 });
 
 describe('human and agent equivalence', () => {

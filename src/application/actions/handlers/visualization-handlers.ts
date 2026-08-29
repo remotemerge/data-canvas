@@ -44,7 +44,7 @@ const validateTitle = (title: string): boolean => {
   return trimmed.length > 0 && trimmed.length <= MAX_VISUALIZATION_TITLE_LENGTH;
 };
 
-export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> = (workspace, payload) => {
+export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> = (workspace, payload, deps) => {
   if (!validateTitle(payload.title)) {
     return err(
       domainError(
@@ -72,6 +72,7 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
     binding: payload.binding,
     presentation: { ...DEFAULT_PRESENTATION, ...payload.presentation },
     linkedSelection: payload.linkedSelection ?? true,
+    createdBy: deps.actor,
   };
 
   return ok({

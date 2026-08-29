@@ -63,6 +63,7 @@ export const visualization = (id: string, datasetId: string): Visualization => (
   binding: { x: 'col_date', y: ['col_revenue'] },
   presentation: { showLegend: true, showGrid: true, stacked: false },
   linkedSelection: true,
+  createdBy: 'human',
 });
 
 /** A workspace holding one ready dataset, the starting point for most action tests. */
@@ -106,7 +107,7 @@ export const createHarness = (
   workspace: Workspace = workspaceWithDataset(),
   dataEngine: DispatcherDeps['dataEngine'] = unavailableDataEngine,
 ): TestHarness => {
-  const store = createStore<WorkspaceState>()(() => ({ workspace, history: [] }));
+  const store = createStore<WorkspaceState>()(() => ({ workspace, history: [], undoStack: [], redoStack: [] }));
 
   return {
     store,

@@ -11,6 +11,8 @@ export interface HydratedWorkspace {
   workspace: Workspace;
   history: ActionHistoryEntry[];
   warnings: string[];
+  undoStack: string[];
+  redoStack: string[];
 }
 
 export const hydrateWorkspace = async (db: PersistenceDatabase): Promise<HydratedWorkspace | null> => {
@@ -22,14 +24,21 @@ export const hydrateWorkspace = async (db: PersistenceDatabase): Promise<Hydrate
   try {
     const value = deserializeEntity(payload);
     if (!isWorkspacePayload(value)) {
-      return { workspace: value as Workspace, history: [], warnings: ['Stored workspace metadata is invalid.'] };
+      return {
+        workspace: value as Workspace,
+        history: [],
+        undoStack: [],
+        redoStack: [],
+        warnings: ['Stored workspace metadata is invalid.'],
+      };
     }
     const history =
       typeof value === 'object' && value !== null && 'history' in value && Array.isArray(value.history)
         ? (value.history as ActionHistoryEntry[])
         : [];
-    const { history: _history, ...workspace } = value as Workspace & { history?: ActionHistoryEntry[] };
-    return { workspace, history, warnings: [] };
+    const stored = value as Workspace & { history?: ActionHistoryEntry[]; undoStack?: string[]; redoStack?: string[] };
+    const { history: _history, undoStack: _undo, redoStack: _redo, ...workspace } = stored;
+    return { workspace, history, undoStack: stored.undoStack ?? [], redoStack: stored.redoStack ?? [], warnings: [] };
   } catch {
     return null;
   }

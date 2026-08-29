@@ -7,7 +7,7 @@ import type {
   VisualizationKind,
   VisualizationPresentation,
 } from '@/domain/visualization/visualization.ts';
-import type { WorkspaceLayoutItem } from '@/domain/workspace/workspace.ts';
+import type { Workspace, WorkspaceLayoutItem } from '@/domain/workspace/workspace.ts';
 import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
@@ -150,6 +150,24 @@ export interface UpdateLayoutInput {
   items?: WorkspaceLayoutItem[];
 }
 
+/** Trusted metadata delta created by the dispatcher for undo and redo. */
+export interface RestoreWorkspaceInput {
+  state: Partial<
+    Pick<
+      Workspace,
+      | 'activeDatasetId'
+      | 'visualizations'
+      | 'filters'
+      | 'tableSorts'
+      | 'selections'
+      | 'metrics'
+      | 'annotations'
+      | 'layout'
+    >
+  >;
+  changedEntityIds: EntityId[];
+}
+
 /**
  * Every state-changing operation the application supports.
  *
@@ -183,7 +201,8 @@ export type ApplicationAction =
   | { type: 'metric.remove'; payload: RemoveMetricInput }
   | { type: 'annotation.add'; payload: AddAnnotationInput }
   | { type: 'annotation.remove'; payload: RemoveAnnotationInput }
-  | { type: 'layout.update'; payload: UpdateLayoutInput };
+  | { type: 'layout.update'; payload: UpdateLayoutInput }
+  | { type: 'history.restore'; payload: RestoreWorkspaceInput };
 
 export type ApplicationActionType = ApplicationAction['type'];
 
@@ -207,10 +226,13 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'annotation.add',
   'annotation.remove',
   'layout.update',
+  'history.restore',
 ] as const;
 
 export interface ActionContext {
   actor: Actor;
+  /** Marks dispatcher-driven history traversal. */
+  origin?: 'undo' | 'redo';
   /**
    * Optimistic concurrency assertion. When supplied and unequal to the current workspace revision,
    * the action is rejected with `STALE_WORKSPACE_REVISION` before any validation or side effect.

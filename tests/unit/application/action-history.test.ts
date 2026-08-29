@@ -13,6 +13,7 @@ const entry = (revision: number): ActionHistoryEntry => ({
   changedEntityIds: [],
   timestamp: '2026-01-01T00:00:00.000Z',
   summary: `entry ${revision}`,
+  undoable: true,
 });
 
 describe('ring buffer', () => {
@@ -92,7 +93,7 @@ describe('history written by the dispatcher', () => {
     expect(harness.history().map((item) => item.revision)).toEqual([1, 2, 3]);
   });
 
-  test('never stores the action payload', async () => {
+  test('keeps the forward payload out of public history fields', async () => {
     const harness = createHarness();
 
     await harness.dispatcher.execute(
@@ -111,12 +112,14 @@ describe('history written by the dispatcher', () => {
       'actionId',
       'actor',
       'changedEntityIds',
+      'inverseAction',
       'revision',
       'summary',
       'timestamp',
       'type',
+      'undoable',
     ]);
-    expect(JSON.stringify(recorded)).not.toContain('confidential-cell');
+    expect(recorded?.summary).not.toContain('confidential-cell');
   });
 
   test('a rejected action appends nothing', async () => {

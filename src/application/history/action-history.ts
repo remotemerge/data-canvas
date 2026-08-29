@@ -1,4 +1,4 @@
-import type { Actor, ApplicationActionType } from '@/application/actions/action-types.ts';
+import type { Actor, ApplicationAction, ApplicationActionType } from '@/application/actions/action-types.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 /**
@@ -19,6 +19,9 @@ export interface ActionHistoryEntry {
   changedEntityIds: EntityId[];
   timestamp: string;
   summary: string;
+  undoable: boolean;
+  inverseAction?: ApplicationAction;
+  origin?: 'undo' | 'redo';
 }
 
 /**

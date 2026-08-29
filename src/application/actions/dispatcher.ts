@@ -28,6 +28,7 @@ import {
 } from '@/application/actions/handlers/visualization-handlers.ts';
 import { appendHistoryEntry } from '@/application/history/action-history.ts';
 import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
+import { invertAction } from '@/application/history/invert-action.ts';
 import type { DataEnginePort } from '@/application/ports/data-engine-port.ts';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
@@ -96,6 +97,12 @@ const runHandler = (
       return handleRemoveAnnotation(workspace, action.payload, deps);
     case 'layout.update':
       return handleUpdateLayout(workspace, action.payload, deps);
+    case 'history.restore':
+      return ok({
+        workspace: { ...workspace, ...action.payload.state },
+        changedEntityIds: action.payload.changedEntityIds,
+        summary: 'Restored workspace metadata from history.',
+      });
   }
 };
 
@@ -156,6 +163,7 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     const actionId = createEntityId(ID_PREFIX.action);
     const revision = workspace.revision + 1;
+    const inverseAction = invertAction(action, workspace, outcome.value.changedEntityIds);
     const entry: ActionHistoryEntry = {
       actionId,
       type: action.type,
@@ -164,20 +172,40 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
       changedEntityIds: outcome.value.changedEntityIds,
       timestamp: new Date().toISOString(),
       summary: outcome.value.summary,
+      undoable: inverseAction !== undefined,
+      ...(inverseAction === undefined ? {} : { inverseAction }),
+      ...(context.origin === undefined ? {} : { origin: context.origin }),
     };
 
     // One `setState` call. Splitting the workspace and history writes would let a subscriber
     // observe changed entities at an unchanged revision, breaking the concurrency contract that
     // `expectedRevision` rests on.
-    deps.store.setState((state) => ({
-      ...state,
-      workspace: {
-        ...outcome.value.workspace,
-        revision,
-        updatedAt: entry.timestamp,
-      },
-      history: appendHistoryEntry(state.history, entry),
-    }));
+    deps.store.setState((state) => {
+      const undoStack =
+        context.origin === 'undo'
+          ? state.undoStack.slice(0, -1)
+          : context.origin === 'redo'
+            ? [...state.undoStack, actionId].slice(-100)
+            : [...state.undoStack, actionId].slice(-100);
+      const redoStack =
+        context.origin === 'undo'
+          ? [...state.redoStack, actionId].slice(-100)
+          : context.origin === 'redo'
+            ? state.redoStack.slice(0, -1)
+            : [];
+
+      return {
+        ...state,
+        workspace: {
+          ...outcome.value.workspace,
+          revision,
+          updatedAt: entry.timestamp,
+        },
+        history: appendHistoryEntry(state.history, entry),
+        undoStack,
+        redoStack,
+      };
+    });
 
     return ok({
       actionId,

@@ -4,6 +4,7 @@ import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { selectFilters } from '@/state/selectors/workspace-selectors.ts';
 import { FilterEditor } from '@/ui/dataset/filter-editor.tsx';
+import { Provenance } from '@/ui/workspace/provenance.tsx';
 
 export const FilterPanel = ({
   dataset,
@@ -13,16 +14,6 @@ export const FilterPanel = ({
   onError(error: DomainError | null): void;
 }): React.JSX.Element => {
   const filterRecord = useWorkspace(selectFilters);
-  const history = useWorkspace((state) => state.history);
-  const agentFilterIds = useMemo(
-    () =>
-      new Set(
-        history
-          .filter((entry) => entry.actor === 'agent' && entry.type === 'filter.apply')
-          .flatMap((entry) => entry.changedEntityIds),
-      ),
-    [history],
-  );
   const filters = useMemo(
     () => Object.values(filterRecord).filter((filter) => filter.datasetId === dataset.id),
     [dataset.id, filterRecord],
@@ -55,7 +46,7 @@ export const FilterPanel = ({
                     }
                   />
                   {column?.name ?? 'Unknown column'} {filter.operator.replace('_', ' ')}
-                  {agentFilterIds.has(filter.id) ? <span className="agent-created-badge">agent</span> : null}
+                  <Provenance entityId={filter.id} createdBy={filter.createdBy} />
                 </label>
                 <button
                   type="button"

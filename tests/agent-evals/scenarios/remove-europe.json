@@ -1,0 +1,22 @@
+{
+  "name": "remove Europe and highlight decline",
+  "prompt": "Remove Europe and highlight the month with the largest decline.",
+  "fixture": "sales",
+  "transcript": [
+    {
+      "tool": "apply_filter",
+      "arguments": {
+        "datasetId": "ds_sales",
+        "columnId": "col_region",
+        "operator": "neq",
+        "value": "Europe",
+        "expectedRevision": 0
+      }
+    },
+    {
+      "tool": "highlight_selection",
+      "arguments": { "datasetId": "ds_sales", "columnId": "col_date", "values": ["2026-02-01"], "expectedRevision": 1 }
+    }
+  ],
+  "expected": { "tools": ["apply_filter", "highlight_selection"], "filters": 1, "selections": 1 }
+}

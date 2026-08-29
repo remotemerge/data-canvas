@@ -4,7 +4,7 @@ export const addAnnotationSchema = {
   type: 'object',
   properties: {
     visualizationId: { type: 'string', minLength: 1, maxLength: 100 },
-    text: { type: 'string', minLength: 1, maxLength: 1000 },
+    text: { type: 'string', minLength: 1, maxLength: 280 },
     anchor: {
       oneOf: [
         {

@@ -16,7 +16,7 @@ const normalize = (value: unknown): unknown => {
         visit(key),
         key === 'updatedAt' || key === 'createdAt'
           ? 'timestamp'
-          : key === 'origin' && (nested === 'human' || nested === 'agent')
+          : (key === 'origin' || key === 'createdBy') && (nested === 'human' || nested === 'agent')
             ? 'actor'
             : visit(nested),
       ]),

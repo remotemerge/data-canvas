@@ -42,7 +42,7 @@ export const startEngine = async (): Promise<void> => {
     await createMetadataTables(database);
     const hydrated = await hydrateWorkspace(database);
     if (hydrated !== null && hydrated.warnings.length === 0) {
-      hydrateWorkspaceState(hydrated.workspace, hydrated.history);
+      hydrateWorkspaceState(hydrated.workspace, hydrated.history, hydrated.undoStack, hydrated.redoStack);
       dataEngine.restoreDatasets(hydrated.workspace.datasets);
     }
     const scheduler = createCheckpointScheduler(

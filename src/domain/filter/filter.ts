@@ -46,6 +46,7 @@ export interface Filter {
   value?: unknown;
   enabled: boolean;
   origin: 'human' | 'agent' | 'system';
+  createdBy: 'human' | 'agent' | 'system';
 }
 
 /**
