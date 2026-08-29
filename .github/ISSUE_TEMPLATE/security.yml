@@ -1,0 +1,62 @@
+name: Security report
+description: Report a security concern in the public issue tracker.
+title: '[Security]: '
+labels: ['security']
+body:
+  - type: textarea
+    id: threat
+    attributes:
+      label: Threat
+    validations:
+      required: true
+  - type: textarea
+    id: asset
+    attributes:
+      label: Asset or data affected
+    validations:
+      required: true
+  - type: textarea
+    id: entry
+    attributes:
+      label: Entry point
+    validations:
+      required: true
+  - type: dropdown
+    id: webmcp
+    attributes:
+      label: WebMCP exposure
+      options: ['Yes', 'No', 'Unknown']
+    validations:
+      required: true
+  - type: dropdown
+    id: duckdb
+    attributes:
+      label: DuckDB involvement
+      options: ['Yes', 'No', 'Unknown']
+    validations:
+      required: true
+  - type: dropdown
+    id: persistence
+    attributes:
+      label: Persistence involvement
+      options: ['Yes', 'No', 'Unknown']
+    validations:
+      required: true
+  - type: textarea
+    id: mitigations
+    attributes:
+      label: Current mitigations
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed mitigation
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression test
+    validations:
+      required: true
