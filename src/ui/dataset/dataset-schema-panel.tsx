@@ -49,8 +49,6 @@ export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.
             <span className="schema__type" data-logical-type={column.logicalType}>
               {column.logicalType}
             </span>
-            {column.nullable ? <span className="schema__nullable">nullable</span> : null}
-            <span className="schema__physical">{column.physicalName}</span>
             <button
               type="button"
               className="schema__profile-toggle"
@@ -59,6 +57,10 @@ export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.
             >
               {profiledColumnId === column.id ? 'Hide stats' : 'Stats'}
             </button>
+            <span className="schema__meta">
+              {column.nullable ? <span className="schema__nullable">nullable</span> : null}
+              <span className="schema__physical">{column.physicalName}</span>
+            </span>
             {profiledColumnId === column.id ? <ColumnProfile dataset={dataset} column={column} /> : null}
           </li>
         ))}
