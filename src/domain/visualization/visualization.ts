@@ -1,5 +1,6 @@
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
+import type { SelectionLinkMode } from '@/domain/visualization/selection-link-mode.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 export type VisualizationKind =
@@ -72,8 +73,8 @@ export interface Visualization {
   query: AnalysisQuery;
   binding: VisualBinding;
   presentation: VisualizationPresentation;
-  /** When true, this chart participates in workspace-wide cross-filtering. */
-  linkedSelection: boolean;
+  /** How this chart responds to a selection made elsewhere in the workspace. */
+  linkMode: SelectionLinkMode;
   createdBy: 'human' | 'agent' | 'system';
 }
 

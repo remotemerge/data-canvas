@@ -7,6 +7,8 @@ import type {
   ClearFiltersInput,
   ClearSelectionInput,
   CreateDerivedColumnInput,
+  ExtendSelectionInput,
+  ImportWorkspaceInput,
   CreateMetricInput,
   CreateRelationshipInput,
   CreateVisualizationInput,
@@ -22,6 +24,7 @@ import type {
   SetActiveDatasetInput,
   SetSelectionInput,
   SetTableSortInput,
+  SetVisualizationLinkModeInput,
   UpdateLayoutInput,
   UpdateMetricInput,
   UpdateVisualizationInput,
@@ -49,8 +52,11 @@ export interface WorkspaceCommands {
   createVisualization: Command<CreateVisualizationInput>;
   updateVisualization: Command<UpdateVisualizationInput>;
   removeVisualization: Command<RemoveVisualizationInput>;
+  setVisualizationLinkMode: Command<SetVisualizationLinkModeInput>;
   setSelection: Command<SetSelectionInput>;
+  extendSelection: Command<ExtendSelectionInput>;
   clearSelection: Command<ClearSelectionInput>;
+  importWorkspace: Command<ImportWorkspaceInput>;
   createMetric: Command<CreateMetricInput>;
   updateMetric: Command<UpdateMetricInput>;
   removeMetric: Command<RemoveMetricInput>;
@@ -91,8 +97,12 @@ const humanCommands: WorkspaceCommands = {
     dispatcher.execute({ type: 'visualization.update', payload: input }, { actor: 'human' }),
   removeVisualization: (input) =>
     dispatcher.execute({ type: 'visualization.remove', payload: input }, { actor: 'human' }),
+  setVisualizationLinkMode: (input) =>
+    dispatcher.execute({ type: 'visualization.setLinkMode', payload: input }, { actor: 'human' }),
   setSelection: (input) => dispatcher.execute({ type: 'selection.set', payload: input }, { actor: 'human' }),
+  extendSelection: (input) => dispatcher.execute({ type: 'selection.extend', payload: input }, { actor: 'human' }),
   clearSelection: (input) => dispatcher.execute({ type: 'selection.clear', payload: input }, { actor: 'human' }),
+  importWorkspace: (input) => dispatcher.execute({ type: 'workspace.import', payload: input }, { actor: 'human' }),
   createMetric: (input) => dispatcher.execute({ type: 'metric.create', payload: input }, { actor: 'human' }),
   updateMetric: (input) => dispatcher.execute({ type: 'metric.update', payload: input }, { actor: 'human' }),
   removeMetric: (input) => dispatcher.execute({ type: 'metric.remove', payload: input }, { actor: 'human' }),

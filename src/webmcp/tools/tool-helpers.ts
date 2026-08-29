@@ -37,6 +37,8 @@ export interface ToolInput {
   binX?: unknown;
   binSeries?: unknown;
   topValueLimit?: unknown;
+  linkMode?: unknown;
+  additive?: unknown;
   expectedRevision?: unknown;
 }
 

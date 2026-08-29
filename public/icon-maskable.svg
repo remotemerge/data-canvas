@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Data Canvas">
+  <!-- Full-bleed background: a maskable icon is cropped to the platform's shape, so the artwork
+       stays inside the safe zone (the centre 80%) while the fill extends to the edges. -->
+  <rect width="64" height="64" fill="#0f1117" />
+  <rect x="18" y="34" width="7" height="14" rx="2" fill="#5b8cff" />
+  <rect x="28.5" y="26" width="7" height="22" rx="2" fill="#45c2a0" />
+  <rect x="39" y="20" width="7" height="28" rx="2" fill="#e6ad55" />
+</svg>

@@ -86,6 +86,21 @@ export const virtualImportPath = (stagingName: string): string => {
 };
 
 /**
+ * The virtual filesystem path a Parquet export is written to and read back from.
+ *
+ * Derived from the generated relation name for the same reason `virtualImportPath` is: `COPY … TO`
+ * and `read_parquet` both take the path as a SQL string literal, so a name originating outside this
+ * module would be an injection surface that identifier quoting does not cover.
+ */
+export const virtualExportPath = (relationName: string): string => {
+  if (!isSafeIdentifier(relationName)) {
+    throw new Error('Refusing to build an export path from a name outside the safe-identifier allowlist.');
+  }
+
+  return `${relationName}.parquet`;
+};
+
+/**
  * Generates the physical column name at a given ordinal.
  *
  * DuckDB derives column names from the file's header row, so they are untrusted text: a header of

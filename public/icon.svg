@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Data Canvas">
+  <rect width="64" height="64" rx="12" fill="#0f1117" />
+  <rect x="12" y="34" width="8" height="18" rx="2" fill="#5b8cff" />
+  <rect x="24" y="24" width="8" height="28" rx="2" fill="#45c2a0" />
+  <rect x="36" y="16" width="8" height="36" rx="2" fill="#e6ad55" />
+  <rect x="48" y="28" width="4" height="24" rx="2" fill="#c682e8" />
+</svg>

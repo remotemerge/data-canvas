@@ -10,6 +10,7 @@ import type {
   VisualizationKind,
   VisualizationPresentation,
 } from '@/domain/visualization/visualization.ts';
+import type { SelectionLinkMode } from '@/domain/visualization/selection-link-mode.ts';
 import type { Workspace, WorkspaceLayoutItem } from '@/domain/workspace/workspace.ts';
 import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -93,7 +94,7 @@ export interface CreateVisualizationInput {
   binding: VisualBinding;
   query?: AnalysisQuery;
   presentation?: Partial<VisualizationPresentation>;
-  linkedSelection?: boolean;
+  linkMode?: SelectionLinkMode;
 }
 
 export interface UpdateVisualizationInput {
@@ -103,7 +104,12 @@ export interface UpdateVisualizationInput {
   binding?: VisualBinding;
   query?: AnalysisQuery;
   presentation?: Partial<VisualizationPresentation>;
-  linkedSelection?: boolean;
+  linkMode?: SelectionLinkMode;
+}
+
+export interface SetVisualizationLinkModeInput {
+  visualizationId: EntityId;
+  linkMode: SelectionLinkMode;
 }
 
 export interface RemoveVisualizationInput {
@@ -111,6 +117,21 @@ export interface RemoveVisualizationInput {
 }
 
 export interface SetSelectionInput {
+  datasetId: EntityId;
+  mode: 'keys' | 'predicate';
+  keys?: string[];
+  predicate?: FilterExpression;
+  origin: 'table' | 'chart' | 'agent';
+}
+
+/**
+ * Adds to an existing selection rather than replacing it.
+ *
+ * The union of the current predicate and the new one, which is what ctrl/cmd-click means: "these as
+ * well as those". With no current selection it behaves as `selection.set`, so the first click of an
+ * additive sequence needs no special case at the call site.
+ */
+export interface ExtendSelectionInput {
   datasetId: EntityId;
   mode: 'keys' | 'predicate';
   keys?: string[];
@@ -199,6 +220,19 @@ export interface UpdateLayoutInput {
   items?: WorkspaceLayoutItem[];
 }
 
+/**
+ * Replaces the workspace with one restored from an archive.
+ *
+ * The workspace is supplied whole rather than assembled here: `importArchive` has already validated
+ * it, regenerated every ID, and created the DuckDB relations. This action is the commit step, so the
+ * replacement is revisioned and attributable like any other change.
+ */
+export interface ImportWorkspaceInput {
+  workspace: Workspace;
+  /** Datasets whose rows were absent from the archive, surfaced to the user after the commit. */
+  missingDatasetNames: string[];
+}
+
 /** Trusted metadata delta created by the dispatcher for undo and redo. */
 export interface RestoreWorkspaceInput {
   state: Partial<
@@ -250,7 +284,10 @@ export type ApplicationAction =
   | { type: 'visualization.update'; payload: UpdateVisualizationInput }
   | { type: 'visualization.remove'; payload: RemoveVisualizationInput }
   | { type: 'selection.set'; payload: SetSelectionInput }
+  | { type: 'selection.extend'; payload: ExtendSelectionInput }
   | { type: 'selection.clear'; payload: ClearSelectionInput }
+  | { type: 'visualization.setLinkMode'; payload: SetVisualizationLinkModeInput }
+  | { type: 'workspace.import'; payload: ImportWorkspaceInput }
   | { type: 'metric.create'; payload: CreateMetricInput }
   | { type: 'metric.update'; payload: UpdateMetricInput }
   | { type: 'metric.remove'; payload: RemoveMetricInput }
@@ -280,7 +317,10 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'visualization.update',
   'visualization.remove',
   'selection.set',
+  'selection.extend',
   'selection.clear',
+  'visualization.setLinkMode',
+  'workspace.import',
   'metric.create',
   'metric.update',
   'metric.remove',

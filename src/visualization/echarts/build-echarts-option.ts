@@ -22,12 +22,39 @@ export interface ChartTheme {
 
 const columnNames = (result: ChartResult): string[] => result.columns.map((column) => column.name);
 
+/** Opacity applied to a mark outside the selection. Dimmed, not hidden: the context is the point. */
+const DIMMED_OPACITY = 0.25;
+
+/**
+ * Per-mark opacity for `highlight` mode.
+ *
+ * Returned as an ECharts `itemStyle` callback so dimming costs one predicate evaluation per mark at
+ * render time and no re-query. Absent when nothing is selected, so an unselected chart carries no
+ * per-item callback at all.
+ */
+const highlightStyle = (
+  highlight: HighlightPredicate | undefined,
+): { itemStyle: { opacity: (params: { dataIndex: number }) => number } } | undefined => {
+  if (highlight === undefined) return undefined;
+
+  return {
+    itemStyle: {
+      opacity: (params: { dataIndex: number }) => (highlight(params.dataIndex) ? 1 : DIMMED_OPACITY),
+    },
+  };
+};
+
+/** Decides whether the row at an index is inside the selection. */
+export type HighlightPredicate = (rowIndex: number) => boolean;
+
 export const buildEChartsOption = (
   visualization: Visualization,
   result: ChartResult,
   theme: ChartTheme,
   annotations: readonly Annotation[] = [],
+  highlight?: HighlightPredicate,
 ): EChartsCoreOption => {
+  const emphasis = highlightStyle(highlight);
   const dimensions = columnNames(result);
   const xName = dimensions[0];
   const measureNames = dimensions.slice(visualization.query.dimensions.length);
@@ -43,7 +70,7 @@ export const buildEChartsOption = (
       ...common,
       legend: { show: visualization.presentation.showLegend },
       series: buildDonutSeries(xName, measureNames[0]).map((item, index) =>
-        index === 0 ? { ...item, ...marks } : item,
+        index === 0 ? { ...item, ...marks, ...emphasis } : item,
       ),
     };
   }
@@ -89,7 +116,7 @@ export const buildEChartsOption = (
             ? buildAreaSeries(measureNames, xName, visualization.presentation.stacked)
             : buildLineSeries(measureNames, xName, visualization.presentation.stacked);
   const marks = buildAnnotationMarks(annotations, visualization, result);
-  const series = baseSeries.map((item, index) => (index === 0 ? { ...item, ...marks } : item));
+  const series = baseSeries.map((item, index) => ({ ...item, ...(index === 0 ? marks : {}), ...emphasis }));
   return {
     ...common,
     legend: { show: visualization.presentation.showLegend },
