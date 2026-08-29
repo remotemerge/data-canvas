@@ -32,6 +32,11 @@ export interface ToolInput {
   filterIds?: unknown;
   text?: unknown;
   anchor?: unknown;
+  expression?: unknown;
+  modifier?: unknown;
+  binX?: unknown;
+  binSeries?: unknown;
+  topValueLimit?: unknown;
   expectedRevision?: unknown;
 }
 
