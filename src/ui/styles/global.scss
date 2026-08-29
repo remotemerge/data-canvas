@@ -130,6 +130,95 @@ select:focus-visible {
   font-size: var(--dc-text-sm);
 }
 
+/* Approximation is a property of the number, so the badge sits with the chart rather than in a
+   corner where it reads as chrome. Bordered instead of coloured: this is information, not a
+   warning, and a red badge would suggest something went wrong. */
+.sampling-badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  cursor: help;
+}
+
+/* Visually hidden but reachable: the full explanation is the accessible name, so a screen-reader
+   user gets the same detail a pointer user gets from the tooltip. */
+.sampling-badge__explanation {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.query-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.query-progress__spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--dc-color-border);
+  border-top-color: var(--dc-color-accent);
+  border-radius: 50%;
+  animation: dc-spin 0.8s linear infinite;
+}
+
+/* The skeleton reserves the space the chart will occupy, so arriving rows do not shift the layout. */
+.query-skeleton {
+  display: grid;
+  align-content: end;
+  gap: var(--dc-space-2);
+  width: 100%;
+  min-height: 16rem;
+  padding: var(--dc-space-4);
+}
+
+.query-skeleton__bar {
+  height: 1.5rem;
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  animation: dc-pulse 1.4s ease-in-out infinite;
+}
+
+.query-skeleton__bar:nth-child(2) {
+  width: 70%;
+  animation-delay: 0.2s;
+}
+
+.query-skeleton__bar:nth-child(3) {
+  width: 45%;
+  animation-delay: 0.4s;
+}
+
+@keyframes dc-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes dc-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Motion here is decorative; the text and the bar carry the meaning without it. */
+@media (prefers-reduced-motion: reduce) {
+  .query-progress__spinner,
+  .query-skeleton__bar {
+    animation: none;
+  }
+}
+
 .chart-panel__kpi,
 .metric-card strong {
   display: block;
@@ -480,6 +569,20 @@ select:focus-visible {
   margin: var(--dc-space-2) 0 0;
   color: var(--dc-color-text-muted);
   font-size: var(--dc-text-sm);
+}
+
+.import__progress {
+  display: grid;
+  gap: var(--dc-space-1);
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.import__progress-bar {
+  width: 100%;
+  height: 0.375rem;
 }
 
 .dataset-list {

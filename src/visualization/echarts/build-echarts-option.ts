@@ -1,5 +1,6 @@
 import type { EChartsCoreOption } from 'echarts/core';
 import type { ChartResult } from '@/application/queries/visualization-query.ts';
+import { temporalUnitLabel } from '@/application/queries/adaptive-sampling.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import { escapeText } from '@/visualization/formatting.ts';
 import { buildAreaSeries } from '@/visualization/echarts/kinds/area.ts';
@@ -46,6 +47,19 @@ const highlightStyle = (
 
 /** Decides whether the row at an index is inside the selection. */
 export type HighlightPredicate = (rowIndex: number) => boolean;
+
+/**
+ * The axis label for a result whose time buckets were widened.
+ *
+ * `undefined` for every other result, so an unwidened chart carries no axis name and looks exactly
+ * as it did before. Only widening needs the label: it is the one strategy that changes what the x
+ * positions mean, and an axis still reading as daily when the marks are monthly is a wrong chart.
+ */
+const temporalAxisName = (result: ChartResult): string | undefined => {
+  const strategy = result.disclosure?.strategy;
+
+  return strategy?.kind === 'temporalWiden' ? temporalUnitLabel[strategy.to] : undefined;
+};
 
 export const buildEChartsOption = (
   visualization: Visualization,
@@ -117,6 +131,7 @@ export const buildEChartsOption = (
             : buildLineSeries(measureNames, xName, visualization.presentation.stacked);
   const marks = buildAnnotationMarks(annotations, visualization, result);
   const series = baseSeries.map((item, index) => ({ ...item, ...(index === 0 ? marks : {}), ...emphasis }));
+  const axisName = temporalAxisName(result);
   return {
     ...common,
     legend: { show: visualization.presentation.showLegend },
@@ -126,6 +141,11 @@ export const buildEChartsOption = (
     xAxis: {
       type: visualization.kind === 'scatter' || visualization.kind === 'histogram' ? 'value' : 'category',
       axisLabel: { color: theme.muted },
+      // Widening a time bucket changes the question the chart answers, so the axis has to name the
+      // granularity that actually produced these marks rather than the one that was requested.
+      ...(axisName === undefined
+        ? {}
+        : { name: axisName, nameLocation: 'middle', nameGap: 28, nameTextStyle: { color: theme.muted } }),
     },
     yAxis: { type: 'value', axisLabel: { color: theme.muted } },
     ...(visualization.kind === 'scatter' ? { brush: { toolbox: ['rect', 'clear'], xAxisIndex: 'all' } } : {}),
