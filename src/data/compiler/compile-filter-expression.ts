@@ -13,6 +13,24 @@ export interface CompiledFilter {
   parameters: unknown[];
 }
 
+/**
+ * Resolves a column ID to the SQL reference for it.
+ *
+ * Injected rather than derived here, because in a joined query the same physical name can exist on
+ * more than one relation and the reference must carry the compiler's generated table alias. The
+ * function returns `undefined` for an unknown column so the caller reports it uniformly.
+ */
+export type ColumnReferenceResolver = (columnId: EntityId) => { sql: string; column: Column } | undefined;
+
+/** The reference resolver for a query over a single, unaliased relation. */
+export const unqualifiedColumnReference =
+  (columns: readonly Column[]): ColumnReferenceResolver =>
+  (columnId) => {
+    const column = columns.find((candidate) => candidate.id === columnId);
+
+    return column === undefined ? undefined : { sql: quoteIdentifier(column.physicalName), column };
+  };
+
 const SQL_OPERATOR: Readonly<Partial<Record<FilterOperator, string>>> = {
   eq: '=',
   neq: '<>',
@@ -25,12 +43,22 @@ const SQL_OPERATOR: Readonly<Partial<Record<FilterOperator, string>>> = {
 const missingColumn = (columnId: EntityId): DomainError =>
   domainError('COLUMN_NOT_FOUND', 'The filter references a column that does not exist in this dataset.', { columnId });
 
+/**
+ * Compiles a filter tree to a parameterized `WHERE` fragment.
+ *
+ * `reference` accepts a plain column list for a single-relation query, or a resolver when the query
+ * spans a join and each identifier must carry its table alias. Values are always bound parameters;
+ * this function has no path that interpolates one into SQL.
+ */
 export const compileFilterExpression = (
   expression: FilterExpression,
-  columns: readonly Column[],
+  reference: readonly Column[] | ColumnReferenceResolver,
 ): Result<CompiledFilter, DomainError> => {
+  const resolve: ColumnReferenceResolver =
+    typeof reference === 'function' ? reference : unqualifiedColumnReference(reference);
+
   if (expression.kind === 'not') {
-    const operand = compileFilterExpression(expression.operand, columns);
+    const operand = compileFilterExpression(expression.operand, resolve);
     return operand.ok ? ok({ sql: `NOT (${operand.value.sql})`, parameters: operand.value.parameters }) : operand;
   }
 
@@ -42,7 +70,7 @@ export const compileFilterExpression = (
     const fragments: string[] = [];
     const parameters: unknown[] = [];
     for (const operand of expression.operands) {
-      const compiled = compileFilterExpression(operand, columns);
+      const compiled = compileFilterExpression(operand, resolve);
       if (!compiled.ok) return compiled;
       fragments.push(`(${compiled.value.sql})`);
       parameters.push(...compiled.value.parameters);
@@ -50,13 +78,14 @@ export const compileFilterExpression = (
     return ok({ sql: fragments.join(expression.kind === 'and' ? ' AND ' : ' OR '), parameters });
   }
 
-  const column = columns.find((candidate) => candidate.id === expression.columnId);
-  if (column === undefined) return err(missingColumn(expression.columnId));
+  const resolved = resolve(expression.columnId);
+  if (resolved === undefined) return err(missingColumn(expression.columnId));
+
+  const { column, sql: identifier } = resolved;
 
   const valid = validateFilter(column, expression.operator, expression.value);
   if (!valid.ok) return valid;
 
-  const identifier = quoteIdentifier(column.physicalName);
   const operator = SQL_OPERATOR[expression.operator];
   if (operator !== undefined) return ok({ sql: `${identifier} ${operator} ?`, parameters: [expression.value] });
 
