@@ -7,6 +7,9 @@ import { buildBarSeries } from '@/visualization/echarts/kinds/bar.ts';
 import { buildDonutSeries } from '@/visualization/echarts/kinds/donut.ts';
 import { buildLineSeries } from '@/visualization/echarts/kinds/line.ts';
 import { buildScatterSeries } from '@/visualization/echarts/kinds/scatter.ts';
+import { buildBoxplotSeries } from '@/visualization/echarts/kinds/boxplot.ts';
+import { buildHeatmapSeries } from '@/visualization/echarts/kinds/heatmap.ts';
+import { buildHistogramSeries } from '@/visualization/echarts/kinds/histogram.ts';
 import type { Annotation } from '@/domain/annotation/annotation.ts';
 import { buildAnnotationMarks } from '@/visualization/annotations/annotation-marks.ts';
 
@@ -44,21 +47,59 @@ export const buildEChartsOption = (
       ),
     };
   }
+  // Box plot and heatmap map rows positionally rather than through the dataset's `encode`, because
+  // ECharts expects a fixed tuple per mark for both. They return before the shared axis assembly.
+  if (visualization.kind === 'boxplot') {
+    const offset = visualization.query.dimensions.length;
+    const { series, categories } = buildBoxplotSeries(result.rows, offset);
+
+    return {
+      ...common,
+      dataset: undefined,
+      legend: { show: visualization.presentation.showLegend },
+      grid: { show: visualization.presentation.showGrid, containLabel: true },
+      xAxis: { type: 'category', data: categories, axisLabel: { color: theme.muted } },
+      yAxis: { type: 'value', axisLabel: { color: theme.muted } },
+      series,
+    };
+  }
+
+  if (visualization.kind === 'heatmap') {
+    const { series, xCategories, yCategories, min, max } = buildHeatmapSeries(result.rows);
+
+    return {
+      ...common,
+      dataset: undefined,
+      grid: { show: visualization.presentation.showGrid, containLabel: true },
+      xAxis: { type: 'category', data: xCategories, axisLabel: { color: theme.muted } },
+      yAxis: { type: 'category', data: yCategories, axisLabel: { color: theme.muted } },
+      visualMap: { min, max, calculable: true, orient: 'horizontal', left: 'center', textStyle: { color: theme.text } },
+      series,
+    };
+  }
+
   const baseSeries =
-    visualization.kind === 'scatter'
-      ? buildScatterSeries(measureNames, xName)
-      : visualization.kind === 'bar'
-        ? buildBarSeries(measureNames, xName, visualization.presentation.stacked)
-        : visualization.kind === 'area'
-          ? buildAreaSeries(measureNames, xName, visualization.presentation.stacked)
-          : buildLineSeries(measureNames, xName, visualization.presentation.stacked);
+    visualization.kind === 'histogram'
+      ? buildHistogramSeries(measureNames[0], xName)
+      : visualization.kind === 'scatter'
+        ? buildScatterSeries(measureNames, xName)
+        : visualization.kind === 'bar'
+          ? buildBarSeries(measureNames, xName, visualization.presentation.stacked)
+          : visualization.kind === 'area'
+            ? buildAreaSeries(measureNames, xName, visualization.presentation.stacked)
+            : buildLineSeries(measureNames, xName, visualization.presentation.stacked);
   const marks = buildAnnotationMarks(annotations, visualization, result);
   const series = baseSeries.map((item, index) => (index === 0 ? { ...item, ...marks } : item));
   return {
     ...common,
     legend: { show: visualization.presentation.showLegend },
     grid: { show: visualization.presentation.showGrid, containLabel: true },
-    xAxis: { type: visualization.kind === 'scatter' ? 'value' : 'category', axisLabel: { color: theme.muted } },
+    // A histogram's x is the bucket's lower bound, which is continuous: a category axis would space
+    // the bins evenly and hide gaps where no rows fell.
+    xAxis: {
+      type: visualization.kind === 'scatter' || visualization.kind === 'histogram' ? 'value' : 'category',
+      axisLabel: { color: theme.muted },
+    },
     yAxis: { type: 'value', axisLabel: { color: theme.muted } },
     ...(visualization.kind === 'scatter' ? { brush: { toolbox: ['rect', 'clear'], xAxisIndex: 'all' } } : {}),
     series,

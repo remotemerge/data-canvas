@@ -7,7 +7,28 @@ export const formatNumber = (value: number, format?: MetricFormat): string =>
     ...(format?.maximumFractionDigits === undefined
       ? { maximumFractionDigits: 2 }
       : { maximumFractionDigits: format.maximumFractionDigits }),
+    // An explicit `+` marks a comparison as a change rather than a level. A running total shows no
+    // sign, so it stays opt-in through the format.
+    ...(format?.showSign === true ? { signDisplay: 'exceptZero' as const } : {}),
   }).format(value);
+
+/**
+ * Whether a delta should read as an improvement, a regression, or neither.
+ *
+ * Direction comes from the metric because the app cannot infer it. Revenue up is good and churn up
+ * is not, and both are a `sum` over a number.
+ */
+export type DeltaTone = 'positive' | 'negative' | 'neutral';
+
+export const deltaTone = (value: number, format?: MetricFormat): DeltaTone => {
+  const direction = format?.direction ?? 'neutral';
+
+  if (direction === 'neutral' || value === 0 || !Number.isFinite(value)) return 'neutral';
+
+  const improving = direction === 'increaseIsGood' ? value > 0 : value < 0;
+
+  return improving ? 'positive' : 'negative';
+};
 
 export const formatValue = (value: unknown): string => {
   if (value === null || value === undefined) return '—';
