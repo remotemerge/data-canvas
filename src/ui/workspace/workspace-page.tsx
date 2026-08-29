@@ -13,6 +13,10 @@ import { DerivedColumnEditor } from '@/ui/dataset/derived-column-editor.tsx';
 import { RelationshipEditor } from '@/ui/dataset/relationship-editor.tsx';
 import { RelationshipGraph } from '@/ui/dataset/relationship-graph.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
+import { ExportDialog } from '@/ui/workspace/export-dialog.tsx';
+import { ImportDialog } from '@/ui/workspace/import-dialog.tsx';
+import { SelectionSummary } from '@/ui/workspace/selection-summary.tsx';
+import { UpdatePrompt } from '@/ui/components/update-prompt.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
 import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
 import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx';
@@ -40,6 +44,7 @@ export const WorkspacePage = (): React.JSX.Element => {
   // The most recent dispatch failure. Held locally rather than in the store: a rejected action is
   // this view's transient concern, not shared workspace state.
   const [actionError, setActionError] = useState<DomainError | null>(null);
+  const [portability, setPortability] = useState<'export' | 'import' | null>(null);
 
   return (
     <div className="workspace">
@@ -47,8 +52,22 @@ export const WorkspacePage = (): React.JSX.Element => {
         <h1 className="workspace__title">{name}</h1>
         <span className="workspace__revision">revision {revision}</span>
         <AgentStatusIndicator />
+        <SelectionSummary onError={setActionError} />
         <UndoRedoControls onError={setActionError} />
+        <div className="workspace__portability">
+          <button type="button" onClick={() => setPortability('export')}>
+            Export
+          </button>
+          <button type="button" onClick={() => setPortability('import')}>
+            Import
+          </button>
+        </div>
       </header>
+
+      <UpdatePrompt />
+
+      {portability === 'export' ? <ExportDialog onClose={() => setPortability(null)} onError={setActionError} /> : null}
+      {portability === 'import' ? <ImportDialog onClose={() => setPortability(null)} onError={setActionError} /> : null}
 
       <div className="workspace__body">
         <aside className="workspace__panel">

@@ -697,6 +697,143 @@ select:focus-visible {
   cursor: pointer;
 }
 
+.link-mode-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+}
+
+.link-mode-control__label {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.link-mode-control__select {
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: transparent;
+  color: var(--dc-color-text);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+}
+
+.selection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dc-space-2);
+}
+
+.selection-summary__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-accent);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  font-size: var(--dc-text-sm);
+}
+
+/* A selection can carry an imported cell value, so a long one truncates rather than pushing the
+   header controls off screen. */
+.selection-summary__text {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-summary__clear {
+  border: 0;
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-base);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.selection-summary__clear:hover {
+  color: var(--dc-color-text);
+}
+
+.workspace__portability {
+  display: flex;
+  gap: var(--dc-space-2);
+}
+
+.update-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-3);
+  padding: var(--dc-space-2) var(--dc-space-4);
+  border-bottom: 1px solid var(--dc-color-border);
+  background: var(--dc-color-surface-raised);
+  font-size: var(--dc-text-sm);
+}
+
+/* Centred over the workspace rather than inline: import replaces everything on the canvas, so the
+   dialog should interrupt rather than sit alongside the thing it is about to discard. */
+.dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  translate: -50% -50%;
+  display: grid;
+  gap: var(--dc-space-4);
+  padding: var(--dc-space-6);
+  width: min(32rem, calc(100vw - var(--dc-space-8)));
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 50%);
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: var(--dc-text-lg);
+}
+
+.dialog__field {
+  display: grid;
+  gap: var(--dc-space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.dialog__choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--dc-space-3);
+  align-items: start;
+  cursor: pointer;
+}
+
+.dialog__choice span {
+  display: grid;
+  gap: var(--dc-space-1);
+}
+
+.dialog__hint,
+.dialog__progress {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.dialog__list {
+  margin: 0;
+  padding-left: var(--dc-space-6);
+  font-size: var(--dc-text-sm);
+}
+
+.dialog__actions {
+  display: flex;
+  gap: var(--dc-space-2);
+  justify-content: flex-end;
+}
+
 .schema__summary {
   margin: 0 0 var(--dc-space-3);
   color: var(--dc-color-text-muted);

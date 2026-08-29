@@ -33,10 +33,16 @@ import {
   handleRemoveDerivedColumn,
 } from '@/application/actions/handlers/derived-column-handlers.ts';
 import { handleAddAnnotation, handleRemoveAnnotation } from '@/application/actions/handlers/annotation-handlers.ts';
-import { handleClearSelection, handleSetSelection } from '@/application/actions/handlers/selection-handlers.ts';
+import {
+  handleClearSelection,
+  handleExtendSelection,
+  handleSetSelection,
+} from '@/application/actions/handlers/selection-handlers.ts';
+import { handleImportWorkspace } from '@/application/actions/handlers/portability-handlers.ts';
 import {
   handleCreateVisualization,
   handleRemoveVisualization,
+  handleSetVisualizationLinkMode,
   handleUpdateVisualization,
 } from '@/application/actions/handlers/visualization-handlers.ts';
 import { appendHistoryEntry } from '@/application/history/action-history.ts';
@@ -104,8 +110,14 @@ const runHandler = (
       return handleRemoveVisualization(workspace, action.payload, deps);
     case 'selection.set':
       return handleSetSelection(workspace, action.payload, deps);
+    case 'selection.extend':
+      return handleExtendSelection(workspace, action.payload, deps);
     case 'selection.clear':
       return handleClearSelection(workspace, action.payload, deps);
+    case 'visualization.setLinkMode':
+      return handleSetVisualizationLinkMode(workspace, action.payload, deps);
+    case 'workspace.import':
+      return handleImportWorkspace(workspace, action.payload, deps);
     case 'metric.create':
       return handleCreateMetric(workspace, action.payload, deps);
     case 'metric.update':
