@@ -5,10 +5,12 @@ import { analyzeDataSchema } from './analyze-data.schema.ts';
 import { applyFilterSchema } from './apply-filter.schema.ts';
 import { clearFiltersSchema } from './clear-filters.schema.ts';
 import { createMetricSchema } from './create-metric.schema.ts';
+import { createRelationshipSchema } from './create-relationship.schema.ts';
 import { createVisualizationSchema } from './create-visualization.schema.ts';
 import { getDatasetSchemaSchema } from './get-dataset-schema.schema.ts';
 import { getWorkspaceSchema } from './get-workspace.schema.ts';
 import { highlightSelectionSchema } from './highlight-selection.schema.ts';
+import { listRelationshipsSchema } from './list-relationships.schema.ts';
 import { previewDataSchema } from './preview-data.schema.ts';
 import { removeVisualizationSchema } from './remove-visualization.schema.ts';
 import { updateVisualizationSchema } from './update-visualization.schema.ts';
@@ -18,6 +20,8 @@ export const toolSchemas = {
   get_dataset_schema: getDatasetSchemaSchema,
   preview_data: previewDataSchema,
   analyze_data: analyzeDataSchema,
+  list_relationships: listRelationshipsSchema,
+  create_relationship: createRelationshipSchema,
   create_visualization: createVisualizationSchema,
   update_visualization: updateVisualizationSchema,
   remove_visualization: removeVisualizationSchema,

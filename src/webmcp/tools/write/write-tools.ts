@@ -10,6 +10,7 @@ import type { VisualizationKind, VisualBinding } from '@/domain/visualization/vi
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
+import { createCreateRelationshipTool } from '@/webmcp/tools/write/create-relationship.ts';
 import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 
 const dispatch = async (
@@ -48,6 +49,7 @@ const queryFrom = (datasetId: string, input: ReturnType<typeof asInput>, binding
 });
 
 export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
+  createCreateRelationshipTool(deps),
   {
     name: 'create_visualization',
     description: 'Create a semantic chart, KPI, or table in the shared workspace.',

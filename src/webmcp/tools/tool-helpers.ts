@@ -8,6 +8,13 @@ export interface ToolInput {
   datasetId?: unknown;
   columnId?: unknown;
   columnIds?: unknown;
+  includeRelated?: unknown;
+  leftDatasetId?: unknown;
+  rightDatasetId?: unknown;
+  on?: unknown;
+  join?: unknown;
+  relationshipIds?: unknown;
+  includeSuggestions?: unknown;
   dimensions?: unknown;
   measures?: unknown;
   limit?: unknown;
