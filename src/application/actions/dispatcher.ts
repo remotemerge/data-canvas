@@ -23,7 +23,15 @@ import {
   handleRemoveRelationship,
 } from '@/application/actions/handlers/relationship-handlers.ts';
 import { handleSetTableSort } from '@/application/actions/handlers/table-handlers.ts';
-import { handleCreateMetric, handleRemoveMetric } from '@/application/actions/handlers/metric-handlers.ts';
+import {
+  handleCreateMetric,
+  handleRemoveMetric,
+  handleUpdateMetric,
+} from '@/application/actions/handlers/metric-handlers.ts';
+import {
+  handleCreateDerivedColumn,
+  handleRemoveDerivedColumn,
+} from '@/application/actions/handlers/derived-column-handlers.ts';
 import { handleAddAnnotation, handleRemoveAnnotation } from '@/application/actions/handlers/annotation-handlers.ts';
 import { handleClearSelection, handleSetSelection } from '@/application/actions/handlers/selection-handlers.ts';
 import {
@@ -100,8 +108,14 @@ const runHandler = (
       return handleClearSelection(workspace, action.payload, deps);
     case 'metric.create':
       return handleCreateMetric(workspace, action.payload, deps);
+    case 'metric.update':
+      return handleUpdateMetric(workspace, action.payload, deps);
     case 'metric.remove':
       return handleRemoveMetric(workspace, action.payload, deps);
+    case 'derivedColumn.create':
+      return handleCreateDerivedColumn(workspace, action.payload, deps);
+    case 'derivedColumn.remove':
+      return handleRemoveDerivedColumn(workspace, action.payload, deps);
     case 'annotation.add':
       return handleAddAnnotation(workspace, action.payload, deps);
     case 'annotation.remove':

@@ -29,8 +29,12 @@ export const invertAction = (
     case 'selection.clear':
       return restore({ selections: before.selections }, changedEntityIds);
     case 'metric.create':
+    case 'metric.update':
     case 'metric.remove':
       return restore({ metrics: before.metrics }, changedEntityIds);
+    case 'derivedColumn.create':
+    case 'derivedColumn.remove':
+      return restore({ derivedColumns: before.derivedColumns }, changedEntityIds);
     case 'annotation.add':
     case 'annotation.remove':
       return restore({ annotations: before.annotations }, changedEntityIds);

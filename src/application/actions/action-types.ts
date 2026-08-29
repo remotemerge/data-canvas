@@ -1,7 +1,9 @@
 import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
+import type { DerivedExpression } from '@/domain/analysis/derived-expression.ts';
 import type { DatasetSourceKind } from '@/domain/dataset/dataset.ts';
 import type { FilterExpression, FilterOperator } from '@/domain/filter/filter.ts';
 import type { AggregateFunction, MetricFormat } from '@/domain/metric/metric.ts';
+import type { MetricModifier } from '@/domain/metric/metric-modifier.ts';
 import type { JoinKind, RelationshipKeyPair, RelationshipKind } from '@/domain/relationship/relationship.ts';
 import type {
   VisualBinding,
@@ -129,10 +131,33 @@ export interface CreateMetricInput {
   columnId?: EntityId;
   filters?: EntityId[];
   format?: MetricFormat;
+  /** Window transformation over the aggregate. Absent leaves a plain aggregate. */
+  modifier?: MetricModifier;
+}
+
+export interface UpdateMetricInput {
+  metricId: EntityId;
+  name?: string;
+  aggregate?: AggregateFunction;
+  columnId?: EntityId;
+  filters?: EntityId[];
+  format?: MetricFormat;
+  modifier?: MetricModifier;
 }
 
 export interface RemoveMetricInput {
   metricId: EntityId;
+}
+
+export interface CreateDerivedColumnInput {
+  datasetId: EntityId;
+  /** Display label, rendered as plain text and never used as a SQL identifier. */
+  name: string;
+  expression: DerivedExpression;
+}
+
+export interface RemoveDerivedColumnInput {
+  derivedColumnId: EntityId;
 }
 
 export interface AddAnnotationInput {
@@ -180,6 +205,7 @@ export interface RestoreWorkspaceInput {
     Pick<
       Workspace,
       | 'activeDatasetId'
+      | 'derivedColumns'
       | 'relationships'
       | 'visualizations'
       | 'filters'
@@ -226,7 +252,10 @@ export type ApplicationAction =
   | { type: 'selection.set'; payload: SetSelectionInput }
   | { type: 'selection.clear'; payload: ClearSelectionInput }
   | { type: 'metric.create'; payload: CreateMetricInput }
+  | { type: 'metric.update'; payload: UpdateMetricInput }
   | { type: 'metric.remove'; payload: RemoveMetricInput }
+  | { type: 'derivedColumn.create'; payload: CreateDerivedColumnInput }
+  | { type: 'derivedColumn.remove'; payload: RemoveDerivedColumnInput }
   | { type: 'annotation.add'; payload: AddAnnotationInput }
   | { type: 'annotation.remove'; payload: RemoveAnnotationInput }
   | { type: 'layout.update'; payload: UpdateLayoutInput }
@@ -253,7 +282,10 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'selection.set',
   'selection.clear',
   'metric.create',
+  'metric.update',
   'metric.remove',
+  'derivedColumn.create',
+  'derivedColumn.remove',
   'annotation.add',
   'annotation.remove',
   'layout.update',
