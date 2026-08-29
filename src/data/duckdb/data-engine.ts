@@ -1,6 +1,9 @@
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import type {
   AnalysisResult,
+  ColumnRangeRequest,
+  ColumnStatistics,
+  ColumnStatisticsRequest,
   DataEnginePort,
   DistinctValuesRequest,
   DistinctValuesResult,
@@ -32,6 +35,8 @@ import type { ValidatedFile } from '@/data/import/import-dataset.ts';
 import { jsonToCsvBytes } from '@/data/import/json-to-csv.ts';
 import { MAX_TABLE_WINDOW_ROWS } from '@/data/import/import-limits.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import type { ColumnRange } from '@/domain/analysis/bin-strategy.ts';
+import type { DerivedColumn } from '@/domain/dataset/derived-column.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
@@ -83,6 +88,13 @@ export interface DataEngine extends DataEnginePort {
    * relationships instead, the same way it pushes restored datasets.
    */
   setRelationships(relationships: Record<EntityId, Relationship>): void;
+  /**
+   * Publishes the workspace's derived columns to the engine.
+   *
+   * Pushed rather than read, for the same reason relationships are: the compiler needs the
+   * definitions to inline them, and the data layer must not depend on the workspace store.
+   */
+  setDerivedColumns(derivedColumns: Record<EntityId, DerivedColumn>): void;
 }
 
 /**
@@ -217,6 +229,17 @@ const queryDataset = (datasetId: EntityId, relation: RelationEntry): QueryDatase
  */
 const FAN_OUT_QUERY_TOLERANCE = 1.05;
 
+/*
+ * Bounds on a column profile.
+ *
+ * The distinct cap keeps the count from becoming a full scan on a high-cardinality column; the
+ * value caps bound what a profile can disclose, since frequent values are dataset content and reach
+ * an agent through `get_column_statistics`.
+ */
+const DISTINCT_COUNT_CAP = 10_000;
+const MAX_TOP_VALUES = 20;
+const MAX_STATISTIC_STRING_LENGTH = 200;
+
 export const describeQueryFanOut = (anchorRows: number, joinedRows: number): string | undefined => {
   if (anchorRows <= 0 || joinedRows <= anchorRows * FAN_OUT_QUERY_TOLERANCE) return undefined;
 
@@ -253,6 +276,9 @@ export const createDataEngine = (): DataEngine => {
 
   /** The join graph, pushed in by the application. The engine never reads the workspace store. */
   const relationshipGraph = new Map<EntityId, Relationship>();
+
+  /** Derived column definitions, pushed in by the application alongside the join graph. */
+  let derivedColumnDefinitions: Record<EntityId, DerivedColumn> = {};
   const countCache = createQueryCache<number>();
 
   const requireConnection = (): Result<AsyncDuckDBConnection, DomainError> =>
@@ -362,9 +388,14 @@ export const createDataEngine = (): DataEngine => {
    * coerced through `Math.trunc` and clamped, so no caller-controlled text reaches the SQL.
    */
   /** Every relation this session knows about, so the compiler can resolve a joined column. */
-  const queryContext = (): { datasets: QueryDataset[]; relationships: Relationship[] } => ({
+  const queryContext = (): {
+    datasets: QueryDataset[];
+    relationships: Relationship[];
+    derivedColumns: Record<EntityId, DerivedColumn>;
+  } => ({
     datasets: [...relations.entries()].map(([datasetId, relation]) => queryDataset(datasetId, relation)),
     relationships: [...relationshipGraph.values()],
+    derivedColumns: derivedColumnDefinitions,
   });
 
   /**
@@ -583,6 +614,125 @@ export const createDataEngine = (): DataEngine => {
     });
   };
 
+  /**
+   * Reads a column's numeric extent for equal-width binning.
+   *
+   * Two aggregates over the filtered relation, so the result is one row whatever the dataset's
+   * size. Callers cache it against the dataset revision rather than calling per render.
+   */
+  const getColumnRange = async (request: ColumnRangeRequest): Promise<Result<ColumnRange, DomainError>> => {
+    const result = await executeAnalysis({
+      datasetId: request.datasetId,
+      dimensions: [],
+      measures: [
+        { columnId: request.columnId, aggregate: 'min', alias: 'lo' },
+        { columnId: request.columnId, aggregate: 'max', alias: 'hi' },
+      ],
+      filters: enabledExpressions(request.filters),
+      limit: 1,
+    });
+
+    if (!result.ok) return result;
+
+    const [row] = result.value.rows;
+    const min = Number(row?.[0] ?? 0);
+    const max = Number(row?.[1] ?? 0);
+
+    // An empty or all-null column has no extent. Reporting a degenerate zero-width range lets the
+    // bin compiler fall back to its single-bucket path instead of dividing by zero.
+    return ok({ min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 0 });
+  };
+
+  /**
+   * Profiles one column in a bounded number of queries.
+   *
+   * Numeric and text columns take different paths because the useful statistics differ and running
+   * both would double the cost for no gain. The distinct count is capped, so a high-cardinality
+   * column costs the same as a low-cardinality one.
+   */
+  const getColumnStatistics = async (
+    request: ColumnStatisticsRequest,
+  ): Promise<Result<ColumnStatistics, DomainError>> => {
+    const relation = relations.get(request.datasetId);
+
+    if (relation === undefined) {
+      return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
+    }
+
+    const column = relation.columns.find((candidate) => candidate.id === request.columnId);
+
+    if (column === undefined) {
+      return err(domainError('COLUMN_NOT_FOUND', 'The statistics request references a column that does not exist.'));
+    }
+
+    const filters = enabledExpressions(request.filters);
+    const numeric = column.logicalType === 'number';
+    const measures: AnalysisQuery['measures'] = [
+      { aggregate: 'count', alias: 'rows' },
+      { columnId: column.id, aggregate: 'count', alias: 'nonNull' },
+      { columnId: column.id, aggregate: 'count_distinct', alias: 'distinct' },
+      ...(numeric
+        ? ([
+            { columnId: column.id, aggregate: 'min', alias: 'lo' },
+            { columnId: column.id, aggregate: 'max', alias: 'hi' },
+            { columnId: column.id, aggregate: 'avg', alias: 'mean' },
+            { columnId: column.id, aggregate: 'median', alias: 'median' },
+            { columnId: column.id, aggregate: 'stddev', alias: 'stddev' },
+          ] satisfies AnalysisQuery['measures'])
+        : []),
+    ];
+
+    const summary = await executeAnalysis({
+      datasetId: request.datasetId,
+      dimensions: [],
+      measures,
+      filters,
+      limit: 1,
+    });
+
+    if (!summary.ok) return summary;
+
+    const [row] = summary.value.rows;
+    const rowCount = Number(row?.[0] ?? 0);
+    const nonNull = Number(row?.[1] ?? 0);
+    const distinctCount = Number(row?.[2] ?? 0);
+
+    const statistics: ColumnStatistics = {
+      rowCount,
+      nullCount: Math.max(rowCount - nonNull, 0),
+      distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
+      distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
+      ...(numeric
+        ? {
+            min: Number(row?.[3] ?? 0),
+            max: Number(row?.[4] ?? 0),
+            mean: Number(row?.[5] ?? 0),
+            median: Number(row?.[6] ?? 0),
+            stddev: Number(row?.[7] ?? 0),
+          }
+        : {}),
+    };
+
+    if (!numeric) {
+      const limit = Math.min(Math.max(Math.trunc(request.topValueLimit ?? 10), 1), MAX_TOP_VALUES);
+      const top = await getDistinctValues({
+        datasetId: request.datasetId,
+        columnId: column.id,
+        filters: request.filters,
+        limit,
+      });
+
+      if (top.ok) {
+        statistics.topValues = top.value.values.map((entry) => ({
+          value: typeof entry.value === 'string' ? entry.value.slice(0, MAX_STATISTIC_STRING_LENGTH) : entry.value,
+          count: entry.count,
+        }));
+      }
+    }
+
+    return ok(statistics);
+  };
+
   const getDistinctValues = async (
     request: DistinctValuesRequest,
   ): Promise<Result<DistinctValuesResult, DomainError>> => {
@@ -646,6 +796,8 @@ export const createDataEngine = (): DataEngine => {
     fetchTableWindow,
     executeAnalysis,
     getDistinctValues,
+    getColumnStatistics,
+    getColumnRange,
     measureKeyQuality,
     dropDataset,
     dispose,
@@ -661,6 +813,9 @@ export const createDataEngine = (): DataEngine => {
     setRelationships: (relationships) => {
       relationshipGraph.clear();
       for (const relationship of Object.values(relationships)) relationshipGraph.set(relationship.id, relationship);
+    },
+    setDerivedColumns: (columns) => {
+      derivedColumnDefinitions = columns;
     },
   };
 };

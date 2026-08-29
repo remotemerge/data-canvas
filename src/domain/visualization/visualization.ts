@@ -1,7 +1,18 @@
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-export type VisualizationKind = 'line' | 'bar' | 'area' | 'scatter' | 'donut' | 'kpi' | 'table';
+export type VisualizationKind =
+  | 'line'
+  | 'bar'
+  | 'area'
+  | 'scatter'
+  | 'donut'
+  | 'kpi'
+  | 'table'
+  | 'histogram'
+  | 'boxplot'
+  | 'heatmap';
 
 export const VISUALIZATION_KINDS: readonly VisualizationKind[] = [
   'line',
@@ -11,7 +22,13 @@ export const VISUALIZATION_KINDS: readonly VisualizationKind[] = [
   'donut',
   'kpi',
   'table',
+  'histogram',
+  'boxplot',
+  'heatmap',
 ] as const;
+
+/** Kinds whose result rows DuckDB computes as a distribution rather than a plain grouped aggregate. */
+export const DISTRIBUTION_KINDS: readonly VisualizationKind[] = ['histogram', 'boxplot', 'heatmap'] as const;
 
 /**
  * Maps dataset columns onto visual channels by ID.
@@ -27,6 +44,15 @@ export interface VisualBinding {
   color?: EntityId;
   size?: EntityId;
   tooltip?: EntityId[];
+  /**
+   * Bins the `x` dimension before grouping. Required by `histogram`, optional elsewhere.
+   *
+   * A strategy rather than a bucket count so the choice of `width_bucket`, `ntile`, or `date_trunc`
+   * stays a compiler decision instead of leaking into the binding.
+   */
+  binX?: BinStrategy;
+  /** Bins the `series` dimension. Only `heatmap` uses it, where both axes may be continuous. */
+  binSeries?: BinStrategy;
 }
 
 export interface VisualizationPresentation {

@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { createHarness, stubDataEngine, workspaceWithDataset } from '../unit/application/action-fixtures.ts';
+import {
+  createHarness,
+  stubColumnStatistics,
+  stubDataEngine,
+  workspaceWithDataset,
+} from '../unit/application/action-fixtures.ts';
 import { createToolDefinitions } from '@/webmcp/registry/tool-registry.ts';
 
 const normalize = (value: unknown): unknown => {
@@ -35,6 +40,7 @@ const pair = () => {
     getWorkspace: agent.workspace,
     fetchTableWindow: engine.fetchTableWindow,
     executeAnalysis: engine.executeAnalysis,
+    fetchColumnStatistics: stubColumnStatistics(engine, agent.workspace),
   });
   const tool = (name: string) => tools.find((candidate) => candidate.name === name)!;
   return { human, agent, tool };

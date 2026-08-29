@@ -1,5 +1,6 @@
 import type { Column } from '@/domain/dataset/dataset.ts';
 import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
+import type { ColumnRange } from '@/domain/analysis/bin-strategy.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -81,6 +82,51 @@ export interface DistinctValuesResult {
 }
 
 /**
+ * A single-pass profile of one column.
+ *
+ * Every field is an aggregate, so the result size is fixed regardless of dataset size. `topValues`
+ * is the exception and carries actual cell content, which is why it is capped and why the tool
+ * exposing it is marked as returning untrusted content.
+ */
+export interface ColumnStatisticsRequest {
+  datasetId: EntityId;
+  columnId: EntityId;
+  filters: Filter[];
+  /** Cap on returned frequent values. The engine clamps it. */
+  topValueLimit?: number;
+  signal?: AbortSignal;
+}
+
+export interface ColumnStatistics {
+  rowCount: number;
+  nullCount: number;
+  /** Capped: equal to the cap means "at least this many", not an exact count. */
+  distinctCount: number;
+  distinctCountCapped: boolean;
+  /** Present for numeric columns only. */
+  min?: number;
+  max?: number;
+  mean?: number;
+  median?: number;
+  stddev?: number;
+  /** Present for text and category columns only. Values are dataset content. */
+  topValues?: { value: string | number | boolean | null; count: number }[];
+}
+
+/**
+ * The numeric extent of a column, needed before an equal-width bin strategy can be compiled.
+ *
+ * Cached against the dataset revision by the caller. Recomputing it on every histogram render would
+ * add a full scan to each frame.
+ */
+export interface ColumnRangeRequest {
+  datasetId: EntityId;
+  columnId: EntityId;
+  filters: Filter[];
+  signal?: AbortSignal;
+}
+
+/**
  * A bounded uniqueness measurement over a candidate join key.
  *
  * Sampled rather than exhaustive so relationship creation stays interactive on a large dataset. The
@@ -113,6 +159,8 @@ export interface DataEnginePort {
   fetchTableWindow(request: TableWindowRequest): Promise<Result<TableWindow, DomainError>>;
   executeAnalysis(query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>>;
   getDistinctValues(request: DistinctValuesRequest): Promise<Result<DistinctValuesResult, DomainError>>;
+  getColumnStatistics(request: ColumnStatisticsRequest): Promise<Result<ColumnStatistics, DomainError>>;
+  getColumnRange(request: ColumnRangeRequest): Promise<Result<ColumnRange, DomainError>>;
   measureKeyQuality(request: KeyQualityRequest): Promise<Result<KeyQualityResult, DomainError>>;
   /** Drops a dataset's relation and its cached counts. Idempotent: an unknown dataset succeeds. */
   dropDataset(datasetId: EntityId): Promise<Result<void, DomainError>>;
@@ -134,6 +182,8 @@ export const unavailableDataEngine: DataEnginePort = {
   fetchTableWindow: () => Promise.resolve(unavailable()),
   executeAnalysis: () => Promise.resolve(unavailable()),
   getDistinctValues: () => Promise.resolve(unavailable()),
+  getColumnStatistics: () => Promise.resolve(unavailable()),
+  getColumnRange: () => Promise.resolve(unavailable()),
   measureKeyQuality: () => Promise.resolve(unavailable()),
   dropDataset: () => Promise.resolve(unavailable()),
 };

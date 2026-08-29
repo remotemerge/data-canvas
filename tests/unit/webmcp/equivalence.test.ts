@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   createHarness,
+  stubColumnStatistics,
   stubDataEngine,
   workspaceWithDataset,
   workspaceWithJoinableDatasets,
@@ -12,7 +13,13 @@ const stripGeneratedIds = (value: unknown): unknown => {
   const ids = new Map<string, string>();
   let next = 0;
   const visit = (item: unknown): unknown => {
-    if (typeof item === 'string' && /^(flt|viz|sel|rel)_[\w-]+$/u.test(item)) {
+    // Derived columns are generated with the `col_` prefix, so they normalize here too. Fixture
+    // columns use readable ids like `col_revenue` and are excluded by the uuid shape.
+    if (
+      typeof item === 'string' &&
+      (/^(flt|viz|sel|rel|mtr|ann)_[\w-]+$/u.test(item) ||
+        /^col_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(item))
+    ) {
       if (!ids.has(item)) ids.set(item, `generated_${next++}`);
       return ids.get(item);
     }
@@ -42,6 +49,7 @@ const pair = (initial: Workspace = workspaceWithDataset()) => {
     getWorkspace: agent.workspace,
     fetchTableWindow: (request) => engine.fetchTableWindow(request),
     executeAnalysis: (query) => engine.executeAnalysis(query),
+    fetchColumnStatistics: stubColumnStatistics(engine, agent.workspace),
   });
   const tool = (name: string) => tools.find((candidate) => candidate.name === name)!;
   return { human, agent, tool };
@@ -145,6 +153,106 @@ test('an agent can chart across a relationship it created, matching the human pa
     xColumnId: 'col_customer_region',
     yColumnIds: ['col_order_revenue'],
     expectedRevision: 1,
+  });
+
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
+test('human and agent derived column paths produce the same workspace', async () => {
+  const { human, agent, tool } = pair();
+  const expression = {
+    kind: 'arithmetic' as const,
+    op: 'div' as const,
+    left: { kind: 'column' as const, columnId: 'col_revenue' },
+    right: { kind: 'column' as const, columnId: 'col_units' },
+  };
+
+  await human.dispatcher.execute(
+    { type: 'derivedColumn.create', payload: { datasetId: 'ds_sales', name: 'Revenue per unit', expression } },
+    { actor: 'human' },
+  );
+  await tool('create_derived_column').handler({
+    datasetId: 'ds_sales',
+    name: 'Revenue per unit',
+    expression,
+    expectedRevision: 0,
+  });
+
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
+test('an agent can build a histogram over a derived column, matching the human path', async () => {
+  const { human, agent, tool } = pair();
+  const expression = { kind: 'datePart' as const, part: 'month' as const, columnId: 'col_date' };
+  const binX = { kind: 'equalWidth' as const, binCount: 12 };
+  const chart = {
+    datasetId: 'ds_sales',
+    title: 'Revenue distribution',
+    kind: 'histogram' as const,
+    binding: { x: 'col_revenue', binX },
+    query: {
+      datasetId: 'ds_sales',
+      dimensions: [],
+      binnedDimensions: [{ columnId: 'col_revenue', strategy: binX }],
+      measures: [{ aggregate: 'count' as const }],
+      filters: [],
+    },
+  };
+
+  await human.dispatcher.execute(
+    { type: 'derivedColumn.create', payload: { datasetId: 'ds_sales', name: 'Order month', expression } },
+    { actor: 'human' },
+  );
+  await human.dispatcher.execute({ type: 'visualization.create', payload: chart }, { actor: 'human' });
+
+  await tool('create_derived_column').handler({
+    datasetId: 'ds_sales',
+    name: 'Order month',
+    expression,
+    expectedRevision: 0,
+  });
+  await tool('create_visualization').handler({
+    datasetId: 'ds_sales',
+    title: 'Revenue distribution',
+    kind: 'histogram',
+    xColumnId: 'col_revenue',
+    binX,
+    expectedRevision: 1,
+  });
+
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
+test('human and agent metric modifier paths produce the same workspace', async () => {
+  const { human, agent, tool } = pair();
+  const modifier = {
+    kind: 'timeComparison' as const,
+    dateColumnId: 'col_date',
+    unit: 'month' as const,
+    offset: 1,
+    as: 'percentChange' as const,
+  };
+
+  await human.dispatcher.execute(
+    {
+      type: 'metric.create',
+      payload: {
+        datasetId: 'ds_sales',
+        name: 'Revenue growth',
+        aggregate: 'sum',
+        columnId: 'col_revenue',
+        modifier,
+      },
+    },
+    { actor: 'human' },
+  );
+  await tool('create_metric').handler({
+    datasetId: 'ds_sales',
+    name: 'Revenue growth',
+    aggregate: 'sum',
+    columnId: 'col_revenue',
+    modifier,
+    expectedRevision: 0,
   });
 
   expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));

@@ -1,3 +1,4 @@
+import { validateBinStrategy } from '@/application/validation/validate-bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { isNumericType, isTemporalType, isTextType } from '@/domain/logical-type.ts';
 import type { VisualBinding, VisualizationKind } from '@/domain/visualization/visualization.ts';
@@ -214,6 +215,148 @@ const validateTable = (binding: VisualBinding, columns: Map<EntityId, Column>): 
     : ok(undefined);
 
 /**
+ * Upper bound on box plots in one chart.
+ *
+ * A box plot with hundreds of boxes is unreadable, and each box is a separate quantile computation,
+ * so the limit protects legibility and query cost together.
+ */
+export const MAX_BOXPLOT_CATEGORIES = 50;
+
+/**
+ * A histogram bins one continuous column and counts the rows in each bucket.
+ *
+ * The measure comes from the bin, so `y` stays unbound: requiring a measure would invite a caller
+ * to bind one that contradicts the count the histogram actually shows.
+ */
+const validateHistogram = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
+  if (binding.x === undefined) {
+    return err(missingChannel('histogram', 'x', 'one numeric or temporal column to bin'));
+  }
+
+  const column = columns.get(binding.x);
+
+  if (column !== undefined && !isNumericType(column.logicalType) && !isTemporalType(column.logicalType)) {
+    return err(wrongType('histogram', 'x', column, 'a numeric or temporal column'));
+  }
+
+  if (binding.binX === undefined) {
+    return err(
+      domainError('UNSUPPORTED_OPERATION', 'histogram requires a bin strategy on its x column.', {
+        kind: 'histogram',
+        channel: 'binX',
+      }),
+    );
+  }
+
+  const strategy = validateBinStrategy(binding.binX);
+
+  if (!strategy.ok) return strategy;
+
+  // A temporal strategy on a numeric column, or the reverse, compiles to a function the column's
+  // type cannot accept. Caught here so the message names the mismatch rather than DuckDB's error.
+  if (column !== undefined) {
+    const temporalStrategy = binding.binX.kind === 'temporal';
+
+    if (temporalStrategy && !isTemporalType(column.logicalType)) {
+      return err(wrongType('histogram', 'binX', column, 'a temporal column for temporal binning'));
+    }
+
+    if (!temporalStrategy && !isNumericType(column.logicalType)) {
+      return err(wrongType('histogram', 'binX', column, 'a numeric column for numeric binning'));
+    }
+  }
+
+  return ok(undefined);
+};
+
+/** A box plot summarizes one numeric measure, optionally split by a low-cardinality category. */
+const validateBoxplot = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
+  const measures = measureIds(binding);
+
+  if (measures.length !== 1) {
+    return err(
+      domainError(
+        'INCOMPATIBLE_COLUMN',
+        `boxplot requires exactly one numeric measure; ${measures.length} are bound.`,
+        {
+          kind: 'boxplot',
+          channel: 'y',
+        },
+      ),
+    );
+  }
+
+  const [measureId] = measures as [EntityId];
+  const measure = columns.get(measureId);
+
+  if (measure !== undefined && !isNumericType(measure.logicalType)) {
+    return err(wrongType('boxplot', 'y', measure, 'a numeric measure'));
+  }
+
+  if (binding.x !== undefined) {
+    const category = columns.get(binding.x);
+
+    if (category !== undefined && isNumericType(category.logicalType)) {
+      return err(wrongType('boxplot', 'x', category, 'a categorical or temporal split'));
+    }
+  }
+
+  return ok(undefined);
+};
+
+/** A heatmap needs both axes and one measure, since colour encodes the cell's value. */
+const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
+  if (binding.x === undefined) return err(missingChannel('heatmap', 'x', 'two dimensions and one measure'));
+  if (binding.series === undefined) return err(missingChannel('heatmap', 'series', 'two dimensions and one measure'));
+
+  const measures = measureIds(binding);
+
+  if (measures.length !== 1) {
+    return err(
+      domainError('INCOMPATIBLE_COLUMN', `heatmap requires exactly one measure; ${measures.length} are bound.`, {
+        kind: 'heatmap',
+        channel: 'y',
+      }),
+    );
+  }
+
+  const [measureId] = measures as [EntityId];
+  const measure = columns.get(measureId);
+
+  if (measure !== undefined && !isNumericType(measure.logicalType)) {
+    return err(wrongType('heatmap', 'y', measure, 'a numeric measure'));
+  }
+
+  for (const [channel, strategy] of [
+    ['binX', binding.binX],
+    ['binSeries', binding.binSeries],
+  ] as const) {
+    if (strategy === undefined) continue;
+
+    const validated = validateBinStrategy(strategy);
+
+    if (!validated.ok) return validated;
+
+    const columnId = channel === 'binX' ? binding.x : binding.series;
+    const column = columnId === undefined ? undefined : columns.get(columnId);
+
+    if (column === undefined) continue;
+
+    const temporalStrategy = strategy.kind === 'temporal';
+
+    if (temporalStrategy && !isTemporalType(column.logicalType)) {
+      return err(wrongType('heatmap', channel, column, 'a temporal column for temporal binning'));
+    }
+
+    if (!temporalStrategy && !isNumericType(column.logicalType)) {
+      return err(wrongType('heatmap', channel, column, 'a numeric column for numeric binning'));
+    }
+  }
+
+  return ok(undefined);
+};
+
+/**
  * Checks a visualization's binding against its kind and the available columns.
  *
  * Runs after the dataset is resolved. Resolves every referenced column itself, so callers do not
@@ -243,6 +386,12 @@ export const validateVisualization = (
       return validateKpi(binding, columns.value);
     case 'table':
       return validateTable(binding, columns.value);
+    case 'histogram':
+      return validateHistogram(binding, columns.value);
+    case 'boxplot':
+      return validateBoxplot(binding, columns.value);
+    case 'heatmap':
+      return validateHeatmap(binding, columns.value);
     default:
       return err(
         domainError('UNSUPPORTED_OPERATION', `Visualization kind '${kind as string}' is not supported.`, { kind }),

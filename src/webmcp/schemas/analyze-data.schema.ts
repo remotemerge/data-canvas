@@ -26,7 +26,10 @@ export const analyzeDataSchema = {
         type: 'object',
         properties: {
           columnId: { type: 'string', minLength: 1, maxLength: 100 },
-          aggregate: { type: 'string', enum: ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'median'] },
+          aggregate: {
+            type: 'string',
+            enum: ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'median', 'stddev'],
+          },
         },
         required: ['aggregate'],
         additionalProperties: false,

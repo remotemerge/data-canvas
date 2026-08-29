@@ -21,6 +21,9 @@ const validBinding: Record<VisualizationKind, VisualBinding> = {
   donut: { x: REGION, y: [REVENUE] },
   kpi: { y: [REVENUE] },
   table: { x: REGION },
+  histogram: { x: REVENUE, binX: { kind: 'equalWidth', binCount: 20 } },
+  boxplot: { x: REGION, y: [REVENUE] },
+  heatmap: { x: REGION, series: DATE, y: [REVENUE] },
 };
 
 describe('per-kind binding rules', () => {

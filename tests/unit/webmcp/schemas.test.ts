@@ -75,6 +75,28 @@ const validInputs: Record<keyof typeof toolSchemas, { minimal: object; canonical
       expectedRevision: 1,
     },
   },
+  create_derived_column: {
+    minimal: {
+      datasetId: 'ds',
+      name: 'Margin',
+      expression: { kind: 'column', columnId: 'col_revenue' },
+    },
+    canonical: {
+      datasetId: 'ds',
+      name: 'Revenue per unit',
+      expression: {
+        kind: 'arithmetic',
+        op: 'div',
+        left: { kind: 'column', columnId: 'col_revenue' },
+        right: { kind: 'column', columnId: 'col_units' },
+      },
+      expectedRevision: 1,
+    },
+  },
+  get_column_statistics: {
+    minimal: { datasetId: 'ds', columnId: 'col' },
+    canonical: { datasetId: 'ds', columnId: 'col_region', topValueLimit: 10 },
+  },
   add_annotation: {
     minimal: { visualizationId: 'viz', text: 'Note', anchor: { kind: 'point', x: 1, y: 2 } },
     canonical: { visualizationId: 'viz', text: 'Peak', anchor: { kind: 'point', x: 1, y: 2 }, expectedRevision: 1 },

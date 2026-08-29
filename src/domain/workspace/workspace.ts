@@ -1,5 +1,6 @@
 import type { Annotation } from '@/domain/annotation/annotation.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
+import type { DerivedColumn } from '@/domain/dataset/derived-column.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
@@ -11,7 +12,7 @@ import { createEntityId, ID_PREFIX, type EntityId } from '@/shared/ids/entity-id
 /** Monotonic counter, incremented exactly once per committed action. */
 export type WorkspaceRevision = number;
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface WorkspaceLayoutItem {
   visualizationId: EntityId;
@@ -43,6 +44,13 @@ export interface Workspace {
   activeDatasetId?: EntityId;
 
   datasets: Record<EntityId, Dataset>;
+  /**
+   * Columns computed from an expression tree rather than imported.
+   *
+   * Workspace-level rather than nested in `Dataset` because one may reference another, and the
+   * reference graph is validated as a whole. Kept acyclic for the same reason relationships are.
+   */
+  derivedColumns: Record<EntityId, DerivedColumn>;
   /** Governed joins between datasets. The relationship graph is kept acyclic; see the validator. */
   relationships: Record<EntityId, Relationship>;
   visualizations: Record<EntityId, Visualization>;
@@ -68,6 +76,7 @@ export const createEmptyWorkspace = (name = 'Untitled workspace'): Workspace => 
     revision: 0,
     name,
     datasets: {},
+    derivedColumns: {},
     relationships: {},
     visualizations: {},
     filters: {},

@@ -4,12 +4,15 @@ import type {
   UpdateVisualizationInput,
 } from '@/application/actions/action-types.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
+import type { MetricModifier } from '@/domain/metric/metric-modifier.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
 import type { FilterOperator } from '@/domain/filter/filter.ts';
 import type { VisualizationKind, VisualBinding } from '@/domain/visualization/visualization.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
+import { createCreateDerivedColumnTool } from '@/webmcp/tools/write/create-derived-column.ts';
 import { createCreateRelationshipTool } from '@/webmcp/tools/write/create-relationship.ts';
 import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 
@@ -33,26 +36,89 @@ const bindingFrom = (input: ReturnType<typeof asInput>, fallback?: VisualBinding
   ...(input.xColumnId === undefined ? {} : { x: input.xColumnId as string }),
   ...(input.yColumnIds === undefined ? {} : { y: input.yColumnIds as string[] }),
   ...(input.groupByColumnId === undefined ? {} : { series: input.groupByColumnId as string }),
+  ...(input.binX === undefined ? {} : { binX: input.binX as BinStrategy }),
+  ...(input.binSeries === undefined ? {} : { binSeries: input.binSeries as BinStrategy }),
 });
 
-const queryFrom = (datasetId: string, input: ReturnType<typeof asInput>, binding: VisualBinding): AnalysisQuery => ({
-  datasetId,
-  dimensions: [...new Set([binding.x, binding.series].filter((id): id is string => id !== undefined))],
-  measures:
-    binding.y === undefined || binding.y.length === 0
-      ? [{ aggregate: 'count' }]
-      : binding.y.map((columnId) => ({
-          columnId,
-          aggregate: (input.aggregate as AggregateFunction | undefined) ?? 'sum',
-        })),
-  filters: [],
-});
+/**
+ * Derives the analysis query from a binding.
+ *
+ * The distribution kinds each need a different query shape, so they branch here rather than falling
+ * through to the grouped-aggregate default: a histogram counts rows per bucket, and a box plot asks
+ * for a five-number summary instead of measures.
+ */
+const queryFrom = (
+  datasetId: string,
+  input: ReturnType<typeof asInput>,
+  binding: VisualBinding,
+  kind: VisualizationKind,
+): AnalysisQuery => {
+  if (kind === 'histogram') {
+    return {
+      datasetId,
+      dimensions: [],
+      ...(binding.x === undefined || binding.binX === undefined
+        ? {}
+        : { binnedDimensions: [{ columnId: binding.x, strategy: binding.binX }] }),
+      measures: [{ aggregate: 'count' }],
+      filters: [],
+    };
+  }
+
+  if (kind === 'boxplot') {
+    const [measureId] = binding.y ?? [];
+
+    return {
+      datasetId,
+      dimensions: [],
+      measures: [],
+      ...(measureId === undefined
+        ? {}
+        : {
+            distribution: {
+              columnId: measureId,
+              ...(binding.x === undefined ? {} : { categoryColumnId: binding.x }),
+            },
+          }),
+      filters: [],
+    };
+  }
+
+  const binned = [
+    ...(binding.x === undefined || binding.binX === undefined ? [] : [{ columnId: binding.x, strategy: binding.binX }]),
+    ...(binding.series === undefined || binding.binSeries === undefined
+      ? []
+      : [{ columnId: binding.series, strategy: binding.binSeries }]),
+  ];
+
+  // A binned channel moves out of `dimensions` into `binnedDimensions`, or the column would be
+  // grouped raw and binned at once.
+  const binnedIds = new Set(binned.map((entry) => entry.columnId));
+
+  return {
+    datasetId,
+    dimensions: [...new Set([binding.x, binding.series].filter((id): id is string => id !== undefined))].filter(
+      (id) => !binnedIds.has(id),
+    ),
+    ...(binned.length === 0 ? {} : { binnedDimensions: binned }),
+    measures:
+      binding.y === undefined || binding.y.length === 0
+        ? [{ aggregate: 'count' }]
+        : binding.y.map((columnId) => ({
+            columnId,
+            aggregate: (input.aggregate as AggregateFunction | undefined) ?? 'sum',
+          })),
+    filters: [],
+  };
+};
 
 export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   createCreateRelationshipTool(deps),
+  createCreateDerivedColumnTool(deps),
   {
     name: 'create_visualization',
-    description: 'Create a semantic chart, KPI, or table in the shared workspace.',
+    description:
+      'Create a semantic chart, KPI, table, histogram, box plot, or heatmap in the shared workspace. Binning and distribution statistics are computed in the engine.',
     schema: toolSchemas.create_visualization,
     annotations: { readOnlyHint: false },
     needsDataset: true,
@@ -60,12 +126,13 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const input = asInput(raw);
       const datasetId = input.datasetId as string;
       const binding = bindingFrom(input);
+      const kind = input.kind as VisualizationKind;
       const payload: CreateVisualizationInput = {
         datasetId,
         title: input.title as string,
-        kind: input.kind as VisualizationKind,
+        kind,
         binding,
-        query: queryFrom(datasetId, input, binding),
+        query: queryFrom(datasetId, input, binding, kind),
       };
       return dispatch(
         deps,
@@ -89,16 +156,30 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
         visualizationId: input.visualizationId as string,
         ...(input.title === undefined ? {} : { title: input.title as string }),
         ...(input.kind === undefined ? {} : { kind: input.kind as VisualizationKind }),
-        ...(input.xColumnId === undefined && input.yColumnIds === undefined && input.groupByColumnId === undefined
+        ...(input.xColumnId === undefined &&
+        input.yColumnIds === undefined &&
+        input.groupByColumnId === undefined &&
+        input.binX === undefined &&
+        input.binSeries === undefined
           ? {}
           : { binding }),
         ...(existing === undefined ||
         (input.aggregate === undefined &&
           input.xColumnId === undefined &&
           input.yColumnIds === undefined &&
-          input.groupByColumnId === undefined)
+          input.groupByColumnId === undefined &&
+          input.binX === undefined &&
+          input.binSeries === undefined &&
+          input.kind === undefined)
           ? {}
-          : { query: queryFrom(existing.datasetId, input, binding) }),
+          : {
+              query: queryFrom(
+                existing.datasetId,
+                input,
+                binding,
+                (input.kind as VisualizationKind | undefined) ?? existing.kind,
+              ),
+            }),
       };
       return dispatch(
         deps,
@@ -191,7 +272,8 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'create_metric',
-    description: 'Create a named aggregate metric from a dataset and optional stored filters.',
+    description:
+      'Create a named aggregate metric, optionally with a percent-of-total, running-total, or time-comparison modifier.',
     schema: toolSchemas.create_metric,
     annotations: { readOnlyHint: false },
     needsDataset: true,
@@ -207,6 +289,7 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
             aggregate: input.aggregate as AggregateFunction,
             ...(input.columnId === undefined ? {} : { columnId: input.columnId as string }),
             ...(input.filterIds === undefined ? {} : { filters: input.filterIds as string[] }),
+            ...(input.modifier === undefined ? {} : { modifier: input.modifier as MetricModifier }),
           },
         },
         input.expectedRevision as number,

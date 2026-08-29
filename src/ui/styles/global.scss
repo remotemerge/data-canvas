@@ -138,6 +138,41 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* The sign carries the same meaning as the colour, so this reinforces rather than encodes. */
+.metric-card__value[data-tone="positive"] {
+  color: var(--dc-color-positive);
+}
+
+.metric-card__value[data-tone="negative"] {
+  color: var(--dc-color-negative);
+}
+
+.metric-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-4);
+  padding-top: var(--dc-space-3);
+  border-top: 1px solid var(--dc-color-border);
+  text-align: left;
+}
+
+.metric-editor h3 {
+  margin: 0;
+  font-size: var(--dc-text-base);
+}
+
+.metric-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.metric-editor small {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
 @media (max-width: 70rem) {
   .visualization-grid {
     display: block;
@@ -713,6 +748,114 @@ select:focus-visible {
 
 .schema__physical {
   margin-left: auto;
+}
+
+.schema__profile-toggle {
+  padding: 0 var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: none;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+/* A profile expands under its column, so it takes the full row rather than joining the flex flow. */
+.column-profile,
+.column-profile__status {
+  flex-basis: 100%;
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.column-profile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--dc-space-1) var(--dc-space-3);
+  padding: var(--dc-space-3);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface);
+}
+
+.column-profile dt {
+  color: var(--dc-color-text-muted);
+}
+
+.column-profile dd {
+  margin: 0;
+  color: var(--dc-color-text);
+  font-family: var(--dc-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.column-profile__values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Frequent values are imported cell content and can be long or unbroken. */
+.column-profile__values li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  overflow-wrap: anywhere;
+}
+
+.column-profile__values small {
+  color: var(--dc-color-text-muted);
+}
+
+.derived-column-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+}
+
+.derived-column-editor h3 {
+  margin: 0;
+  font-size: var(--dc-text-base);
+}
+
+.derived-column-editor p,
+.derived-column-editor small,
+.derived-column-editor__hint {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.derived-column-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.derived-column-editor button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.derived-column-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--dc-text-sm);
+}
+
+.derived-column-editor__list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  overflow-wrap: anywhere;
 }
 
 .preview {

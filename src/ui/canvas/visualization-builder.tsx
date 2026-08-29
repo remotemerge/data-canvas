@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
+import { MAX_BIN_COUNT, MIN_BIN_COUNT } from '@/domain/analysis/bin-strategy.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import {
@@ -49,6 +51,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const [x, setX] = useState('');
   const [y, setY] = useState('');
   const [aggregate, setAggregate] = useState<AggregateFunction>('sum');
+  const [binCount, setBinCount] = useState(20);
   const dataset = datasets[datasetId];
 
   // Columns from datasets joinable to the anchor become selectable, anchor first. The same
@@ -68,25 +71,75 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   );
 
   const numericColumns = scopedColumns.filter((scoped) => scoped.column.logicalType === 'number');
+
+  // A histogram bins its x column, so it offers numeric and temporal columns rather than the
+  // dimensions the grouped kinds accept.
+  const binnable = scopedColumns.filter(
+    (scoped) =>
+      scoped.column.logicalType === 'number' ||
+      scoped.column.logicalType === 'date' ||
+      scoped.column.logicalType === 'timestamp',
+  );
+
+  const histogramColumn = binnable.find((scoped) => scoped.column.id === x)?.column;
+  const temporalBin = histogramColumn !== undefined && histogramColumn.logicalType !== 'number';
+  const binStrategy: BinStrategy = temporalBin ? { kind: 'temporal', unit: 'month' } : { kind: 'equalWidth', binCount };
+
   const validationMeasure = y === '' ? numericColumns[0]?.column.id : y;
   const dimensionColumns = scopedColumns.filter((scoped) => {
     if (dataset === undefined || kind === 'kpi' || validationMeasure === undefined) return false;
     return validateVisualization(dataset, kind, { x: scoped.column.id, y: [validationMeasure] }, related).ok;
   });
+
   const binding: VisualBinding =
-    kind === 'kpi' ? { y: y === '' ? [] : [y] } : { ...(x === '' ? {} : { x }), ...(y === '' ? {} : { y: [y] }) };
+    kind === 'kpi'
+      ? { y: y === '' ? [] : [y] }
+      : kind === 'histogram'
+        ? x === ''
+          ? {}
+          : { x, binX: binStrategy }
+        : {
+            ...(x === '' ? {} : { x }),
+            ...(y === '' ? {} : { y: [y] }),
+          };
+
   const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding, related);
 
   const create = async () => {
     if (dataset === undefined || validation === null || !validation.ok) return;
-    const dimensions = x === '' ? [] : [x];
+    // Each distribution kind needs its own query shape: a histogram counts rows per bucket, a box
+    // plot asks for a five-number summary, and the rest group as before.
+    const query =
+      kind === 'histogram'
+        ? {
+            datasetId,
+            dimensions: [],
+            ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
+            measures: [{ aggregate: 'count' as const }],
+            filters: [],
+          }
+        : kind === 'boxplot'
+          ? {
+              datasetId,
+              dimensions: [],
+              measures: [],
+              ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
+              filters: [],
+            }
+          : {
+              datasetId,
+              dimensions: x === '' ? [] : [x],
+              measures: y === '' ? [] : [{ columnId: y, aggregate }],
+              filters: [],
+            };
+
     const result = await actions.createVisualization({
       datasetId,
       title,
       kind,
       binding,
       linkedSelection: true,
-      query: { datasetId, dimensions, measures: y === '' ? [] : [{ columnId: y, aggregate }], filters: [] },
+      query,
     });
     if (!result.ok) {
       onError(result.error);
@@ -156,7 +209,46 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
         Title
         <input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} />
       </label>
-      {kind === 'kpi' ? null : (
+      {kind === 'histogram' ? (
+        <>
+          <label>
+            Column to bin
+            <select value={x} onChange={(event) => setX(event.target.value)}>
+              <option value="">Choose</option>
+              {groupByDataset(binnable).map((group) => (
+                <optgroup key={group.dataset.id} label={group.dataset.name}>
+                  {group.columns.map((column) => (
+                    <option key={column.id} value={column.id}>
+                      {column.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          {temporalBin ? (
+            <small>Temporal columns bin by month.</small>
+          ) : (
+            <label>
+              Buckets
+              <input
+                type="number"
+                min={MIN_BIN_COUNT}
+                max={MAX_BIN_COUNT}
+                value={binCount}
+                onChange={(event) =>
+                  setBinCount(
+                    Math.min(
+                      Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
+                      MAX_BIN_COUNT,
+                    ),
+                  )
+                }
+              />
+            </label>
+          )}
+        </>
+      ) : kind === 'kpi' ? null : (
         <label>
           Dimension
           <select value={x} onChange={(event) => setX(event.target.value)}>
@@ -175,29 +267,35 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           </select>
         </label>
       )}
-      <label>
-        Measure
-        <select value={y} onChange={(event) => setY(event.target.value)}>
-          <option value="">Choose</option>
-          {groupByDataset(numericColumns).map((group) => (
-            <optgroup key={group.dataset.id} label={group.dataset.name}>
-              {group.columns.map((column) => (
-                <option key={column.id} value={column.id}>
-                  {column.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </label>
-      <label>
-        Aggregate
-        <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
-          {['sum', 'avg', 'min', 'max', 'median'].map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-      </label>
+      {/* A histogram's measure is the bucket count, so offering one would let it contradict the chart. */}
+      {kind === 'histogram' ? null : (
+        <label>
+          Measure
+          <select value={y} onChange={(event) => setY(event.target.value)}>
+            <option value="">Choose</option>
+            {groupByDataset(numericColumns).map((group) => (
+              <optgroup key={group.dataset.id} label={group.dataset.name}>
+                {group.columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+      )}
+      {/* A box plot computes its own quantiles, so an aggregate choice would have nothing to act on. */}
+      {kind === 'histogram' || kind === 'boxplot' ? null : (
+        <label>
+          Aggregate
+          <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
+            {['sum', 'avg', 'min', 'max', 'median', 'stddev'].map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <button
         type="button"
         disabled={title.trim() === '' || validation === null || !validation.ok}

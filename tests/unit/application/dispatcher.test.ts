@@ -72,8 +72,26 @@ describe('dispatcher handler coverage', () => {
         return { type, payload: {} };
       case 'metric.create':
         return { type, payload: { datasetId: DATASET_ID, name: 'Total', aggregate: 'sum', columnId: 'col_revenue' } };
+      case 'metric.update':
+        return { type, payload: { metricId: 'mtr_missing', name: 'Renamed' } };
       case 'metric.remove':
         return { type, payload: { metricId: 'mtr_missing' } };
+      case 'derivedColumn.create':
+        return {
+          type,
+          payload: {
+            datasetId: DATASET_ID,
+            name: 'Margin',
+            expression: {
+              kind: 'arithmetic',
+              op: 'div',
+              left: { kind: 'column', columnId: 'col_revenue' },
+              right: { kind: 'column', columnId: 'col_revenue' },
+            },
+          },
+        };
+      case 'derivedColumn.remove':
+        return { type, payload: { derivedColumnId: 'col_missing' } };
       case 'annotation.add':
         return {
           type,
@@ -110,7 +128,7 @@ describe('dispatcher handler coverage', () => {
 
   test('every action type in the union is listed in APPLICATION_ACTION_TYPES', () => {
     expect(new Set(APPLICATION_ACTION_TYPES).size).toBe(APPLICATION_ACTION_TYPES.length);
-    expect(APPLICATION_ACTION_TYPES).toHaveLength(22);
+    expect(APPLICATION_ACTION_TYPES).toHaveLength(25);
   });
 });
 

@@ -5,12 +5,13 @@ import type { LogicalType } from '@/domain/logical-type.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 
 describe('createEmptyWorkspace', () => {
-  test('starts at revision 0 with the origin schema version', () => {
+  test('starts at revision 0 with the current schema version', () => {
     const workspace = createEmptyWorkspace();
 
     expect(workspace.revision).toBe(0);
-    expect(workspace.schemaVersion).toBe(1);
     expect(workspace.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    // The version only moves when the workspace shape changes, so a bump here should be deliberate.
+    expect(CURRENT_SCHEMA_VERSION).toBe(2);
   });
 
   test('normalized entity maps are empty records, not arrays', () => {
@@ -18,6 +19,7 @@ describe('createEmptyWorkspace', () => {
 
     for (const map of [
       workspace.datasets,
+      workspace.derivedColumns,
       workspace.visualizations,
       workspace.filters,
       workspace.selections,
