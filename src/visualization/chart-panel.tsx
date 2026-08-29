@@ -1,3 +1,4 @@
+import { LuTrash2 } from 'react-icons/lu';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { executeVisualizationQuery, type ChartResult } from '@/application/queries/visualization-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
@@ -23,6 +24,7 @@ import { AnnotationEditor } from '@/ui/canvas/annotation-editor.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
 import { QueryProgress, QuerySkeleton } from '@/ui/components/query-progress.tsx';
 import { SamplingBadge } from '@/ui/components/sampling-badge.tsx';
+import { Button } from '@/ui/components/ui/button.tsx';
 
 const readTheme = (): ChartTheme => {
   const styles = getComputedStyle(document.documentElement);
@@ -30,10 +32,32 @@ const readTheme = (): ChartTheme => {
     text: styles.getPropertyValue('--dc-color-text').trim(),
     muted: styles.getPropertyValue('--dc-color-text-muted').trim(),
     border: styles.getPropertyValue('--dc-color-border').trim(),
-    colors: ['--dc-color-accent', '--dc-color-chart-2', '--dc-color-chart-3', '--dc-color-chart-4'].map((token) =>
-      styles.getPropertyValue(token).trim(),
-    ),
+    grid: styles.getPropertyValue('--chart-grid').trim(),
+    tooltipBackground: styles.getPropertyValue('--chart-tooltip').trim(),
+    tooltipText: styles.getPropertyValue('--background').trim(),
+    colors: [
+      '--dc-color-accent',
+      '--dc-color-chart-2',
+      '--dc-color-chart-3',
+      '--dc-color-chart-4',
+      '--dc-color-chart-5',
+      '--dc-color-chart-6',
+      '--dc-color-chart-7',
+      '--dc-color-chart-8',
+      '--dc-color-chart-9',
+      '--dc-color-chart-10',
+    ].map((token) => styles.getPropertyValue(token).trim()),
   };
+};
+
+const useThemeRevision = (): number => {
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const update = (): void => setRevision((current) => current + 1);
+    window.addEventListener('data-canvas:theme-change', update);
+    return () => window.removeEventListener('data-canvas:theme-change', update);
+  }, []);
+  return revision;
 };
 
 const EChart = ({
@@ -64,6 +88,7 @@ const EChart = ({
     [selectionRecord, visualization.datasetId],
   );
   const workspace = useWorkspace((state) => state.workspace);
+  const themeRevision = useThemeRevision();
   const propagated = propagateSelection(workspace, visualization);
   // Only `highlight` dims here. `filter` already removed the excluded rows from `result`, so dimming
   // as well would fade every remaining mark.
@@ -86,7 +111,7 @@ const EChart = ({
       measureSync('chart-conversion', () =>
         buildEChartsOption(visualization, result, readTheme(), annotations, highlightPredicate),
       ),
-    [annotations, highlightPredicate, result, visualization],
+    [annotations, highlightPredicate, result, visualization, themeRevision],
   );
   const onClick = useCallback(
     (event: unknown) => {
@@ -205,9 +230,14 @@ export const ChartPanel = ({
         </h3>
         <div className="chart-panel__controls">
           <LinkModeControl visualizationId={visualization.id} linkMode={visualization.linkMode} onError={onError} />
-          <button type="button" onClick={() => void remove()}>
-            Remove
-          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove ${visualization.title}`}
+            onClick={() => void remove()}
+          >
+            <LuTrash2 size={15} aria-hidden="true" />
+          </Button>
         </div>
       </header>
       {loading && result !== null ? <QueryProgress /> : null}
