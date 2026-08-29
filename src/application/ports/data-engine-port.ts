@@ -156,6 +156,22 @@ export interface KeyQualityResult {
  */
 export interface DataEnginePort {
   importFile(file: unknown, datasetId: EntityId): Promise<Result<ImportedRelation, DomainError>>;
+  /**
+   * Serializes one dataset's relation to Parquet bytes.
+   *
+   * Parquet rather than CSV because it preserves column types exactly, which is what makes an
+   * exported workspace reproduce identical query results after import. The bytes are produced in
+   * the worker's virtual filesystem and handed back once; the caller is expected to stream them out
+   * rather than accumulate several datasets' worth.
+   */
+  exportDatasetParquet(datasetId: EntityId): Promise<Result<Uint8Array, DomainError>>;
+  /**
+   * Creates a relation from Parquet bytes under a caller-supplied dataset ID.
+   *
+   * The relation name is derived from that ID by `createRelationName`, never taken from the archive,
+   * so an archive author cannot influence an internal identifier.
+   */
+  importDatasetParquet(datasetId: EntityId, bytes: Uint8Array): Promise<Result<ImportedRelation, DomainError>>;
   fetchTableWindow(request: TableWindowRequest): Promise<Result<TableWindow, DomainError>>;
   executeAnalysis(query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>>;
   getDistinctValues(request: DistinctValuesRequest): Promise<Result<DistinctValuesResult, DomainError>>;
@@ -179,6 +195,8 @@ const unavailable = (): Result<never, DomainError> =>
 
 export const unavailableDataEngine: DataEnginePort = {
   importFile: () => Promise.resolve(unavailable()),
+  exportDatasetParquet: () => Promise.resolve(unavailable()),
+  importDatasetParquet: () => Promise.resolve(unavailable()),
   fetchTableWindow: () => Promise.resolve(unavailable()),
   executeAnalysis: () => Promise.resolve(unavailable()),
   getDistinctValues: () => Promise.resolve(unavailable()),

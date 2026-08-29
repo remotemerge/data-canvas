@@ -29,6 +29,8 @@ export const registerDataEngine = (engine: DataEnginePort): void => {
  */
 export const registeredDataEngine: DataEnginePort = {
   importFile: (file, datasetId) => installed.importFile(file, datasetId),
+  exportDatasetParquet: (datasetId) => installed.exportDatasetParquet(datasetId),
+  importDatasetParquet: (datasetId, bytes) => installed.importDatasetParquet(datasetId, bytes),
   fetchTableWindow: (request) => installed.fetchTableWindow(request),
   executeAnalysis: (query) => installed.executeAnalysis(query),
   getDistinctValues: (request) => installed.getDistinctValues(request),
