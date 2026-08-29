@@ -1,3 +1,4 @@
+import { LuDatabase, LuDownload, LuEllipsis, LuPanelRight, LuUpload } from 'react-icons/lu';
 import { useState } from 'react';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
@@ -22,6 +23,57 @@ import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
 import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx';
 import { StoragePanel } from '@/ui/workspace/storage-panel.tsx';
 import { UndoRedoControls } from '@/ui/workspace/undo-redo-controls.tsx';
+import { Button } from '@/ui/components/ui/button.tsx';
+import { Dialog, DialogContent } from '@/ui/components/ui/dialog.tsx';
+import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from '@/ui/components/ui/sheet.tsx';
+import { ThemeToggle } from '@/ui/workspace/theme-toggle.tsx';
+import { useMediaQuery } from '@/shared/use-media-query.ts';
+
+interface PanelProps {
+  activeDataset: ReturnType<typeof selectActiveDataset>;
+  onError(error: DomainError | null): void;
+}
+
+const DatasetExplorer = ({ activeDataset, onError }: PanelProps): React.JSX.Element => (
+  <div className="workspace__panel-content">
+    <div className="workspace__panel-title-row">
+      <h2 className="workspace__panel-heading">Datasets</h2>
+      <LuDatabase size={15} aria-hidden="true" />
+    </div>
+    <DatasetImportButton onError={onError} />
+    <DatasetList onError={onError} />
+    <section>
+      <h2 className="workspace__panel-heading">Columns</h2>
+      <DatasetSchemaPanel dataset={activeDataset} />
+    </section>
+    <RelationshipEditor onError={onError} />
+    <RelationshipGraph onError={onError} />
+  </div>
+);
+
+const Inspector = ({ activeDataset, onError }: PanelProps): React.JSX.Element => (
+  <div className="workspace__panel-content">
+    <h2 className="workspace__panel-heading">Inspector</h2>
+    {activeDataset === undefined ? (
+      <p className="workspace__empty">Select a dataset or visualization to edit its properties.</p>
+    ) : (
+      <>
+        <DerivedColumnEditor dataset={activeDataset} onError={onError} />
+        <FilterPanel dataset={activeDataset} onError={onError} />
+      </>
+    )}
+    <CanvasDensityControl onError={onError} />
+    <ActionHistoryPanel />
+    <StoragePanel />
+    <section className="privacy-notice" aria-labelledby="privacy-notice-title">
+      <h2 id="privacy-notice-title" className="workspace__panel-heading">
+        Privacy
+      </h2>
+      <p>Imported data stays in DuckDB-Wasm in this browser.</p>
+      <p>Data returned through WebMCP may be processed by the AI agent you use.</p>
+    </section>
+  </div>
+);
 
 /**
  * The workspace shell.
@@ -40,6 +92,8 @@ export const WorkspacePage = (): React.JSX.Element => {
   const name = useWorkspace(selectWorkspaceName);
   const revision = useWorkspace(selectRevision);
   const activeDataset = useWorkspace(selectActiveDataset);
+  const narrow = useMediaQuery('(max-width: 1023px)');
+  const compact = useMediaQuery('(max-width: 479px)');
 
   // The most recent dispatch failure. Held locally rather than in the store: a rejected action is
   // this view's transient concern, not shared workspace state.
@@ -49,49 +103,103 @@ export const WorkspacePage = (): React.JSX.Element => {
   return (
     <div className="workspace">
       <header className="workspace__header">
-        <h1 className="workspace__title">{name}</h1>
-        <span className="workspace__revision">revision {revision}</span>
-        <AgentStatusIndicator />
-        <SelectionSummary onError={setActionError} />
-        <UndoRedoControls onError={setActionError} />
-        <div className="workspace__portability">
-          <button type="button" onClick={() => setPortability('export')}>
-            Export
-          </button>
-          <button type="button" onClick={() => setPortability('import')}>
-            Import
-          </button>
+        <div className="workspace__identity">
+          {narrow ? (
+            <Sheet>
+              <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open datasets" />}>
+                <LuDatabase size={16} aria-hidden="true" />
+              </SheetTrigger>
+              <SheetContent side="left">
+                <SheetTitle>Dataset explorer</SheetTitle>
+                <DatasetExplorer activeDataset={activeDataset} onError={setActionError} />
+              </SheetContent>
+            </Sheet>
+          ) : null}
+          <span className="workspace__brand">Data Canvas</span>
+          <h1 className="workspace__title">{name}</h1>
+          <span className="workspace__revision" aria-label={`Workspace revision ${revision}`}>
+            r{revision}
+          </span>
+        </div>
+        <div className="workspace__header-status">
+          <AgentStatusIndicator />
+          <SelectionSummary onError={setActionError} />
+        </div>
+        <div className="workspace__actions">
+          {compact ? null : <UndoRedoControls onError={setActionError} />}
+          {compact ? null : (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Export workspace"
+                onClick={() => setPortability('export')}
+              >
+                <LuDownload size={16} aria-hidden="true" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Import workspace"
+                onClick={() => setPortability('import')}
+              >
+                <LuUpload size={16} aria-hidden="true" />
+              </Button>
+            </>
+          )}
+          <ThemeToggle />
+          {compact ? (
+            <Sheet>
+              <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open workspace options" />}>
+                <LuEllipsis size={16} aria-hidden="true" />
+              </SheetTrigger>
+              <SheetContent side="right">
+                <SheetTitle>Workspace options</SheetTitle>
+                <div className="workspace__mobile-actions">
+                  <UndoRedoControls onError={setActionError} />
+                  <SheetClose render={<Button variant="outline" onClick={() => setPortability('export')} />}>
+                    <LuDownload size={15} aria-hidden="true" /> Export workspace
+                  </SheetClose>
+                  <SheetClose render={<Button variant="outline" onClick={() => setPortability('import')} />}>
+                    <LuUpload size={15} aria-hidden="true" /> Import workspace
+                  </SheetClose>
+                </div>
+              </SheetContent>
+            </Sheet>
+          ) : null}
+          {narrow ? (
+            <Sheet>
+              <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open inspector" />}>
+                <LuPanelRight size={16} aria-hidden="true" />
+              </SheetTrigger>
+              <SheetContent side="right">
+                <SheetTitle>Inspector</SheetTitle>
+                <Inspector activeDataset={activeDataset} onError={setActionError} />
+              </SheetContent>
+            </Sheet>
+          ) : null}
         </div>
       </header>
 
       <UpdatePrompt />
 
-      {portability === 'export' ? <ExportDialog onClose={() => setPortability(null)} onError={setActionError} /> : null}
-      {portability === 'import' ? <ImportDialog onClose={() => setPortability(null)} onError={setActionError} /> : null}
+      <Dialog open={portability === 'export'} onOpenChange={(open) => !open && setPortability(null)}>
+        <DialogContent aria-labelledby="export-dialog-title">
+          <ExportDialog onClose={() => setPortability(null)} onError={setActionError} />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={portability === 'import'} onOpenChange={(open) => !open && setPortability(null)}>
+        <DialogContent aria-labelledby="import-dialog-title">
+          <ImportDialog onClose={() => setPortability(null)} onError={setActionError} />
+        </DialogContent>
+      </Dialog>
 
       <div className="workspace__body">
-        <aside className="workspace__panel">
-          <h2 className="workspace__panel-heading">Datasets</h2>
-
-          <DatasetImportButton onError={setActionError} />
-
-          <DatasetList onError={setActionError} />
-
-          <section>
-            <h2 className="workspace__panel-heading">Schema</h2>
-            <DatasetSchemaPanel dataset={activeDataset} />
-          </section>
-
-          {activeDataset === undefined ? null : (
-            <DerivedColumnEditor dataset={activeDataset} onError={setActionError} />
-          )}
-
-          <RelationshipEditor onError={setActionError} />
-          <RelationshipGraph onError={setActionError} />
-
-          <CanvasDensityControl onError={setActionError} />
-          {activeDataset === undefined ? null : <FilterPanel dataset={activeDataset} onError={setActionError} />}
-        </aside>
+        {narrow ? null : (
+          <aside className="workspace__panel">
+            <DatasetExplorer activeDataset={activeDataset} onError={setActionError} />
+          </aside>
+        )}
 
         <main className="workspace__canvas">
           <EngineStatusBanner />
@@ -99,8 +207,10 @@ export const WorkspacePage = (): React.JSX.Element => {
 
           {activeDataset === undefined ? (
             <div className="workspace__empty">
-              <p className="workspace__empty-title">Nothing on the canvas yet</p>
-              <p>Import a CSV or JSON file to explore its schema and rows.</p>
+              <LuDatabase className="workspace__empty-icon" size={28} aria-hidden="true" />
+              <p className="workspace__empty-title">Import a dataset</p>
+              <p>CSV, TSV, JSON, and NDJSON are supported.</p>
+              <DatasetImportButton onError={setActionError} />
             </div>
           ) : (
             <>
@@ -110,17 +220,11 @@ export const WorkspacePage = (): React.JSX.Element => {
           )}
         </main>
 
-        <aside className="workspace__panel workspace__panel--right">
-          <ActionHistoryPanel />
-          <StoragePanel />
-          <section className="privacy-notice" aria-labelledby="privacy-notice-title">
-            <h2 id="privacy-notice-title" className="workspace__panel-heading">
-              Privacy
-            </h2>
-            <p>Your imported data stays in DuckDB-Wasm in this browser.</p>
-            <p>Data returned through WebMCP is sent to the AI agent you use and may be processed in the cloud.</p>
-          </section>
-        </aside>
+        {narrow ? null : (
+          <aside className="workspace__panel workspace__panel--right">
+            <Inspector activeDataset={activeDataset} onError={setActionError} />
+          </aside>
+        )}
       </div>
     </div>
   );

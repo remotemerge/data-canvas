@@ -56,7 +56,7 @@ export const ExportDialog = ({
   };
 
   return (
-    <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
+    <div className="dialog">
       <h2 id="export-dialog-title">Export workspace</h2>
 
       <fieldset className="dialog__field">

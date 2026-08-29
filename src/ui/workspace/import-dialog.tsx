@@ -70,7 +70,7 @@ export const ImportDialog = ({
 
   if (missing !== null) {
     return (
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="import-dialog-title">
+      <div className="dialog">
         <h2 id="import-dialog-title">Workspace imported</h2>
         <p>The structure was restored, but this archive carried no data for:</p>
         <ul className="dialog__list">
@@ -89,7 +89,7 @@ export const ImportDialog = ({
   }
 
   return (
-    <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="import-dialog-title">
+    <div className="dialog">
       <h2 id="import-dialog-title">Import workspace</h2>
       <p>This replaces everything currently open. Export the current workspace first if you want to keep it.</p>
 
