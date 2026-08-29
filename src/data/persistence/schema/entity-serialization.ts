@@ -15,6 +15,7 @@ export const isWorkspacePayload = (value: unknown): value is Workspace => {
     Number.isSafeInteger(value['revision']) &&
     typeof value['name'] === 'string' &&
     isRecord(value['datasets']) &&
+    isRecord(value['relationships']) &&
     isRecord(value['visualizations']) &&
     isRecord(value['filters']) &&
     isRecord(value['tableSorts']) &&

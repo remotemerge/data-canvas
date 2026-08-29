@@ -2,6 +2,7 @@ import type { Annotation } from '@/domain/annotation/annotation.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
+import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { Selection } from '@/domain/selection/selection.ts';
 import type { SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
@@ -42,6 +43,8 @@ export interface Workspace {
   activeDatasetId?: EntityId;
 
   datasets: Record<EntityId, Dataset>;
+  /** Governed joins between datasets. The relationship graph is kept acyclic; see the validator. */
+  relationships: Record<EntityId, Relationship>;
   visualizations: Record<EntityId, Visualization>;
   filters: Record<EntityId, Filter>;
   tableSorts: Record<EntityId, SortSpec[]>;
@@ -65,6 +68,7 @@ export const createEmptyWorkspace = (name = 'Untitled workspace'): Workspace => 
     revision: 0,
     name,
     datasets: {},
+    relationships: {},
     visualizations: {},
     filters: {},
     tableSorts: {},
