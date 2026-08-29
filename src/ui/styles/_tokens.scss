@@ -16,6 +16,17 @@
   --dc-color-chart-3: #e6ad55;
   --dc-color-chart-4: #c682e8;
 
+  /*
+   * Delta tones. Which direction is good is a per-metric decision the app cannot infer, so these
+   * name the judgement rather than the direction: a metric where a rise is bad renders an increase
+   * in the negative tone.
+   *
+   * Colour is never the only signal. A delta also carries an explicit sign, so the meaning survives
+   * for anyone who cannot distinguish these two hues.
+   */
+  --dc-color-positive: #45c2a0;
+  --dc-color-negative: #e8746c;
+
   --dc-space-1: 0.25rem;
   --dc-space-2: 0.5rem;
   --dc-space-3: 0.75rem;

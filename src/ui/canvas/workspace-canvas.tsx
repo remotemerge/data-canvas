@@ -34,7 +34,7 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
       {metrics.length === 0 ? null : (
         <div className="metric-grid">
           {metrics.map((metric) => (
-            <MetricCard key={metric.id} metric={metric} />
+            <MetricCard key={metric.id} metric={metric} onError={onError} />
           ))}
         </div>
       )}

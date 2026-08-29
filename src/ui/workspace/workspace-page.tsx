@@ -9,6 +9,7 @@ import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
 import { FilterPanel } from '@/ui/dataset/filter-panel.tsx';
 import { DatasetList } from '@/ui/dataset/dataset-list.tsx';
 import { DatasetSchemaPanel } from '@/ui/dataset/dataset-schema-panel.tsx';
+import { DerivedColumnEditor } from '@/ui/dataset/derived-column-editor.tsx';
 import { RelationshipEditor } from '@/ui/dataset/relationship-editor.tsx';
 import { RelationshipGraph } from '@/ui/dataset/relationship-graph.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
@@ -61,6 +62,10 @@ export const WorkspacePage = (): React.JSX.Element => {
             <h2 className="workspace__panel-heading">Schema</h2>
             <DatasetSchemaPanel dataset={activeDataset} />
           </section>
+
+          {activeDataset === undefined ? null : (
+            <DerivedColumnEditor dataset={activeDataset} onError={setActionError} />
+          )}
 
           <RelationshipEditor onError={setActionError} />
           <RelationshipGraph onError={setActionError} />

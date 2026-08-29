@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
+import { ColumnProfile } from '@/ui/dataset/column-profile.tsx';
 
 interface DatasetSchemaPanelProps {
   dataset: Dataset | undefined;
@@ -15,6 +17,10 @@ interface DatasetSchemaPanelProps {
  * is how the identifier-safety guarantee becomes visible rather than merely documented.
  */
 export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.JSX.Element => {
+  // One profile at a time. Each is a query, so expanding every column at once would fire a burst of
+  // them for a result the user is not looking at.
+  const [profiledColumnId, setProfiledColumnId] = useState<string | null>(null);
+
   if (dataset === undefined) {
     return <p className="workspace__empty">Import a file to see its schema.</p>;
   }
@@ -45,6 +51,15 @@ export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.
             </span>
             {column.nullable ? <span className="schema__nullable">nullable</span> : null}
             <span className="schema__physical">{column.physicalName}</span>
+            <button
+              type="button"
+              className="schema__profile-toggle"
+              aria-expanded={profiledColumnId === column.id}
+              onClick={() => setProfiledColumnId(profiledColumnId === column.id ? null : column.id)}
+            >
+              {profiledColumnId === column.id ? 'Hide stats' : 'Stats'}
+            </button>
+            {profiledColumnId === column.id ? <ColumnProfile dataset={dataset} column={column} /> : null}
           </li>
         ))}
       </ul>
