@@ -21,8 +21,9 @@ import { databasePath, type DatabaseStorage } from '@/data/persistence/opfs-data
  * emit these as hashed same-origin assets instead.
  *
  * Only `mvp` and `eh` are offered. The threaded `coi` bundle needs COOP/COEP response headers on
- * every deployment and gives no measured benefit yet, so threading stays a separate, benchmark-led
- * decision rather than a hosting constraint adopted by default.
+ * every deployment, which break cross-origin assets and embeds and have not been verified against
+ * WebMCP tool registration. The benchmark evidence that would justify that cost does not exist, so
+ * threading stays unshipped — see `docs/decisions/0015-threaded-duckdb.md` for what would reopen it.
  */
 const BUNDLES: duckdb.DuckDBBundles = {
   mvp: { mainModule: mvpWasm, mainWorker: mvpWorker },
