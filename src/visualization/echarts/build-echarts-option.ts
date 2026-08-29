@@ -18,6 +18,9 @@ export interface ChartTheme {
   text: string;
   muted: string;
   border: string;
+  grid: string;
+  tooltipBackground: string;
+  tooltipText: string;
   colors: string[];
 }
 
@@ -74,9 +77,21 @@ export const buildEChartsOption = (
   const measureNames = dimensions.slice(visualization.query.dimensions.length);
   const common = {
     color: theme.colors,
+    backgroundColor: 'transparent',
     textStyle: { color: theme.text },
     dataset: { dimensions, source: result.rows },
-    tooltip: { trigger: 'item', formatter: (params: unknown) => escapeText(JSON.stringify(params)) },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: theme.tooltipBackground,
+      borderWidth: 0,
+      textStyle: { color: theme.tooltipText },
+      formatter: (params: unknown) => escapeText(JSON.stringify(params)),
+    },
+  };
+  const axisStyle = {
+    axisLabel: { color: theme.muted },
+    axisLine: { lineStyle: { color: theme.border } },
+    splitLine: { lineStyle: { color: theme.grid } },
   };
   if (visualization.kind === 'donut') {
     const marks = buildAnnotationMarks(annotations, visualization, result);
@@ -99,8 +114,8 @@ export const buildEChartsOption = (
       dataset: undefined,
       legend: { show: visualization.presentation.showLegend },
       grid: { show: visualization.presentation.showGrid, containLabel: true },
-      xAxis: { type: 'category', data: categories, axisLabel: { color: theme.muted } },
-      yAxis: { type: 'value', axisLabel: { color: theme.muted } },
+      xAxis: { type: 'category', data: categories, ...axisStyle },
+      yAxis: { type: 'value', ...axisStyle },
       series,
     };
   }
@@ -112,8 +127,8 @@ export const buildEChartsOption = (
       ...common,
       dataset: undefined,
       grid: { show: visualization.presentation.showGrid, containLabel: true },
-      xAxis: { type: 'category', data: xCategories, axisLabel: { color: theme.muted } },
-      yAxis: { type: 'category', data: yCategories, axisLabel: { color: theme.muted } },
+      xAxis: { type: 'category', data: xCategories, ...axisStyle },
+      yAxis: { type: 'category', data: yCategories, ...axisStyle },
       visualMap: { min, max, calculable: true, orient: 'horizontal', left: 'center', textStyle: { color: theme.text } },
       series,
     };
@@ -140,14 +155,14 @@ export const buildEChartsOption = (
     // the bins evenly and hide gaps where no rows fell.
     xAxis: {
       type: visualization.kind === 'scatter' || visualization.kind === 'histogram' ? 'value' : 'category',
-      axisLabel: { color: theme.muted },
+      ...axisStyle,
       // Widening a time bucket changes the question the chart answers, so the axis has to name the
       // granularity that actually produced these marks rather than the one that was requested.
       ...(axisName === undefined
         ? {}
         : { name: axisName, nameLocation: 'middle', nameGap: 28, nameTextStyle: { color: theme.muted } }),
     },
-    yAxis: { type: 'value', axisLabel: { color: theme.muted } },
+    yAxis: { type: 'value', ...axisStyle },
     ...(visualization.kind === 'scatter' ? { brush: { toolbox: ['rect', 'clear'], xAxisIndex: 'all' } } : {}),
     series,
   };

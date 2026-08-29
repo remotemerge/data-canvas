@@ -2,7 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { buildEChartsOption } from '@/visualization/echarts/build-echarts-option.ts';
 import { visualization } from '@/../tests/unit/application/action-fixtures.ts';
 
-const theme = { text: '#fff', muted: '#999', border: '#333', colors: ['#08f'] };
+const theme = {
+  text: '#fff',
+  muted: '#999',
+  border: '#333',
+  grid: '#222',
+  tooltipBackground: '#111',
+  tooltipText: '#fff',
+  colors: ['#08f'],
+};
 
 describe('ECharts option builder', () => {
   test('uses one dataset source with encoded series', () => {
@@ -20,6 +28,7 @@ describe('ECharts option builder', () => {
       theme,
     );
     expect(option['dataset']).toEqual({ dimensions: ['region', 'revenue'], source: [['West', 10]] });
+    expect(option['backgroundColor']).toBe('transparent');
   });
 
   test('escapes dataset-derived tooltip text', () => {
