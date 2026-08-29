@@ -1,0 +1,68 @@
+name: Feature request
+description: Propose a scoped product capability.
+title: '[Feature]: '
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+    validations:
+      required: true
+  - type: textarea
+    id: human
+    attributes:
+      label: Human interaction
+      description: Describe how a person uses this through the UI.
+    validations:
+      required: true
+  - type: textarea
+    id: agent
+    attributes:
+      label: Equivalent agent interaction
+      description: Describe the semantic application capability an agent uses.
+    validations:
+      required: true
+  - type: textarea
+    id: domain
+    attributes:
+      label: Domain changes
+    validations:
+      required: true
+  - type: textarea
+    id: actions
+    attributes:
+      label: Action API changes
+    validations:
+      required: true
+  - type: textarea
+    id: webmcp
+    attributes:
+      label: WebMCP changes
+    validations:
+      required: true
+  - type: textarea
+    id: persistence
+    attributes:
+      label: Persistence impact
+    validations:
+      required: true
+  - type: textarea
+    id: performance
+    attributes:
+      label: Performance impact
+      description: Cover query volume, row materialization, and rendering.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Out of scope
+    validations:
+      required: true
