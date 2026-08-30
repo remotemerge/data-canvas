@@ -8,7 +8,6 @@ import type {
   ClearSelectionInput,
   CreateDerivedColumnInput,
   ExtendSelectionInput,
-  ImportWorkspaceInput,
   CreateMetricInput,
   CreateRelationshipInput,
   CreateVisualizationInput,
@@ -56,7 +55,6 @@ export interface WorkspaceCommands {
   setSelection: Command<SetSelectionInput>;
   extendSelection: Command<ExtendSelectionInput>;
   clearSelection: Command<ClearSelectionInput>;
-  importWorkspace: Command<ImportWorkspaceInput>;
   createMetric: Command<CreateMetricInput>;
   updateMetric: Command<UpdateMetricInput>;
   removeMetric: Command<RemoveMetricInput>;
@@ -102,7 +100,6 @@ const humanCommands: WorkspaceCommands = {
   setSelection: (input) => dispatcher.execute({ type: 'selection.set', payload: input }, { actor: 'human' }),
   extendSelection: (input) => dispatcher.execute({ type: 'selection.extend', payload: input }, { actor: 'human' }),
   clearSelection: (input) => dispatcher.execute({ type: 'selection.clear', payload: input }, { actor: 'human' }),
-  importWorkspace: (input) => dispatcher.execute({ type: 'workspace.import', payload: input }, { actor: 'human' }),
   createMetric: (input) => dispatcher.execute({ type: 'metric.create', payload: input }, { actor: 'human' }),
   updateMetric: (input) => dispatcher.execute({ type: 'metric.update', payload: input }, { actor: 'human' }),
   removeMetric: (input) => dispatcher.execute({ type: 'metric.remove', payload: input }, { actor: 'human' }),

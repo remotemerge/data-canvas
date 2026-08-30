@@ -229,19 +229,6 @@ export interface UpdateLayoutInput {
   items?: WorkspaceLayoutItem[];
 }
 
-/**
- * Replaces the workspace with one restored from an archive.
- *
- * The workspace is supplied whole rather than assembled here: `importArchive` has already validated
- * it, regenerated every ID, and created the DuckDB relations. This action is the commit step, so the
- * replacement is revisioned and attributable like any other change.
- */
-export interface ImportWorkspaceInput {
-  workspace: Workspace;
-  /** Datasets whose rows were absent from the archive, surfaced to the user after the commit. */
-  missingDatasetNames: string[];
-}
-
 /** Trusted metadata delta created by the dispatcher for undo and redo. */
 export interface RestoreWorkspaceInput {
   state: Partial<
@@ -296,7 +283,6 @@ export type ApplicationAction =
   | { type: 'selection.extend'; payload: ExtendSelectionInput }
   | { type: 'selection.clear'; payload: ClearSelectionInput }
   | { type: 'visualization.setLinkMode'; payload: SetVisualizationLinkModeInput }
-  | { type: 'workspace.import'; payload: ImportWorkspaceInput }
   | { type: 'metric.create'; payload: CreateMetricInput }
   | { type: 'metric.update'; payload: UpdateMetricInput }
   | { type: 'metric.remove'; payload: RemoveMetricInput }
@@ -329,7 +315,6 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'selection.extend',
   'selection.clear',
   'visualization.setLinkMode',
-  'workspace.import',
   'metric.create',
   'metric.update',
   'metric.remove',

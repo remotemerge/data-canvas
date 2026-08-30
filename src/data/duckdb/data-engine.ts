@@ -27,7 +27,6 @@ import {
   createRelationName,
   quoteIdentifier,
   stagingRelationName,
-  virtualExportPath,
   virtualImportPath,
 } from '@/data/duckdb/identifier-safety.ts';
 import { CATEGORY_DISTINCT_THRESHOLD, normalizeLogicalType, refineTextType } from '@/data/duckdb/type-normalization.ts';
@@ -488,102 +487,6 @@ export const createDataEngine = (): DataEngine => {
       await dropRelation(connection, relationName);
 
       return err(engineFailure('IMPORT_FAILED'));
-    }
-  };
-
-  /**
-   * Writes a dataset's relation to Parquet and returns the bytes.
-   *
-   * `COPY … TO` needs a path, so the output goes to the worker's virtual filesystem under a name
-   * derived from the generated relation name — the same rule ingestion follows, and for the same
-   * reason: the path is a SQL string literal, which quoting an identifier would not protect.
-   */
-  const exportDatasetParquet = async (datasetId: EntityId): Promise<Result<Uint8Array, DomainError>> => {
-    const connectionResult = requireConnection();
-
-    if (!connectionResult.ok) return connectionResult;
-
-    const relation = relations.get(datasetId);
-
-    if (relation === undefined) {
-      return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
-    }
-
-    const virtualPath = virtualExportPath(relation.relationName);
-
-    try {
-      await connectionResult.value.query(
-        `COPY (SELECT * FROM ${quoteIdentifier(relation.relationName)}) TO '${virtualPath}' (FORMAT PARQUET)`,
-      );
-
-      const bytes = await handle?.database.copyFileToBuffer(virtualPath);
-
-      if (bytes === undefined) return err(engineFailure('QUERY_FAILED'));
-
-      return ok(bytes);
-    } catch {
-      return err(engineFailure('QUERY_FAILED'));
-    } finally {
-      await handle?.database.dropFile(virtualPath).catch(() => undefined);
-    }
-  };
-
-  /**
-   * Creates a relation from Parquet bytes produced by a previous export.
-   *
-   * Unlike CSV import there is no staging or positional rename step: the Parquet file already
-   * carries the physical column names this application generated when the dataset was first
-   * imported, so reading it back reproduces the same schema. The columns are still described from
-   * the created relation rather than trusted from the archive's metadata.
-   */
-  const importDatasetParquet = async (
-    datasetId: EntityId,
-    bytes: Uint8Array,
-  ): Promise<Result<ImportedRelation, DomainError>> => {
-    const connectionResult = requireConnection();
-
-    if (!connectionResult.ok) return connectionResult;
-
-    const connection = connectionResult.value;
-    const relationName = createRelationName(datasetId);
-    const virtualPath = virtualExportPath(relationName);
-
-    try {
-      await handle?.database.registerFileBuffer(virtualPath, bytes);
-      await connection.query(
-        `CREATE OR REPLACE TABLE ${quoteIdentifier(relationName)} AS SELECT * FROM read_parquet('${virtualPath}')`,
-      );
-
-      const described = await describeRelation(connection, relationName);
-      const columnCount = validateColumnCount(described.length);
-
-      if (!columnCount.ok) {
-        await dropRelation(connection, relationName);
-
-        return columnCount;
-      }
-
-      const columns = await buildColumns(
-        connection,
-        relationName,
-        described,
-        described.map((entry) => String(entry.column_name ?? '')),
-      );
-      const counted = await connection.query(`SELECT count(*) FROM ${quoteIdentifier(relationName)}`);
-      const rowCount = readScalarCount(counted as unknown as ArrowRowSource);
-
-      const revision = (relations.get(datasetId)?.revision ?? 0) + 1;
-      relations.set(datasetId, { relationName, columns, revision, rowCount });
-      countCache.clear();
-      statisticsCache.setDatasetStatistics(datasetId, revision, { rowCount });
-
-      return ok({ relationId: relationName, rowCount, columns });
-    } catch {
-      await dropRelation(connection, relationName);
-
-      return err(engineFailure('IMPORT_FAILED'));
-    } finally {
-      await handle?.database.dropFile(virtualPath).catch(() => undefined);
     }
   };
 
@@ -1076,8 +979,6 @@ export const createDataEngine = (): DataEngine => {
   return {
     initialize,
     importFile,
-    exportDatasetParquet,
-    importDatasetParquet,
     fetchTableWindow,
     executeAnalysis,
     getDistinctValues,
@@ -1086,7 +987,21 @@ export const createDataEngine = (): DataEngine => {
     measureKeyQuality,
     dropDataset,
     dispose,
-    persistenceDatabase: () => handle?.connection ?? null,
+    // The connection runs the SQL, but only the database can flush buffered pages to OPFS, so the
+    // two are combined here rather than leaking the DuckDB handle itself past this module.
+    persistenceDatabase: () => {
+      const opened = handle;
+
+      if (opened === null) return null;
+
+      return {
+        query: (sql) => opened.connection.query(sql),
+        prepare: (sql) => opened.connection.prepare(sql),
+        flushFiles: async () => {
+          await opened.database.flushFiles();
+        },
+      };
+    },
     restoreDatasets: (datasets) => {
       relations.clear();
       statisticsCache.clear();

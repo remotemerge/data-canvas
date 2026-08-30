@@ -38,7 +38,6 @@ import {
   handleExtendSelection,
   handleSetSelection,
 } from '@/application/actions/handlers/selection-handlers.ts';
-import { handleImportWorkspace } from '@/application/actions/handlers/portability-handlers.ts';
 import {
   handleCreateVisualization,
   handleRemoveVisualization,
@@ -116,8 +115,6 @@ const runHandler = (
       return handleClearSelection(workspace, action.payload, deps);
     case 'visualization.setLinkMode':
       return handleSetVisualizationLinkMode(workspace, action.payload, deps);
-    case 'workspace.import':
-      return handleImportWorkspace(workspace, action.payload, deps);
     case 'metric.create':
       return handleCreateMetric(workspace, action.payload, deps);
     case 'metric.update':

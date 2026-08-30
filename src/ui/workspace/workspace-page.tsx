@@ -1,12 +1,17 @@
-import { LuDatabase, LuDownload, LuEllipsis, LuPanelRight, LuUpload } from 'react-icons/lu';
+import { LuDatabase, LuEllipsis, LuPanelRight } from 'react-icons/lu';
 import { useState } from 'react';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
-import { selectActiveDataset, selectRevision, selectWorkspaceName } from '@/state/selectors/workspace-selectors.ts';
+import {
+  selectActiveDataset,
+  selectHasVisualizations,
+  selectRevision,
+  selectWorkspaceName,
+} from '@/state/selectors/workspace-selectors.ts';
 import { ActionErrorBanner } from '@/ui/components/action-error-banner.tsx';
 import { EngineStatusBanner } from '@/ui/components/engine-status-banner.tsx';
 import { DatasetImportButton } from '@/ui/dataset/dataset-import-button.tsx';
-import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
+import { DataPanel } from '@/ui/workspace/data-panel.tsx';
 import { FilterPanel } from '@/ui/dataset/filter-panel.tsx';
 import { DatasetList } from '@/ui/dataset/dataset-list.tsx';
 import { DatasetSchemaPanel } from '@/ui/dataset/dataset-schema-panel.tsx';
@@ -14,8 +19,6 @@ import { DerivedColumnEditor } from '@/ui/dataset/derived-column-editor.tsx';
 import { RelationshipEditor } from '@/ui/dataset/relationship-editor.tsx';
 import { RelationshipGraph } from '@/ui/dataset/relationship-graph.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
-import { ExportDialog } from '@/ui/workspace/export-dialog.tsx';
-import { ImportDialog } from '@/ui/workspace/import-dialog.tsx';
 import { SelectionSummary } from '@/ui/workspace/selection-summary.tsx';
 import { UpdatePrompt } from '@/ui/components/update-prompt.tsx';
 import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
@@ -24,8 +27,7 @@ import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx'
 import { StoragePanel } from '@/ui/workspace/storage-panel.tsx';
 import { UndoRedoControls } from '@/ui/workspace/undo-redo-controls.tsx';
 import { Button } from '@/ui/components/ui/button.tsx';
-import { Dialog, DialogContent } from '@/ui/components/ui/dialog.tsx';
-import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from '@/ui/components/ui/sheet.tsx';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/ui/components/ui/sheet.tsx';
 import { ThemeToggle } from '@/ui/workspace/theme-toggle.tsx';
 import { useMediaQuery } from '@/shared/use-media-query.ts';
 
@@ -92,13 +94,13 @@ export const WorkspacePage = (): React.JSX.Element => {
   const name = useWorkspace(selectWorkspaceName);
   const revision = useWorkspace(selectRevision);
   const activeDataset = useWorkspace(selectActiveDataset);
+  const hasVisualizations = useWorkspace(selectHasVisualizations);
   const narrow = useMediaQuery('(max-width: 1023px)');
   const compact = useMediaQuery('(max-width: 479px)');
 
   // The most recent dispatch failure. Held locally rather than in the store: a rejected action is
   // this view's transient concern, not shared workspace state.
   const [actionError, setActionError] = useState<DomainError | null>(null);
-  const [portability, setPortability] = useState<'export' | 'import' | null>(null);
 
   return (
     <div className="workspace">
@@ -127,26 +129,6 @@ export const WorkspacePage = (): React.JSX.Element => {
         </div>
         <div className="workspace__actions">
           {compact ? null : <UndoRedoControls onError={setActionError} />}
-          {compact ? null : (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Export workspace"
-                onClick={() => setPortability('export')}
-              >
-                <LuDownload size={16} aria-hidden="true" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Import workspace"
-                onClick={() => setPortability('import')}
-              >
-                <LuUpload size={16} aria-hidden="true" />
-              </Button>
-            </>
-          )}
           <ThemeToggle />
           {compact ? (
             <Sheet>
@@ -157,12 +139,6 @@ export const WorkspacePage = (): React.JSX.Element => {
                 <SheetTitle>Workspace options</SheetTitle>
                 <div className="workspace__mobile-actions">
                   <UndoRedoControls onError={setActionError} />
-                  <SheetClose render={<Button variant="outline" onClick={() => setPortability('export')} />}>
-                    <LuDownload size={15} aria-hidden="true" /> Export workspace
-                  </SheetClose>
-                  <SheetClose render={<Button variant="outline" onClick={() => setPortability('import')} />}>
-                    <LuUpload size={15} aria-hidden="true" /> Import workspace
-                  </SheetClose>
                 </div>
               </SheetContent>
             </Sheet>
@@ -182,17 +158,6 @@ export const WorkspacePage = (): React.JSX.Element => {
       </header>
 
       <UpdatePrompt />
-
-      <Dialog open={portability === 'export'} onOpenChange={(open) => !open && setPortability(null)}>
-        <DialogContent aria-labelledby="export-dialog-title">
-          <ExportDialog onClose={() => setPortability(null)} onError={setActionError} />
-        </DialogContent>
-      </Dialog>
-      <Dialog open={portability === 'import'} onOpenChange={(open) => !open && setPortability(null)}>
-        <DialogContent aria-labelledby="import-dialog-title">
-          <ImportDialog onClose={() => setPortability(null)} onError={setActionError} />
-        </DialogContent>
-      </Dialog>
 
       <div className="workspace__body">
         {narrow ? null : (
@@ -214,8 +179,13 @@ export const WorkspacePage = (): React.JSX.Element => {
             </div>
           ) : (
             <>
-              <WorkspaceCanvas onError={setActionError} />
-              <WorkspaceTable dataset={activeDataset} />
+              {/* An empty canvas is a builder and a one-line placeholder, so it takes only the
+                  height it needs and the data panel grows into the rest. Reserving chart space for
+                  charts that do not exist would push the table into a strip for nothing. */}
+              <div className="workspace__views" data-empty={!hasVisualizations}>
+                <WorkspaceCanvas onError={setActionError} />
+              </div>
+              <DataPanel dataset={activeDataset} fills={!hasVisualizations} />
             </>
           )}
         </main>
