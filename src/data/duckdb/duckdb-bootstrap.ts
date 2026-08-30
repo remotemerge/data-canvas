@@ -86,6 +86,15 @@ export const openDuckDB = async (storage: DatabaseStorage = 'opfs'): Promise<Duc
   await database.open({
     path: databasePath(storage),
     accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
+    /**
+     * Required for an `opfs://` path to reach disk at all.
+     *
+     * DuckDB-Wasm gates OPFS file handling on this flag: `shouldOPFSFileHandling()` returns true
+     * only when the path is `opfs://` *and* this is `"auto"`. Without it the database opens and
+     * queries succeed against an in-memory image, and even `FORCE CHECKPOINT` leaves the OPFS file
+     * at zero bytes — so every workspace was silently lost on reload.
+     */
+    ...(storage === 'opfs' ? { opfs: { fileHandling: 'auto' as const } } : {}),
     query: {
       /**
        * Integers stay `BIGINT` rather than being cast to double on the way out. The conversion

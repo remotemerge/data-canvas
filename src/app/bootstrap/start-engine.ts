@@ -59,7 +59,12 @@ export const startEngine = async (): Promise<void> => {
     dataEngine.setRelationships(workspaceStore.getState().workspace.relationships);
     dataEngine.setDerivedColumns(workspaceStore.getState().workspace.derivedColumns);
     const scheduler = createCheckpointScheduler(
-      (state) => writeCheckpoint(database, state),
+      async (state) => {
+        await writeCheckpoint(database, state);
+        // Announced only after the checkpoint has flushed to OPFS. A storage estimate taken before
+        // this point still reports the pre-write size, so anything showing usage must wait for it.
+        window.dispatchEvent(new CustomEvent('data-canvas:persistence-saved'));
+      },
       500,
       () => window.dispatchEvent(new CustomEvent('data-canvas:persistence-error')),
     );

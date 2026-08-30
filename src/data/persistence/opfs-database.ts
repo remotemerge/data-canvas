@@ -1,4 +1,5 @@
-export const OPFS_DATABASE_PATH = 'opfs://data-canvas.db';
+export const OPFS_DATABASE_FILE = 'data-canvas.db';
+export const OPFS_DATABASE_PATH = `opfs://${OPFS_DATABASE_FILE}`;
 
 export type DatabaseStorage = 'opfs' | 'memory';
 

@@ -33,6 +33,9 @@ export const writeCheckpoint = async (db: PersistenceDatabase, state: Checkpoint
     }
     await db.query('COMMIT');
     await db.query('CHECKPOINT');
+    // `CHECKPOINT` settles the pages inside DuckDB but does not reach the OPFS file; without this
+    // the database stayed at zero bytes and every workspace was lost on reload.
+    await db.flushFiles?.();
   } catch (error) {
     await db.query('ROLLBACK').catch(() => undefined);
     throw error;
