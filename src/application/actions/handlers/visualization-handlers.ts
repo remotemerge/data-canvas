@@ -31,15 +31,28 @@ const DEFAULT_PRESENTATION: VisualizationPresentation = {
  * here rather than requiring callers to construct one keeps the human and agent paths equivalent:
  * a UI chart builder and a WebMCP tool both express intent as a binding.
  */
-const deriveQuery = (datasetId: string, binding: VisualBinding): AnalysisQuery => ({
-  datasetId,
-  dimensions: [
-    ...(binding.x === undefined ? [] : [binding.x]),
-    ...(binding.series === undefined ? [] : [binding.series]),
-  ],
-  measures: (binding.y ?? []).map((columnId) => ({ columnId, aggregate: 'sum' as const })),
-  filters: [],
-});
+const deriveQuery = (datasetId: string, binding: VisualBinding): AnalysisQuery => {
+  // A bound bin strategy moves its channel into `binnedDimensions`, because a binned channel is
+  // grouped by bucket rather than by raw value. Leaving it among the plain dimensions would ignore
+  // the strategy the caller bound and group by every distinct instant instead.
+  const binned = [
+    ...(binding.x === undefined || binding.binX === undefined ? [] : [{ columnId: binding.x, strategy: binding.binX }]),
+    ...(binding.series === undefined || binding.binSeries === undefined
+      ? []
+      : [{ columnId: binding.series, strategy: binding.binSeries }]),
+  ];
+
+  return {
+    datasetId,
+    dimensions: [
+      ...(binding.x === undefined || binding.binX !== undefined ? [] : [binding.x]),
+      ...(binding.series === undefined || binding.binSeries !== undefined ? [] : [binding.series]),
+    ],
+    ...(binned.length === 0 ? {} : { binnedDimensions: binned }),
+    measures: (binding.y ?? []).map((columnId) => ({ columnId, aggregate: 'sum' as const })),
+    filters: [],
+  };
+};
 
 const validateTitle = (title: string): boolean => {
   const trimmed = title.trim();
