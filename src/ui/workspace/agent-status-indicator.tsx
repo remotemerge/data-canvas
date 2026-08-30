@@ -7,7 +7,7 @@ export const AgentStatusIndicator = (): React.JSX.Element => {
   const message = !status.available
     ? 'Agent tools unavailable in this browser'
     : status.executingCount > 0
-      ? `Agent working with ${status.executingCount} tool${status.executingCount === 1 ? '' : 's'}`
+      ? `Agent is using ${status.executingCount} tool${status.executingCount === 1 ? '' : 's'}`
       : `${status.registeredCount} agent tools available`;
 
   return (

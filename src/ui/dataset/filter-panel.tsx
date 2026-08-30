@@ -24,7 +24,7 @@ export const FilterPanel = ({
       <h2 className="workspace__panel-heading">Filters</h2>
       <FilterEditor dataset={dataset} onError={onError} />
       {filters.length === 0 ? (
-        <p className="workspace__empty">No filters.</p>
+        <p className="workspace__empty">No filters applied.</p>
       ) : (
         <ul className="filter-list">
           {filters.map((filter) => {

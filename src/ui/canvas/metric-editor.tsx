@@ -160,7 +160,7 @@ export const MetricEditor = ({
               ))}
             </select>
           </label>
-          <small>Periods with no rows are filled in, so a gap in the data does not shift the comparison.</small>
+          <small>Empty periods count as zero, so gaps do not shift the comparison.</small>
         </>
       ) : null}
 

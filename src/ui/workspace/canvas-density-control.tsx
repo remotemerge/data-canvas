@@ -56,7 +56,7 @@ export const CanvasDensityControl = ({ onError }: CanvasDensityControlProps): Re
       </div>
 
       <p className="density__value">
-        {columns} of {MIN_LAYOUT_COLUMNS}–{MAX_LAYOUT_COLUMNS} columns
+        {columns} columns, range {MIN_LAYOUT_COLUMNS} to {MAX_LAYOUT_COLUMNS}
       </p>
     </section>
   );

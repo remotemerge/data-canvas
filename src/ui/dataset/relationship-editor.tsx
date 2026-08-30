@@ -194,9 +194,9 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
 
           {suggestions.length === 0 ? null : (
             <div className="relationship-editor__suggestions">
-              <h3>Suggested</h3>
+              <h3>Suggested relationships</h3>
               <p className="relationship-editor__suggestions-note">
-                Proposals only. Review the keys before creating one.
+                Check the suggested keys before creating a relationship.
               </p>
               <ul>
                 {suggestions.map((suggestion) => (

@@ -48,7 +48,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
       <dd>{profile.logicalType}</dd>
       <dt>Rows</dt>
       <dd>{profile.rowCount}</dd>
-      <dt>Null</dt>
+      <dt>Null values</dt>
       <dd>{profile.nullCount}</dd>
       <dt>Distinct</dt>
       <dd>
@@ -66,7 +66,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
           <dd>{formatNumber(profile.mean)}</dd>
           <dt>Median</dt>
           <dd>{formatNumber(profile.median)}</dd>
-          <dt>Std dev</dt>
+          <dt>Standard deviation</dt>
           <dd>{formatNumber(profile.stddev)}</dd>
         </>
       )}

@@ -102,7 +102,7 @@ export const RelationshipGraph = ({ onError }: { onError: (error: DomainError) =
       </svg>
 
       {edges.length === 0 ? (
-        <p className="workspace__empty">No relationships defined yet.</p>
+        <p className="workspace__empty">No relationships yet.</p>
       ) : (
         <ul className="relationship-graph__list">
           {edges.map(({ relationship, from, to }) => (

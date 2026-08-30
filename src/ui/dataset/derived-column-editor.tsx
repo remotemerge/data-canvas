@@ -85,7 +85,7 @@ export const DerivedColumnEditor = ({
   return (
     <section className="derived-column-editor" aria-labelledby="derived-column-title">
       <h3 id="derived-column-title">Derived columns</h3>
-      <p>Build a computed column from existing ones. Values compute in the engine, not in the browser.</p>
+      <p>Build a column from existing data. DuckDB calculates its values when you query the dataset.</p>
 
       <label>
         Name
@@ -134,7 +134,7 @@ export const DerivedColumnEditor = ({
               ))}
             </select>
           </label>
-          {operator === 'div' ? <small>Division by zero produces an empty value rather than an error.</small> : null}
+          {operator === 'div' ? <small>Division by zero returns null instead of an error.</small> : null}
         </>
       ) : (
         <>

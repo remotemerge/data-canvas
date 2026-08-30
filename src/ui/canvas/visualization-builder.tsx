@@ -198,7 +198,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
     <section className="visualization-builder" aria-labelledby="visualization-builder-title">
       <div>
         <h2 id="visualization-builder-title">Add a view</h2>
-        <p>Bind a dataset column to a chart.</p>
+        <p>Choose a dataset and the columns to chart.</p>
       </div>
       <label>
         Dataset
@@ -264,7 +264,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
             </select>
           </label>
           {temporalBin ? (
-            <small>Temporal columns bin by month.</small>
+            <small>Date and timestamp values are grouped by month.</small>
           ) : (
             <label>
               Buckets
