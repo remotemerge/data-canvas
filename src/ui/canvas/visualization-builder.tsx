@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
+import { placeNewVisualization } from '@/application/layout/place-visualization.ts';
+import { suggestVisualizationTitle } from '@/application/layout/visualization-title.ts';
 import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
 import { MAX_BIN_COUNT, MIN_BIN_COUNT } from '@/domain/analysis/bin-strategy.ts';
 import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
+import { isTemporalType } from '@/domain/logical-type.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import {
   VISUALIZATION_KINDS,
@@ -91,6 +94,21 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
     return validateVisualization(dataset, kind, { x: scoped.column.id, y: [validationMeasure] }, related).ok;
   });
 
+  /*
+   * A temporal dimension on a series chart is bucketed rather than grouped by raw value.
+   *
+   * Grouping by a raw timestamp makes one group per distinct instant, which for daily data over a
+   * year is hundreds of marks packed into a few hundred pixels. Binning states the granularity
+   * explicitly, and it is what lets the sampling policy widen the unit when the span outgrows the
+   * plot — an unbinned dimension gives it nothing to widen.
+   *
+   * Day is the floor, never the final answer: the policy coarsens to weeks or months as needed, and
+   * a short span stays daily.
+   */
+  const seriesDimension = dimensionColumns.find((scoped) => scoped.column.id === x)?.column;
+  const temporalDimension = seriesDimension !== undefined && isTemporalType(seriesDimension.logicalType);
+  const dimensionBin: BinStrategy = { kind: 'temporal', unit: 'day' };
+
   const binding: VisualBinding =
     kind === 'kpi'
       ? { y: y === '' ? [] : [y] }
@@ -101,9 +119,26 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
         : {
             ...(x === '' ? {} : { x }),
             ...(y === '' ? {} : { y: [y] }),
+            ...(temporalDimension ? { binX: dimensionBin } : {}),
           };
 
   const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding, related);
+
+  const columnName = (columnId: string): string | undefined =>
+    scopedColumns.find((scoped) => scoped.column.id === columnId)?.column.name;
+  const measureName = columnName(y);
+  const dimensionName = columnName(x);
+
+  // The title state holds a user override only, so an untouched field keeps tracking the binding
+  // rather than freezing whatever the first column choice suggested.
+  const suggestedTitle = suggestVisualizationTitle({
+    kind,
+    ...(measureName === undefined ? {} : { measureName }),
+    ...(dimensionName === undefined ? {} : { dimensionName }),
+    // A box plot derives its own quantiles, so naming an aggregate would describe a step it never runs.
+    ...(kind === 'boxplot' ? {} : { aggregate }),
+  });
+  const effectiveTitle = title.trim() === '' ? suggestedTitle : title;
 
   const create = async () => {
     if (dataset === undefined || validation === null || !validation.ok) return;
@@ -128,14 +163,19 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
             }
           : {
               datasetId,
-              dimensions: x === '' ? [] : [x],
+              // A bucketed temporal dimension moves to `binnedDimensions`, which is the shape the
+              // compiler bins on and the sampling policy widens.
+              dimensions: x === '' || temporalDimension ? [] : [x],
+              ...(x === '' || !temporalDimension
+                ? {}
+                : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
               measures: y === '' ? [] : [{ columnId: y, aggregate }],
               filters: [],
             };
 
     const result = await actions.createVisualization({
       datasetId,
-      title,
+      title: effectiveTitle,
       kind,
       binding,
       query,
@@ -147,16 +187,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
     const visualizationId = result.value.changedEntityIds[0];
     if (visualizationId !== undefined) {
       const layout = await actions.updateLayout({
-        items: [
-          ...layoutItems,
-          {
-            visualizationId,
-            x: 0,
-            y: layoutItems.reduce((bottom, item) => Math.max(bottom, item.y + item.height), 0),
-            width: 6,
-            height: 4,
-          },
-        ],
+        items: placeNewVisualization(layoutItems, visualizationId, workspace.layout.columns),
       });
       if (!layout.ok) onError(layout.error);
     }
@@ -206,7 +237,14 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
       </label>
       <label>
         Title
-        <input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} />
+        {/* Empty means "use the suggestion", shown as the placeholder so the generated title is
+            visible before creating. Typing overrides it; clearing the field returns to tracking. */}
+        <input
+          value={title}
+          maxLength={120}
+          placeholder={suggestedTitle}
+          onChange={(event) => setTitle(event.target.value)}
+        />
       </label>
       {kind === 'histogram' ? (
         <>
@@ -297,7 +335,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
       )}
       <button
         type="button"
-        disabled={title.trim() === '' || validation === null || !validation.ok}
+        disabled={effectiveTitle.trim() === '' || validation === null || !validation.ok}
         onClick={() => void create()}
       >
         Create view
