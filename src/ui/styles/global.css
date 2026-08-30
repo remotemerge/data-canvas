@@ -473,18 +473,25 @@ textarea:focus-visible,
  * The workspace is exactly viewport-height. It cannot grow with its content: the data table
  * virtualises against the height it is given, so a page that grew to fit the table would feed back
  * into the measurement that sizes it and render every row. */
+/* The update prompt renders nothing until a new build is cached, so a fixed three-row template
+   cannot be used: with the prompt absent the body was auto-placed into the middle `auto` row and
+   the trailing `1fr` row held the leftover viewport as dead space below the panels. The header is
+   fixed and every other child sizes to its content; `.workspace__body` claims the remaining height
+   through `flex: 1` below. */
 .workspace {
-  display: grid;
-  grid-template-rows: var(--dc-header-height) auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
 .workspace__header {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   gap: var(--dc-space-4);
+  height: var(--dc-header-height);
   padding-inline: var(--dc-space-3);
   border-bottom: 1px solid var(--dc-color-border);
   background: var(--dc-color-surface-raised);
@@ -575,6 +582,7 @@ textarea:focus-visible,
  * height, which is what keeps the data panel aligned with the bottom of the longer panel. */
 .workspace__body {
   display: grid;
+  flex: 1;
   grid-template-columns: var(--dc-panel-width) minmax(0, 1fr) var(--dc-panel-width);
   min-height: 0;
   overflow: hidden;
@@ -602,6 +610,23 @@ textarea:focus-visible,
   gap: var(--dc-space-4);
 }
 
+/* Divides the panel's groups from each other.
+ *
+ * Stated as an exclusion rather than a list of allowed predecessors, because the elements above a
+ * group vary with state: the dataset list renders a `<ul>` when populated and a bare placeholder
+ * paragraph when empty, and enumerating those left the empty panel with a rule above one section
+ * but not the next.
+ *
+ * A heading takes a rule when something precedes it, since it then opens a new group, but never
+ * immediately after another rule — the section following a heading belongs to it, and a border
+ * there would separate the title from its own content. The gap above matches the padding below,
+ * keeping the rule centred between the groups. */
+.workspace__panel-content > *:not(.workspace__panel-heading) + section,
+.workspace__panel-content > * + .workspace__panel-heading {
+  border-top: 1px solid var(--dc-color-border);
+  padding-top: var(--dc-space-4);
+}
+
 .workspace__panel-title-row {
   display: flex;
   align-items: center;
@@ -614,14 +639,33 @@ textarea:focus-visible,
   border-left: 1px solid var(--dc-color-border);
 }
 
-/* The side panel is narrower than the two labels combined, so the buttons stack. Stretching them to
-   the column width keeps their edges aligned instead of ragged at each label's intrinsic width. */
-.storage__actions {
+/* Confirm sits after cancel, so the destructive action is not under the cursor when the dialog
+   opens. */
+.workspace__dialog-actions {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  justify-content: flex-end;
   gap: var(--dc-space-2);
-  margin-top: var(--dc-space-3);
+}
+
+/* The gap carries the space below each rule and the padding carries the space above it, so the two
+   must match to keep a divider centred between the sections it separates. */
+.settings {
+  display: grid;
+  gap: var(--dc-space-4);
+  align-content: start;
+}
+
+/* Between sections only. A rule above the first would sit directly under the sheet title, which is
+   already separated from the content by its own weight. */
+.settings > * + * {
+  border-top: 1px solid var(--dc-color-border);
+  padding-top: var(--dc-space-4);
+}
+
+/* The bottom-anchoring above belongs to the inspector column this notice used to end. Inside the
+   settings sheet it is one section among several and is placed by the grid. */
+.settings .privacy-notice {
+  margin-top: 0;
 }
 
 .privacy-notice {
@@ -772,10 +816,21 @@ textarea:focus-visible,
   min-height: 0;
 }
 
-.workspace__canvas > .workspace__empty {
+/* Both placeholders stand in for a region rather than labelling a control, so each centres in the
+   space its region would occupy: the canvas hero before any import, and the view placeholder in the
+   chart area under the builder. */
+.workspace__canvas > .workspace__empty,
+.workspace__views > .workspace__empty {
   margin-block: auto;
   margin-inline: auto;
   text-align: center;
+}
+
+/* The builder sits directly above and reads as a form, so the placeholder needs clear air beneath
+   it rather than looking like the form's own trailing caption. Padding rather than a margin: the
+   auto margins above do the centring, and setting `margin-top` here would cancel them. */
+.workspace__views > .workspace__empty {
+  padding-top: var(--dc-space-6);
 }
 
 /* The canvas hero centres itself (above); in a side panel the same placeholder is one compact row
@@ -849,7 +904,9 @@ textarea:focus-visible,
   list-style: none;
 }
 
-.history__entry {
+/* The rule divides one entry from the next, so the last one does not get it: a trailing border
+   reads as a section boundary with nothing below it. */
+.history__entry:not(:last-child) {
   padding-bottom: var(--dc-space-3);
   border-bottom: 1px solid var(--dc-color-border);
 }

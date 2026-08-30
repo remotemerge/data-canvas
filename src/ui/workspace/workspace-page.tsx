@@ -1,4 +1,4 @@
-import { LuDatabase, LuEllipsis, LuPanelRight } from 'react-icons/lu';
+import { LuDatabase, LuPanelRight } from 'react-icons/lu';
 import { useState } from 'react';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
@@ -21,10 +21,9 @@ import { RelationshipGraph } from '@/ui/dataset/relationship-graph.tsx';
 import { ActionHistoryPanel } from '@/ui/workspace/action-history-panel.tsx';
 import { SelectionSummary } from '@/ui/workspace/selection-summary.tsx';
 import { UpdatePrompt } from '@/ui/components/update-prompt.tsx';
-import { CanvasDensityControl } from '@/ui/workspace/canvas-density-control.tsx';
 import { WorkspaceCanvas } from '@/ui/canvas/workspace-canvas.tsx';
 import { AgentStatusIndicator } from '@/ui/workspace/agent-status-indicator.tsx';
-import { StoragePanel } from '@/ui/workspace/storage-panel.tsx';
+import { SettingsSheet } from '@/ui/workspace/settings-sheet.tsx';
 import { UndoRedoControls } from '@/ui/workspace/undo-redo-controls.tsx';
 import { Button } from '@/ui/components/ui/button.tsx';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/ui/components/ui/sheet.tsx';
@@ -55,6 +54,7 @@ const DatasetExplorer = ({ activeDataset, onError }: PanelProps): React.JSX.Elem
 
 const Inspector = ({ activeDataset, onError }: PanelProps): React.JSX.Element => (
   <div className="workspace__panel-content">
+    <ActionHistoryPanel />
     <h2 className="workspace__panel-heading">Inspector</h2>
     {activeDataset === undefined ? (
       <p className="workspace__empty">Select a dataset or visualization to edit its properties.</p>
@@ -64,16 +64,6 @@ const Inspector = ({ activeDataset, onError }: PanelProps): React.JSX.Element =>
         <FilterPanel dataset={activeDataset} onError={onError} />
       </>
     )}
-    <CanvasDensityControl onError={onError} />
-    <ActionHistoryPanel />
-    <StoragePanel />
-    <section className="privacy-notice" aria-labelledby="privacy-notice-title">
-      <h2 id="privacy-notice-title" className="workspace__panel-heading">
-        Privacy
-      </h2>
-      <p>Imported data stays in DuckDB-Wasm in this browser.</p>
-      <p>Data returned through WebMCP may be processed by the AI agent you use.</p>
-    </section>
   </div>
 );
 
@@ -130,19 +120,7 @@ export const WorkspacePage = (): React.JSX.Element => {
         <div className="workspace__actions">
           {compact ? null : <UndoRedoControls onError={setActionError} />}
           <ThemeToggle />
-          {compact ? (
-            <Sheet>
-              <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open workspace options" />}>
-                <LuEllipsis size={16} aria-hidden="true" />
-              </SheetTrigger>
-              <SheetContent side="right">
-                <SheetTitle>Workspace options</SheetTitle>
-                <div className="workspace__mobile-actions">
-                  <UndoRedoControls onError={setActionError} />
-                </div>
-              </SheetContent>
-            </Sheet>
-          ) : null}
+          <SettingsSheet onError={setActionError} showHistoryControls={compact} />
           {narrow ? (
             <Sheet>
               <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open inspector" />}>
