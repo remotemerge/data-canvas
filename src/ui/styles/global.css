@@ -152,8 +152,7 @@ textarea:focus-visible,
 .visualization-builder input,
 .visualization-builder select,
 .visualization-builder button,
-.chart-panel button,
-.visualization-grid__size button {
+.chart-panel button {
   min-height: 2rem;
   border: 1px solid var(--dc-color-border);
   border-radius: calc(var(--dc-radius) / 2);
@@ -178,15 +177,7 @@ textarea:focus-visible,
 }
 
 .visualization-grid__item {
-  position: relative;
   min-height: 20rem;
-}
-
-.visualization-grid__size {
-  position: absolute;
-  z-index: 1;
-  top: var(--dc-space-2);
-  right: var(--dc-space-2);
 }
 
 .chart-panel,
@@ -198,12 +189,28 @@ textarea:focus-visible,
   background: var(--dc-color-surface-raised);
 }
 
+/* The card is a column so its body can take the height the header and badges leave. Without this
+   the chart falls back to its own min-height and a taller card is just empty space below it. */
+.chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+}
+
+/* `min-height: 0` lets the body shrink below its content's intrinsic height, which a flex item
+   otherwise refuses to do — without it a tall chart pushes the card past its grid row. */
+.chart-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .chart-panel__header {
   display: flex;
   align-items: center;
   gap: var(--dc-space-2);
   justify-content: space-between;
-  padding-right: 4.5rem;
 }
 
 /* The title and its provenance disclosure share one line. Without this the `details` keeps its
@@ -216,16 +223,22 @@ textarea:focus-visible,
   gap: var(--dc-space-2);
 }
 
-/* Chart titles are user- or agent-supplied and must truncate rather than push the controls away. */
+/* Chart titles are user- or agent-supplied and must truncate rather than push the controls away.
+   The minimum keeps a few characters legible instead of collapsing to zero once the provenance
+   badge and header controls have taken their room. */
 .chart-panel__title {
+  min-width: 4rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Shrinks before the title does: the badge is secondary metadata, so on a narrow panel the chart's
+   name is what must stay readable. */
 .provenance {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: baseline;
   gap: var(--dc-space-1);
 }
@@ -281,9 +294,13 @@ textarea:focus-visible,
   }
 }
 
+/* ECharts sizes its canvas from this element's box, so it has to fill the body rather than sit at
+   an intrinsic height. The min-height is the floor a chart stays readable at; above it the chart
+   takes whatever the card was given. */
 .chart-panel__chart {
+  flex: 1;
   width: 100%;
-  min-height: 16rem;
+  min-height: 20rem;
 }
 
 .chart-panel__badge,
@@ -398,6 +415,23 @@ textarea:focus-visible,
   color: var(--dc-color-negative);
 }
 
+/* Opened by clicking a mark, so it sits under the chart inside the panel and must not widen it. */
+.annotation-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-3);
+  padding-top: var(--dc-space-3);
+  border-top: 1px solid var(--dc-color-border);
+  min-width: 0;
+}
+
+.annotation-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
 .metric-editor {
   display: grid;
   gap: var(--dc-space-2);
@@ -433,10 +467,17 @@ textarea:focus-visible,
   }
 }
 
+/* Header, update prompt, body. The prompt row is `auto` and collapses to nothing when no update is
+   pending; naming it matters because an unnamed third child would otherwise get an implicit row.
+ *
+ * The workspace is exactly viewport-height. It cannot grow with its content: the data table
+ * virtualises against the height it is given, so a page that grew to fit the table would feed back
+ * into the measurement that sizes it and render every row. */
 .workspace {
   display: grid;
-  grid-template-rows: var(--dc-header-height) 1fr;
+  grid-template-rows: var(--dc-header-height) auto minmax(0, 1fr);
   height: 100%;
+  overflow: hidden;
 }
 
 .workspace__header {
@@ -458,7 +499,6 @@ textarea:focus-visible,
 .workspace__identity,
 .workspace__header-status,
 .workspace__actions,
-.workspace__portability,
 .undo-redo-controls {
   display: flex;
   min-width: 0;
@@ -525,18 +565,34 @@ textarea:focus-visible,
   text-transform: uppercase;
 }
 
+/* `minmax(0, 1fr)` rather than `1fr`: a grid track's default floor is its content's width, so a wide
+   data table would stretch the middle column and push the inspector off-screen. */
+/* `minmax(0, 1fr)` rather than `1fr`: a grid track's default floor is its content's width, so a wide
+   data table would stretch the middle column and push the inspector off-screen.
+ *
+ * The row grows to the tallest column rather than being capped, so a panel taller than the viewport
+ * extends the page instead of having its lower controls cut off. The canvas column then matches that
+ * height, which is what keeps the data panel aligned with the bottom of the longer panel. */
 .workspace__body {
   display: grid;
-  grid-template-columns: var(--dc-panel-width) 1fr var(--dc-panel-width);
+  grid-template-columns: var(--dc-panel-width) minmax(0, 1fr) var(--dc-panel-width);
   min-height: 0;
+  overflow: hidden;
 }
 
+/* The panels scroll when their content is taller than the viewport.
+ *
+ * Every control in them has to be reachable, and the two alternatives both fail: clipping cuts the
+ * inspector off mid-control, and growing the page feeds back into the height the data table
+ * virtualises against, which renders every row. So the panel scrolls itself — the scrollbar appears
+ * only when the content genuinely does not fit, and never for the canvas or the chart. */
 .workspace__panel {
   display: flex;
   flex-direction: column;
   gap: var(--dc-space-4);
   padding: var(--dc-space-4);
   border-right: 1px solid var(--dc-color-border);
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -556,6 +612,16 @@ textarea:focus-visible,
 .workspace__panel--right {
   border-right: 0;
   border-left: 1px solid var(--dc-color-border);
+}
+
+/* The side panel is narrower than the two labels combined, so the buttons stack. Stretching them to
+   the column width keeps their edges aligned instead of ragged at each label's intrinsic width. */
+.storage__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-3);
 }
 
 .privacy-notice {
@@ -588,14 +654,122 @@ textarea:focus-visible,
   gap: var(--dc-space-4);
   padding: var(--dc-space-4);
   background: var(--workspace);
+  /* Clipped, not scrollable: the canvas splits into the chart region and the data panel, and each
+     sizes to what this column gives them. */
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+/* Charts take the height the data panel leaves. `min-height: 0` lets this region shrink to what is
+   left rather than insisting on its content's height and pushing the panel off-screen. It does not
+   scroll: the data table is the workspace's only scrolling surface. */
+.workspace__views {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The grid's bottom margin is redundant inside this region: the data panel's handle and title bar
+   already separate the two. */
+.workspace__views > .visualization-grid {
+  margin-bottom: 0;
+}
+
+/* The grid and its items give up their intrinsic floors here so the row shrinks with the region
+   instead of overflowing it. `.chart-panel__chart` keeps its own minimum, which is what stops a
+   chart being squashed to nothing. */
+.workspace__views > .visualization-grid,
+.workspace__views .visualization-grid__item {
+  min-height: 0;
+}
+
+/* Inside the workspace the chart shares a fixed column with the data panel, so it takes the height
+   actually available. The larger floor is for a chart standing on its own. */
+.workspace__views .chart-panel__chart {
+  min-height: 12rem;
 }
 
 /* Banners stay readable rather than stretching the full canvas width. */
 .workspace__canvas > .engine-status,
 .workspace__canvas > .action-error {
   align-self: center;
+}
+
+.data-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* The panel's height is its own; it must not be stretched or compressed by the flex column. */
+  flex: none;
+}
+
+/* With no chart on the canvas the table takes everything the builder does not need, rather than
+   holding to a fraction that would reserve empty space for charts that do not exist. */
+.data-panel[data-fills="true"] {
+  flex: 1;
+}
+
+.workspace__views[data-empty="true"] {
+  flex: none;
+  overflow: visible;
+}
+
+.data-panel[data-collapsed="true"] {
+  height: auto;
+}
+
+/* Wider than it looks: the visible rule is 1px but the hit area is the full padding box, which is
+   what makes the handle grabbable without hunting for it. */
+.data-panel__handle {
+  position: relative;
+  flex: none;
+  height: var(--dc-space-3);
+  margin-inline: calc(var(--dc-space-4) * -1);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.data-panel__handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--dc-color-border);
+}
+
+.data-panel__handle:hover::after,
+.data-panel__handle:focus-visible::after {
+  border-top-color: var(--dc-color-accent);
+}
+
+.data-panel__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: var(--dc-space-1);
+}
+
+/* Inside the panel the row count needs no margin of its own: the title bar directly above it
+   already separates it from the handle, and the gap cost roughly a row of data. */
+.data-panel__body .data-table__status {
+  margin-bottom: 0;
+}
+
+.data-panel__title {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+}
+
+.data-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .workspace__canvas > .workspace__empty {
@@ -635,6 +809,9 @@ textarea:focus-visible,
 }
 
 .density__option {
+  /* Matches the 2rem height shared by every other control, so a row of these lines up with the
+     buttons and selects around it. */
+  min-height: 2rem;
   padding: var(--dc-space-1) var(--dc-space-3);
   border: 1px solid var(--dc-color-border);
   border-radius: var(--dc-radius);
@@ -1043,8 +1220,11 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
+/* Matches the 2rem height of the icon buttons beside it; without this the select sits 5px shorter
+   and the header controls read as a staggered row rather than one line. */
 .link-mode-control__select {
-  padding: var(--dc-space-1) var(--dc-space-2);
+  height: 2rem;
+  padding: 0 var(--dc-space-2);
   border: 1px solid var(--dc-color-border);
   border-radius: calc(var(--dc-radius) / 2);
   background: transparent;
@@ -1092,11 +1272,6 @@ textarea:focus-visible,
   color: var(--dc-color-text);
 }
 
-.workspace__portability {
-  display: flex;
-  gap: var(--dc-space-2);
-}
-
 .update-prompt {
   display: flex;
   align-items: center;
@@ -1107,54 +1282,15 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-.dialog {
-  display: grid;
-  gap: var(--dc-space-4);
-  min-width: 0;
-}
-
-.dialog h2 {
-  margin: 0;
-  font-size: var(--dc-text-lg);
-}
-
-.dialog__field {
-  display: grid;
-  gap: var(--dc-space-3);
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.dialog__choice {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--dc-space-3);
-  align-items: start;
-  cursor: pointer;
-}
-
-.dialog__choice span {
-  display: grid;
-  gap: var(--dc-space-1);
-}
-
-.dialog__hint,
-.dialog__progress {
-  color: var(--dc-color-text-muted);
-  font-size: var(--dc-text-sm);
-}
-
-.dialog__list {
-  margin: 0;
-  padding-left: var(--dc-space-6);
-  font-size: var(--dc-text-sm);
-}
-
-.dialog__actions {
+/* The shared row for a form's submit/cancel pair. Buttons are inline-level, so without a flex
+   parent they butt together with no gap and wrap at ragged widths. Wraps rather than overflowing,
+   since these forms sit inside panels and chart cards that get narrow. */
+.form-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--dc-space-2);
-  justify-content: flex-end;
+  margin-top: var(--dc-space-3);
 }
 
 .schema__summary {
@@ -1173,60 +1309,55 @@ textarea:focus-visible,
   list-style: none;
 }
 
-/* An explorer row is a fixed three-slot grid rather than wrapping flex: with five items competing
-   for a ~240px panel, flex-wrap broke each column across two ragged lines of differing height. The
-   name takes the free space, the type and the stats toggle keep their intrinsic width, and the
-   quieter metadata drops to a second line that is the same for every row. */
+/* One compact line per column: type glyph, name, stats control. Type, nullability, and the physical
+   name used to print on a second line under every row, which tripled the list's height and made a
+   twenty-column dataset a wall of repeated words. They moved into the row's tooltip, leaving the
+   names — the thing actually being scanned — as the only text competing for attention. */
 .schema__column {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--dc-space-1) var(--dc-space-2);
-  padding-block: var(--dc-space-1);
+  gap: var(--dc-space-2);
+  padding-block: 0.1875rem;
+  border-radius: calc(var(--dc-radius) / 2);
   font-size: var(--dc-text-sm);
 }
 
-/* The metadata line spans the row and lays its own items out, so it stays one line whether or not
-   the optional `nullable` marker is present. */
-.schema__meta {
-  display: flex;
-  grid-column: 1 / -1;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--dc-space-2);
+.schema__column:hover {
+  background: var(--dc-color-surface-raised);
 }
 
-.schema__nullable,
-.schema__physical {
-  margin: 0;
-  font-size: 0.6875rem;
+.schema__glyph {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.schema__glyph[data-logical-type="number"] {
+  color: var(--dc-color-accent);
+}
+
+/* The glyph carries the type visually; this keeps the word itself in the accessibility tree. */
+.schema__type-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Column headers come from the imported file and can be arbitrarily long or unbroken. */
 .schema__name {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.schema__type {
-  padding: 0 var(--dc-space-2);
-  border-radius: var(--dc-radius);
-  background: var(--dc-color-surface-raised);
-  color: var(--dc-color-accent);
-  font-size: var(--dc-text-sm);
-}
-
-.schema__type[data-logical-type="unknown"] {
-  color: var(--dc-color-text-muted);
-}
-
-.schema__nullable,
-.schema__physical {
-  color: var(--dc-color-text-muted);
-  font-family: var(--dc-font-mono);
-  font-size: var(--dc-text-sm);
-}
-
+/* The control is a per-row action, so it stays invisible until the row is hovered or it is focused;
+   twenty always-visible buttons read as a column of chrome beside the names. */
 .schema__profile-toggle {
   padding: 0 var(--dc-space-2);
   border: 1px solid var(--dc-color-border);
@@ -1235,12 +1366,21 @@ textarea:focus-visible,
   color: var(--dc-color-text-muted);
   font-size: var(--dc-text-sm);
   cursor: pointer;
+  opacity: 0;
+}
+
+.schema__column:hover .schema__profile-toggle,
+.schema__profile-toggle:focus-visible,
+.schema__profile-toggle[aria-expanded="true"] {
+  opacity: 1;
 }
 
 /* A profile expands under its column, so it takes the full row rather than joining the flex flow. */
+/* The profile expands beneath its column's row, so it spans every track of that row's grid rather
+   than being squeezed into the name's column. */
 .column-profile,
 .column-profile__status {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   margin: var(--dc-space-2) 0 0;
   color: var(--dc-color-text-muted);
   font-size: var(--dc-text-sm);
@@ -1382,8 +1522,12 @@ textarea:focus-visible,
 }
 
 .data-table {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
 }
 
 .data-table__status {
@@ -1395,8 +1539,12 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
+/* The viewport fills whatever the data panel was resized to rather than claiming a fixed slice of
+   the window, so dragging the panel changes how many rows are visible. The min-height keeps a few
+   rows on screen when a chart-embedded table has no panel to size it. */
 .data-table__viewport {
-  height: 60vh;
+  flex: 1;
+  min-height: 8rem;
   overflow: auto;
   border: 1px solid var(--dc-color-border);
   border-radius: var(--dc-radius);
@@ -1524,8 +1672,6 @@ textarea:focus-visible,
 
 .chart-panel__header {
   min-height: 2rem;
-  /* Clears the resize control that floats over the panel's top-right corner. */
-  padding-right: 4.75rem;
 }
 
 .chart-panel__header h3 {
@@ -1641,11 +1787,8 @@ textarea:focus-visible,
     min-height: 18rem;
   }
 
-  /* The reserve must clear the floating resize control, which is two 32px buttons plus their gap;
-     3.5rem left the narrower button underneath the delete action and untappable. */
   .chart-panel__header {
     align-items: center;
-    padding-right: 4.75rem;
   }
 
   .chart-panel__controls {

@@ -5,6 +5,7 @@ import { useWorkspace } from '@/state/use-workspace.ts';
 import { ChartPanel } from '@/visualization/chart-panel.tsx';
 import { MetricCard } from '@/ui/canvas/metric-card.tsx';
 import { VisualizationBuilder } from '@/ui/canvas/visualization-builder.tsx';
+import { Button } from '@/ui/components/ui/button.tsx';
 
 export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => void }) => {
   const workspace = useWorkspace((state) => state.workspace);
@@ -56,23 +57,30 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
                 className="visualization-grid__item"
                 style={{ gridColumn: `span ${item?.width ?? 6}`, gridRow: `span ${item?.height ?? 4}` }}
               >
-                <div className="visualization-grid__size">
-                  <button
-                    type="button"
-                    onClick={() => void resize(visualization.id, -1)}
-                    aria-label={`Make ${visualization.title} narrower`}
-                  >
-                    −
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void resize(visualization.id, 1)}
-                    aria-label={`Make ${visualization.title} wider`}
-                  >
-                    +
-                  </button>
-                </div>
-                <ChartPanel visualization={visualization} onError={onError} />
+                <ChartPanel
+                  visualization={visualization}
+                  onError={onError}
+                  resizeControls={
+                    <>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => void resize(visualization.id, -1)}
+                        aria-label={`Make ${visualization.title} narrower`}
+                      >
+                        −
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => void resize(visualization.id, 1)}
+                        aria-label={`Make ${visualization.title} wider`}
+                      >
+                        +
+                      </Button>
+                    </>
+                  }
+                />
               </div>
             );
           })}

@@ -24,6 +24,15 @@ export const selectVisualizations = (state: WorkspaceState): Record<EntityId, Vi
 
 export const selectFilters = (state: WorkspaceState): Record<EntityId, Filter> => state.workspace.filters;
 
+/**
+ * Whether the canvas holds any chart.
+ *
+ * Returns a boolean rather than a count or an array, so subscribers re-render when the canvas
+ * becomes empty or stops being empty and not on every unrelated visualization edit.
+ */
+export const selectHasVisualizations = (state: WorkspaceState): boolean =>
+  Object.keys(state.workspace.visualizations).length > 0;
+
 export const selectActiveDatasetId = (state: WorkspaceState): EntityId | undefined => state.workspace.activeDatasetId;
 
 export const selectLayoutColumns = (state: WorkspaceState): number => state.workspace.layout.columns;
