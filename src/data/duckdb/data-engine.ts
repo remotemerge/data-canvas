@@ -43,7 +43,6 @@ import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { ColumnRange } from '@/domain/analysis/bin-strategy.ts';
 import type { DerivedColumn } from '@/domain/dataset/derived-column.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
-import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
@@ -52,7 +51,6 @@ import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
-import type { PersistenceDatabase } from '@/data/persistence/persistence-database.ts';
 
 /**
  * The DuckDB-Wasm implementation of `DataEnginePort`.
@@ -91,8 +89,6 @@ interface DescribedColumn {
 export interface DataEngine extends DataEnginePort {
   initialize(): Promise<Result<void, DomainError>>;
   dispose(): Promise<void>;
-  persistenceDatabase(): PersistenceDatabase | null;
-  restoreDatasets(datasets: Record<EntityId, Dataset>): void;
   /**
    * Publishes the workspace's relationships to the engine.
    *
@@ -987,35 +983,6 @@ export const createDataEngine = (): DataEngine => {
     measureKeyQuality,
     dropDataset,
     dispose,
-    // The connection runs the SQL, but only the database can flush buffered pages to OPFS, so the
-    // two are combined here rather than leaking the DuckDB handle itself past this module.
-    persistenceDatabase: () => {
-      const opened = handle;
-
-      if (opened === null) return null;
-
-      return {
-        query: (sql) => opened.connection.query(sql),
-        prepare: (sql) => opened.connection.prepare(sql),
-        flushFiles: async () => {
-          await opened.database.flushFiles();
-        },
-      };
-    },
-    restoreDatasets: (datasets) => {
-      relations.clear();
-      statisticsCache.clear();
-      for (const dataset of Object.values(datasets)) {
-        if (dataset.importStatus === 'ready') {
-          relations.set(dataset.id, {
-            relationName: dataset.relationId,
-            columns: dataset.columns,
-            revision: 1,
-            ...(dataset.rowCount === null ? {} : { rowCount: dataset.rowCount }),
-          });
-        }
-      }
-    },
     setRelationships: (relationships) => {
       relationshipGraph.clear();
       for (const relationship of Object.values(relationships)) relationshipGraph.set(relationship.id, relationship);

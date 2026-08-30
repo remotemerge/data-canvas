@@ -3,7 +3,6 @@ import ehWasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import ehWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 import mvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
 import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
-import { databasePath, type DatabaseStorage } from '@/data/persistence/opfs-database.ts';
 
 /**
  * Brings up DuckDB-Wasm in a worker.
@@ -70,7 +69,17 @@ const SECURITY_STATEMENTS: readonly string[] = [
  */
 const REQUIRED_EXTENSIONS: readonly string[] = [];
 
-export const openDuckDB = async (storage: DatabaseStorage = 'opfs'): Promise<DuckDBHandle> => {
+/**
+ * Opens the analytical database in memory.
+ *
+ * The workspace lasts for the life of the tab and a reload starts empty. OPFS persistence was
+ * measured against `@duckdb/duckdb-wasm@1.33.1-dev57.0` and does not work: with an `opfs://` path,
+ * `CHECKPOINT` and `flushFiles()` both succeed while the file stays at zero bytes, and a reopened
+ * database reports `Catalog Error: Table with name t does not exist`. Reproduced outside this
+ * application using the sequence from DuckDB's own `opfs.test.ts`, so it is not a misuse of the
+ * API. See `docs/decisions/0004-opfs-persistence.md`.
+ */
+export const openDuckDB = async (): Promise<DuckDBHandle> => {
   const bundle = await duckdb.selectBundle(BUNDLES);
 
   if (bundle.mainWorker === null) {
@@ -84,17 +93,8 @@ export const openDuckDB = async (storage: DatabaseStorage = 'opfs'): Promise<Duc
   await database.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
   await database.open({
-    path: databasePath(storage),
+    path: ':memory:',
     accessMode: duckdb.DuckDBAccessMode.READ_WRITE,
-    /**
-     * Required for an `opfs://` path to reach disk at all.
-     *
-     * DuckDB-Wasm gates OPFS file handling on this flag: `shouldOPFSFileHandling()` returns true
-     * only when the path is `opfs://` *and* this is `"auto"`. Without it the database opens and
-     * queries succeed against an in-memory image, and even `FORCE CHECKPOINT` leaves the OPFS file
-     * at zero bytes — so every workspace was silently lost on reload.
-     */
-    ...(storage === 'opfs' ? { opfs: { fileHandling: 'auto' as const } } : {}),
     query: {
       /**
        * Integers stay `BIGINT` rather than being cast to double on the way out. The conversion

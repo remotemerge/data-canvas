@@ -103,8 +103,6 @@ describe('data engine boundary', () => {
         'src/data/compiler/compile-derived-expression.ts',
         'src/data/compiler/compile-time-spine.ts',
         'src/data/duckdb/data-engine.ts',
-        'src/data/persistence/hydrate-workspace.ts',
-        'src/data/persistence/schema/metadata-tables.ts',
       ].toSorted(),
     );
   });

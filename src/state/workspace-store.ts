@@ -27,8 +27,8 @@ export interface WorkspaceState {
  * handlers never call it directly. That restriction is what stops the human and agent execution
  * paths from diverging.
  *
- * No `persist` middleware here by design. Durable storage targets OPFS, and adding localStorage
- * persistence now would leave the workspace with two competing sources of truth.
+ * No `persist` middleware here by design. The workspace lives for the life of the tab and a reload
+ * starts empty; see `docs/decisions/0004-opfs-persistence.md`.
  */
 export const workspaceStore = createStore<WorkspaceState>()(() => ({
   workspace: createEmptyWorkspace(),
@@ -39,12 +39,3 @@ export const workspaceStore = createStore<WorkspaceState>()(() => ({
 
 /** Narrow read accessor for non-React consumers (services, WebMCP adapter, tests). */
 export const getWorkspace = (): Workspace => workspaceStore.getState().workspace;
-
-export const hydrateWorkspaceState = (
-  workspace: Workspace,
-  history: ActionHistoryEntry[],
-  undoStack: string[] = [],
-  redoStack: string[] = [],
-): void => {
-  workspaceStore.setState({ workspace, history, undoStack, redoStack });
-};
