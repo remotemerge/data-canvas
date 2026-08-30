@@ -30,6 +30,22 @@ export const compilerDataset: Dataset = {
   ],
 };
 
+/** The compiler dataset plus a temporal column, for the binning cases only. */
+const temporalDataset: Dataset = {
+  ...compilerDataset,
+  columns: [
+    ...compilerDataset.columns,
+    {
+      id: 'col_date',
+      name: 'Date',
+      physicalName: 'c2',
+      databaseType: 'DATE',
+      logicalType: 'date',
+      nullable: false,
+    },
+  ],
+};
+
 describe('compileAnalysisQuery', () => {
   test('compiles projection, filter, sort, limit, and offset', () => {
     const result = compileAnalysisQuery(
@@ -72,7 +88,61 @@ describe('compileAnalysisQuery', () => {
       compilerDataset,
     );
     expect(result.ok && result.value.sql).toContain('SUM("c1") AS "m0"');
-    expect(result.ok && result.value.sql).toContain('GROUP BY "c0"');
+    // Grouped by SELECT position rather than by repeating the expression, which is what keeps a
+    // parameterised dimension's placeholders and its bound values in step.
+    expect(result.ok && result.value.sql).toContain('GROUP BY 1');
     expect(result.ok && result.value.sql).toContain('ORDER BY "m0" DESC');
+  });
+
+  /*
+   * A binned dimension emits a placeholder in the SELECT list. Repeating the expression in GROUP BY
+   * emitted a second placeholder while the parameter list still bound one value, so the statement
+   * reached DuckDB with more placeholders than parameters and every temporally bucketed chart failed
+   * to run. Grouping by position emits the expression exactly once.
+   */
+  test('a binned dimension binds exactly as many parameters as it emits placeholders', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: temporalDataset.id,
+        dimensions: [],
+        binnedDimensions: [{ columnId: 'col_date', strategy: { kind: 'temporal', unit: 'month' } }],
+        measures: [{ columnId: 'col_value', aggregate: 'sum' }],
+        filters: [],
+      },
+      temporalDataset,
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) return;
+
+    const placeholders = (result.value.sql.match(/\?/g) ?? []).length;
+
+    expect(placeholders).toBe(result.value.parameters.length);
+    expect(result.value.sql).toContain('GROUP BY 1');
+    expect(result.value.parameters).toEqual(['month']);
+  });
+
+  test('a filtered binned query keeps dimension and filter parameters in order', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: temporalDataset.id,
+        dimensions: [],
+        binnedDimensions: [{ columnId: 'col_date', strategy: { kind: 'temporal', unit: 'week' } }],
+        measures: [{ columnId: 'col_value', aggregate: 'sum' }],
+        filters: [{ kind: 'comparison', columnId: 'col_value', operator: 'gte', value: 10 }],
+      },
+      temporalDataset,
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) return;
+
+    const placeholders = (result.value.sql.match(/\?/g) ?? []).length;
+
+    expect(placeholders).toBe(result.value.parameters.length);
+    // The dimension's unit binds before the filter's value, matching where each appears.
+    expect(result.value.parameters).toEqual(['week', 10]);
   });
 });

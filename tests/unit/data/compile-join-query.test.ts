@@ -54,7 +54,7 @@ describe('join compilation', () => {
     expect(result.value.sql).toBe(
       'SELECT "t1"."region", SUM("t0"."revenue") AS "m0" FROM "dataset_orders" AS "t0" ' +
         'INNER JOIN "dataset_customers" AS "t1" ON "t0"."customer_id" = "t1"."id" ' +
-        'GROUP BY "t1"."region" LIMIT 500',
+        'GROUP BY 1 LIMIT 500',
     );
     expect(result.value.joined).toBe(true);
     expect(result.value.datasetIds).toEqual(['ds_orders', 'ds_customers']);

@@ -231,8 +231,21 @@ export const compileAnalysisQuery = (
   const { resolve } = from.value;
 
   const select: string[] = [];
+  /*
+   * Grouped expressions are recorded as SELECT positions rather than repeated as SQL.
+   *
+   * A parameterised dimension — a binned column, or a derived expression carrying literals — emits
+   * placeholders. Repeating its text in GROUP BY would emit those placeholders a second time while
+   * the parameter list still bound them once, so the statement arrived with more placeholders than
+   * values and DuckDB rejected it. A positional reference names the same expression without
+   * re-emitting it, which keeps placeholders and parameters in step by construction.
+   */
   const groupBy: string[] = [];
   const resultColumns: ResultColumn[] = [];
+  /** Records the SELECT position of the expression just pushed, which is what GROUP BY refers to. */
+  const groupBySelectPosition = (): void => {
+    groupBy.push(`${select.length}`);
+  };
 
   // Dimension parameters precede the WHERE values, because a binned or derived dimension binds its
   // boundaries in the SELECT list. Collected separately so the final order matches the statement.
@@ -246,7 +259,7 @@ export const compileAnalysisQuery = (
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
       if (!compiled.ok) return compiled;
       select.push(compiled.value.sql);
-      groupBy.push(compiled.value.sql);
+      groupBySelectPosition();
       dimensionParameters.push(...compiled.value.parameters);
       resultColumns.push({ key: derived.id, name: derived.name, logicalType: derived.logicalType });
       continue;
@@ -255,7 +268,7 @@ export const compileAnalysisQuery = (
     const resolved = resolve(columnId);
     if (resolved === undefined) return err(missingColumn(columnId));
     select.push(resolved.sql);
-    groupBy.push(resolved.sql);
+    groupBySelectPosition();
     resultColumns.push({
       key: resolved.column.id,
       name: resolved.column.name,
@@ -273,9 +286,9 @@ export const compileAnalysisQuery = (
     select.push(compiled.value.sql);
     dimensionParameters.push(...compiled.value.parameters);
 
-    // A quantile bin compiles to a window function, which SQL forbids in GROUP BY. Its buckets are
-    // already one row per input row, so the outer query groups by the emitted position instead.
-    if (bin.strategy.kind !== 'quantile') groupBy.push(compiled.value.sql);
+    // A quantile bin compiles to a window function, which SQL forbids in GROUP BY at all — its
+    // buckets are already one row per input row, so it is left ungrouped entirely.
+    if (bin.strategy.kind !== 'quantile') groupBySelectPosition();
 
     resultColumns.push({
       key: resolved.column.id,
@@ -340,7 +353,11 @@ export const compileAnalysisQuery = (
       const category = resolve(query.distribution.categoryColumnId);
       if (category === undefined) return err(missingColumn(query.distribution.categoryColumnId));
       select.unshift(category.sql);
-      groupBy.unshift(category.sql);
+      // Prepending shifts every already-recorded SELECT position by one, so the existing positional
+      // entries are renumbered rather than left pointing at the wrong expression. A box plot binds
+      // no other dimension today, which makes this a no-op in practice and correct if that changes.
+      for (const [index, position] of groupBy.entries()) groupBy[index] = `${Number(position) + 1}`;
+      groupBy.unshift('1');
       resultColumns.unshift({
         key: category.column.id,
         name: category.column.name,
