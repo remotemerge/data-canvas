@@ -134,6 +134,15 @@ export interface SamplingInput {
   estimatedRows: number;
   /** Defaults to the chart point budget; overridable so tests need no large fixtures. */
   budget?: number;
+  /**
+   * The point count the plot can legibly show, when the caller knows its width.
+   *
+   * Applies to temporal widening alone. Widening is the one reduction that stays exact — it reads
+   * every row and only changes the bucket width — so it is safe to apply for readability before
+   * anything is over budget. Every other strategy discards or estimates data and therefore stays
+   * governed by `budget`, so a narrow panel can never silently drop categories or rows.
+   */
+  readableBudget?: number;
 }
 
 /**
@@ -148,40 +157,49 @@ export const planSampling = ({
   kind,
   estimatedRows,
   budget = MAX_CHART_POINTS,
+  readableBudget,
 }: SamplingInput): SamplingPlan => {
   const exact: SamplingPlan = { query, disclosure: null };
 
-  if (estimatedRows <= budget) return exact;
-
-  // A headline figure is never approximated. These kinds also collapse to a single row, so reaching
-  // here at all means the estimate was wrong rather than that the result is genuinely large.
+  // A headline figure is never approximated, and neither kind has an axis to widen.
   if (requiresExactResult(kind)) return exact;
+
+  const temporalBin = (query.binnedDimensions ?? []).find((bin) => bin.strategy.kind === 'temporal');
+
+  // Widening is checked first and against the tighter of the two budgets. It is the only reduction
+  // that keeps every row and every measure exact, so applying it for legibility costs no fidelity —
+  // a year of daily points becomes weekly or monthly instead of hundreds of overlapping spikes.
+  if (temporalBin !== undefined && temporalBin.strategy.kind === 'temporal') {
+    const target = Math.min(budget, readableBudget ?? budget);
+
+    if (estimatedRows > target) {
+      const from = temporalBin.strategy.unit;
+      const to = widenTemporalUnit(from, estimatedRows, target);
+
+      if (to !== from) {
+        return {
+          query: {
+            ...query,
+            binnedDimensions: (query.binnedDimensions ?? []).map((bin) =>
+              bin === temporalBin ? { ...bin, strategy: { kind: 'temporal', unit: to } } : bin,
+            ),
+          },
+          // Widening reads every row; only the bucket width changed, so the measures stay exact.
+          disclosure: { strategy: { kind: 'temporalWiden', from, to }, rate: 1, estimatedRows },
+        };
+      }
+    }
+  }
+
+  // Past here every strategy loses information, so the performance budget alone decides. A result
+  // that merely reads densely is left intact rather than being thinned into an approximation.
+  if (estimatedRows <= budget) return exact;
 
   // The rows that can actually arrive, not the rows the budget would allow. The compiler clamps
   // every statement to `MAX_QUERY_LIMIT`, so a rate computed from a larger budget would describe a
   // sample the user never received — and a disclosure that misstates the rate is worse than none.
   const deliverable = Math.min(budget, MAX_QUERY_LIMIT);
   const rate = clampRate(deliverable / estimatedRows);
-
-  const temporalBin = (query.binnedDimensions ?? []).find((bin) => bin.strategy.kind === 'temporal');
-
-  if (temporalBin !== undefined && temporalBin.strategy.kind === 'temporal') {
-    const from = temporalBin.strategy.unit;
-    const to = widenTemporalUnit(from, estimatedRows, budget);
-
-    if (to !== from) {
-      return {
-        query: {
-          ...query,
-          binnedDimensions: (query.binnedDimensions ?? []).map((bin) =>
-            bin === temporalBin ? { ...bin, strategy: { kind: 'temporal', unit: to } } : bin,
-          ),
-        },
-        // Widening reads every row; only the bucket width changed, so the measures stay exact.
-        disclosure: { strategy: { kind: 'temporalWiden', from, to }, rate: 1, estimatedRows },
-      };
-    }
-  }
 
   if (isRowLevel(query)) {
     return {

@@ -102,6 +102,64 @@ describe('adaptive sampling policy', () => {
     expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'month' });
   });
 
+  /*
+   * A year and a half of daily points is far inside the 5,000-point performance budget and still
+   * unreadable in a 900px panel. The readable budget is what turns that into a weekly series.
+   */
+  test('widens a temporal bucket to what the plot can legibly show', () => {
+    const plan = planSampling({
+      query: temporalQuery(),
+      kind: 'line',
+      estimatedRows: 550,
+      budget: 5_000,
+      readableBudget: 180,
+    });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'week' });
+  });
+
+  test('a temporal result the plot can already show is left exact', () => {
+    const plan = planSampling({
+      query: temporalQuery(),
+      kind: 'line',
+      estimatedRows: 90,
+      budget: 5_000,
+      readableBudget: 180,
+    });
+
+    expect(plan.disclosure).toBeNull();
+  });
+
+  /*
+   * Readability must never cost data. Widening is exempt because it keeps every row, but a narrow
+   * panel must not start folding categories into an "Other" bucket — that is a fidelity decision,
+   * and only the performance budget makes it.
+   */
+  test('a narrow plot never triggers lossy reduction of a categorical result', () => {
+    const plan = planSampling({
+      query: groupedQuery(),
+      kind: 'bar',
+      estimatedRows: 400,
+      budget: 5_000,
+      readableBudget: 60,
+    });
+
+    expect(plan.disclosure).toBeNull();
+    expect(plan.query).toEqual(groupedQuery());
+  });
+
+  test('the performance budget still applies when it is the tighter of the two', () => {
+    const plan = planSampling({
+      query: temporalQuery(),
+      kind: 'line',
+      estimatedRows: 3_650,
+      budget: 200,
+      readableBudget: 5_000,
+    });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'month' });
+  });
+
   test('widening picks the narrowest unit that fits', () => {
     expect(widenTemporalUnit('day', 3_650, 200)).toBe('month');
     expect(widenTemporalUnit('day', 3_650, 600)).toBe('week');

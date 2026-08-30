@@ -3,7 +3,7 @@ import type { AnalysisResult, DataEnginePort } from '@/application/ports/data-en
 import { planSampling, requiresExactResult } from '@/application/queries/adaptive-sampling.ts';
 import type { SamplingDisclosure } from '@/application/queries/adaptive-sampling.ts';
 import { foldOtherBucket, isAdditiveAggregate } from '@/application/queries/sampling-disclosure.ts';
-import { boundChartRows, MAX_CHART_POINTS } from '@/application/queries/sampling-policy.ts';
+import { boundChartRows, MAX_CHART_POINTS, readableChartPoints } from '@/application/queries/sampling-policy.ts';
 import { propagateSelection } from '@/application/selection/propagate-selection.ts';
 import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
@@ -93,6 +93,13 @@ export const executeVisualizationQuery = async (
   workspace: Workspace,
   engine: DataEnginePort = registeredDataEngine,
   signal?: AbortSignal,
+  /**
+   * The rendered plot's width in pixels, when the caller has measured it.
+   *
+   * Only ever narrows a temporal chart's buckets to what the panel can legibly show. Omitted by
+   * every non-rendering caller — a WebMCP tool has no plot — and those keep the point budget alone.
+   */
+  plotWidth?: number,
 ): Promise<Result<ChartResult, DomainError>> => {
   const resolved = resolveVisualizationQuery(visualization, workspace);
 
@@ -110,7 +117,12 @@ export const executeVisualizationQuery = async (
   const plan =
     estimatedRows === undefined
       ? { query: resolved, disclosure: null }
-      : planSampling({ query: resolved, kind: visualization.kind, estimatedRows });
+      : planSampling({
+          query: resolved,
+          kind: visualization.kind,
+          estimatedRows,
+          ...(plotWidth === undefined ? {} : { readableBudget: readableChartPoints(plotWidth) }),
+        });
 
   const result: Result<AnalysisResult, DomainError> = await measureAsync('visualization-query', () =>
     engine.executeAnalysis(plan.query, scheduling),
