@@ -399,8 +399,7 @@ export const createDataEngine = (): DataEngine => {
     }
   };
 
-  // Reads a bounded row window after clamping the inlined `LIMIT` and `OFFSET` values.
-  // Relations available to the compiler in this session.
+  // Supplies the SQL compiler with session relations, relationships, and derived columns.
   const queryContext = (): {
     datasets: QueryDataset[];
     relationships: Relationship[];
@@ -576,17 +575,32 @@ export const createDataEngine = (): DataEngine => {
     const limit = Math.min(Math.max(Math.trunc(request.limit) || 0, 0), MAX_TABLE_WINDOW_ROWS);
     const offset = Math.max(Math.trunc(request.offset) || 0, 0);
     const filters = enabledExpressions(request.filters);
+    // Derived columns are virtual, so add their metadata before compiling the full projection.
+    const derivedColumns = Object.values(derivedColumnDefinitions).filter(
+      (column) => column.datasetId === request.datasetId,
+    );
+    const projectedColumns = [
+      ...relation.columns,
+      ...derivedColumns.map((column) => ({
+        id: column.id,
+        name: column.name,
+        physicalName: '',
+        databaseType: '',
+        logicalType: column.logicalType,
+        nullable: true,
+      })),
+    ];
     const compiled = compileAnalysisQuery(
       {
         datasetId: request.datasetId,
-        dimensions: [],
+        dimensions: projectedColumns.map((column) => column.id),
         measures: [],
         filters,
         orderBy: request.sort ?? [],
         limit,
         offset,
       },
-      queryDataset(request.datasetId, relation),
+      queryContext(),
     );
     if (!compiled.ok) return compiled;
     const countKey = {
@@ -619,7 +633,7 @@ export const createDataEngine = (): DataEngine => {
           return {
             rows: readArrowRows(
               table,
-              relation.columns.map((column) => column.logicalType),
+              projectedColumns.map((column) => column.logicalType),
             ).rows,
             totalRowCount,
           };
@@ -634,7 +648,7 @@ export const createDataEngine = (): DataEngine => {
 
     if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
 
-    const columnIds = relation.columns.map((column) => column.id);
+    const columnIds = projectedColumns.map((column) => column.id);
 
     // Superseded reads are normal interaction; callers keep the current window.
     if (scheduled.stale) {
@@ -697,7 +711,7 @@ export const createDataEngine = (): DataEngine => {
     return ok(range);
   };
 
-  // Profiles one column with bounded aggregate queries.
+  // Profiles a physical or derived column with bounded aggregate queries.
   const getColumnStatistics = async (
     request: ColumnStatisticsRequest,
   ): Promise<Result<ColumnStatistics, DomainError>> => {
@@ -707,7 +721,19 @@ export const createDataEngine = (): DataEngine => {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
 
-    const column = relation.columns.find((candidate) => candidate.id === request.columnId);
+    const derived = derivedColumnDefinitions[request.columnId];
+    const column =
+      relation.columns.find((candidate) => candidate.id === request.columnId) ??
+      (derived?.datasetId === request.datasetId
+        ? {
+            id: derived.id,
+            name: derived.name,
+            physicalName: '',
+            databaseType: '',
+            logicalType: derived.logicalType,
+            nullable: true,
+          }
+        : undefined);
 
     if (column === undefined) {
       return err(domainError('COLUMN_NOT_FOUND', 'The statistics request references a column that does not exist.'));
@@ -715,17 +741,23 @@ export const createDataEngine = (): DataEngine => {
 
     const filters = enabledExpressions(request.filters);
     const numeric = column.logicalType === 'number';
+    const temporal = column.logicalType === 'date' || column.logicalType === 'timestamp';
+    const extrema = numeric || temporal;
     const measures: AnalysisQuery['measures'] = [
       { aggregate: 'count', alias: 'rows' },
       { columnId: column.id, aggregate: 'count', alias: 'nonNull' },
       { columnId: column.id, aggregate: 'count_distinct', alias: 'distinct' },
-      ...(numeric
+      ...(extrema
         ? ([
-            { columnId: column.id, aggregate: 'min', alias: 'lo' },
-            { columnId: column.id, aggregate: 'max', alias: 'hi' },
-            { columnId: column.id, aggregate: 'avg', alias: 'mean' },
-            { columnId: column.id, aggregate: 'median', alias: 'median' },
-            { columnId: column.id, aggregate: 'stddev', alias: 'stddev' },
+            { columnId: column.id, aggregate: 'min' as const, alias: 'lo' },
+            { columnId: column.id, aggregate: 'max' as const, alias: 'hi' },
+            ...(numeric
+              ? [
+                  { columnId: column.id, aggregate: 'avg' as const, alias: 'mean' },
+                  { columnId: column.id, aggregate: 'median' as const, alias: 'median' },
+                  { columnId: column.id, aggregate: 'stddev' as const, alias: 'stddev' },
+                ]
+              : []),
           ] satisfies AnalysisQuery['measures'])
         : []),
     ];
@@ -744,6 +776,12 @@ export const createDataEngine = (): DataEngine => {
     const rowCount = Number(row?.[0] ?? 0);
     const nonNull = Number(row?.[1] ?? 0);
     const distinctCount = Number(row?.[2] ?? 0);
+    // Convert temporal extrema to ISO strings for the data-engine port.
+    const temporalBound = (value: unknown): string => {
+      const date = new Date(typeof value === 'number' ? value : Number(value));
+      if (Number.isNaN(date.getTime())) return String(value ?? '');
+      return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
+    };
 
     // Cache exact statistics for this dataset revision.
     statisticsCache.setColumnStatistics(column.id, relation.revision, {
@@ -757,13 +795,17 @@ export const createDataEngine = (): DataEngine => {
       nullCount: Math.max(rowCount - nonNull, 0),
       distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
       distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
-      ...(numeric
+      ...(extrema
         ? {
-            min: Number(row?.[3] ?? 0),
-            max: Number(row?.[4] ?? 0),
-            mean: Number(row?.[5] ?? 0),
-            median: Number(row?.[6] ?? 0),
-            stddev: Number(row?.[7] ?? 0),
+            min: numeric ? Number(row?.[3] ?? 0) : temporalBound(row?.[3]),
+            max: numeric ? Number(row?.[4] ?? 0) : temporalBound(row?.[4]),
+            ...(numeric
+              ? {
+                  mean: Number(row?.[5] ?? 0),
+                  median: Number(row?.[6] ?? 0),
+                  stddev: Number(row?.[7] ?? 0),
+                }
+              : {}),
           }
         : {}),
     };

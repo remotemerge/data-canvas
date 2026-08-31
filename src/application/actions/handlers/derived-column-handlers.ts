@@ -9,7 +9,7 @@ import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-// Adds a derived-column definition; the compiler evaluates it when a query uses it.
+// Adds the definition and exposes it as a dataset column; the compiler evaluates it when a query uses it.
 export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> = (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
@@ -34,14 +34,33 @@ export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> 
     createdBy: deps.actor,
   };
 
+  const updatedDataset = {
+    ...dataset.value,
+    columns: [
+      ...dataset.value.columns,
+      {
+        id: derived.id,
+        name: derived.name,
+        physicalName: '',
+        databaseType: '',
+        logicalType: derived.logicalType,
+        nullable: true,
+      },
+    ],
+  };
+
   return ok({
-    workspace: { ...workspace, derivedColumns: { ...workspace.derivedColumns, [derived.id]: derived } },
+    workspace: {
+      ...workspace,
+      datasets: { ...workspace.datasets, [updatedDataset.id]: updatedDataset },
+      derivedColumns: { ...workspace.derivedColumns, [derived.id]: derived },
+    },
     changedEntityIds: [derived.id],
     summary: `Created derived column '${derived.name}' of type ${derived.logicalType}.`,
   });
 };
 
-// Refuses to remove a derived column while other definitions or charts reference it.
+// Removes the definition and dataset column after confirming that no definitions or charts reference it.
 export const handleRemoveDerivedColumn: ActionHandler<RemoveDerivedColumnInput> = (workspace, payload) => {
   const derived = resolveDerivedColumn(workspace, payload.derivedColumnId);
 
@@ -87,7 +106,19 @@ export const handleRemoveDerivedColumn: ActionHandler<RemoveDerivedColumnInput> 
   }
 
   return ok({
-    workspace: { ...workspace, derivedColumns: omitKeys(workspace.derivedColumns, [derived.value.id]) },
+    workspace: {
+      ...workspace,
+      datasets: {
+        ...workspace.datasets,
+        [derived.value.datasetId]: {
+          ...workspace.datasets[derived.value.datasetId]!,
+          columns: workspace.datasets[derived.value.datasetId]!.columns.filter(
+            (column) => column.id !== derived.value.id,
+          ),
+        },
+      },
+      derivedColumns: omitKeys(workspace.derivedColumns, [derived.value.id]),
+    },
     changedEntityIds: [derived.value.id],
     summary: `Removed derived column '${derived.value.name}'.`,
   });
