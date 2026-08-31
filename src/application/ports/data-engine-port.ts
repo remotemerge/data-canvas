@@ -85,9 +85,9 @@ export interface ColumnStatistics {
   // Capped count; equality with the cap means "at least this many."
   distinctCount: number;
   distinctCountCapped: boolean;
-  // Numeric columns only.
-  min?: number;
-  max?: number;
+  // Numeric values, or ISO strings for date and timestamp columns.
+  min?: number | string;
+  max?: number | string;
   mean?: number;
   median?: number;
   stddev?: number;

@@ -61,15 +61,19 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
       {profile.min === undefined ? null : (
         <>
           <dt>Min</dt>
-          <dd>{formatNumber(profile.min)}</dd>
+          <dd>{typeof profile.min === 'number' ? formatNumber(profile.min) : profile.min}</dd>
           <dt>Max</dt>
-          <dd>{formatNumber(profile.max)}</dd>
-          <dt>Mean</dt>
-          <dd>{formatNumber(profile.mean)}</dd>
-          <dt>Median</dt>
-          <dd>{formatNumber(profile.median)}</dd>
-          <dt>Standard deviation</dt>
-          <dd>{formatNumber(profile.stddev)}</dd>
+          <dd>{typeof profile.max === 'number' ? formatNumber(profile.max) : profile.max}</dd>
+          {profile.mean === undefined ? null : (
+            <>
+              <dt>Mean</dt>
+              <dd>{formatNumber(profile.mean)}</dd>
+              <dt>Median</dt>
+              <dd>{formatNumber(profile.median)}</dd>
+              <dt>Standard deviation</dt>
+              <dd>{formatNumber(profile.stddev)}</dd>
+            </>
+          )}
         </>
       )}
 

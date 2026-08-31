@@ -1,6 +1,6 @@
 import { quoteIdentifier } from '@/data/duckdb/identifier-safety.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
-import { isNumericType } from '@/domain/logical-type.ts';
+import { isNumericType, isTemporalType } from '@/domain/logical-type.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -19,7 +19,9 @@ export const compileAggregate = (
   if (aggregate === 'count') return ok('COUNT(*)');
   if (column === undefined) return err(domainError('COLUMN_NOT_FOUND', 'This aggregate requires a column.'));
 
-  if (NUMERIC_ONLY.has(aggregate) && !isNumericType(column.logicalType)) {
+  // Min and max also accept date and timestamp columns.
+  const temporalExtrema = (aggregate === 'min' || aggregate === 'max') && isTemporalType(column.logicalType);
+  if (NUMERIC_ONLY.has(aggregate) && !isNumericType(column.logicalType) && !temporalExtrema) {
     return err(
       domainError('INCOMPATIBLE_COLUMN', `Aggregate '${aggregate}' requires a numeric column.`, {
         columnId: column.id,
