@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
@@ -75,4 +76,3 @@ export const FilterPanel = ({
     </section>
   );
 };
-import { useMemo } from 'react';
