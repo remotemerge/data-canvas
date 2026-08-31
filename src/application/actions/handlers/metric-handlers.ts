@@ -70,6 +70,7 @@ const validateModifier = (
 };
 
 // Stores a metric definition; the engine evaluates it when a value is requested.
+// Percent-of-total and percent-change modifiers default to percent formatting.
 export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, payload, deps) => {
   const name = payload.name.trim();
 
@@ -145,7 +146,12 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
     aggregate: payload.aggregate,
     ...(payload.columnId === undefined ? {} : { columnId: payload.columnId }),
     filters: payload.filters ?? [],
-    ...(payload.format === undefined ? {} : { format: payload.format }),
+    ...(payload.format === undefined
+      ? payload.modifier?.kind === 'percentOfTotal' ||
+        (payload.modifier?.kind === 'timeComparison' && payload.modifier.as === 'percentChange')
+        ? { format: { style: 'percent' as const } }
+        : {}
+      : { format: payload.format }),
     ...(payload.modifier === undefined ? {} : { modifier: payload.modifier }),
     createdBy: deps.actor,
   };

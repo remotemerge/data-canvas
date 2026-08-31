@@ -17,9 +17,8 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
   useEffect(() => {
     // Ignore superseded responses so a slow earlier query cannot overwrite a newer value.
     let cancelled = false;
-    const filters = metric.filters.flatMap((id) => {
-      const filter = filterRecord[id];
-      return filter === undefined || !filter.enabled
+    const filters = Object.values(filterRecord).flatMap((filter) => {
+      return filter.datasetId !== metric.datasetId || !filter.enabled
         ? []
         : [
             {
@@ -34,26 +33,62 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
       .executeAnalysis({
         datasetId: metric.datasetId,
         dimensions: [],
+        ...(metric.modifier?.kind === 'timeComparison'
+          ? {
+              binnedDimensions: [
+                {
+                  columnId: metric.modifier.dateColumnId,
+                  strategy: { kind: 'temporal' as const, unit: metric.modifier.unit },
+                },
+              ],
+            }
+          : {}),
         measures: [
           {
             aggregate: metric.aggregate,
             ...(metric.columnId === undefined ? {} : { columnId: metric.columnId }),
             alias: metric.name,
-            ...(metric.modifier === undefined ? {} : { modifier: metric.modifier }),
+            ...(metric.modifier === undefined || metric.modifier.kind === 'timeComparison'
+              ? {}
+              : { modifier: metric.modifier }),
           },
         ],
         filters,
-        // Time comparisons return one row per period; the card shows the most recent. Other modifiers return one row.
+        // Fetch every temporal bucket so the card can compare the latest value
+        // with the configured prior period.
         limit: metric.modifier?.kind === 'timeComparison' ? 200 : 1,
       })
       .then((result) => {
-        if (cancelled || !result.ok) return;
+        if (cancelled) return;
+        if (!result.ok) {
+          setValue(null);
+          onError(result.error);
+          return;
+        }
 
         const rows = result.value.rows;
+        if (metric.modifier?.kind === 'timeComparison') {
+          // The query returns [period, value] rows, so calculate the requested comparison here.
+          const ordered = rows.toSorted((left, right) => String(left[0]).localeCompare(String(right[0])));
+          const current = Number(ordered.at(-1)?.[1]);
+          const prior = Number(ordered.at(-(metric.modifier.offset + 1))?.[1]);
+          if (!Number.isFinite(current) || !Number.isFinite(prior)) {
+            setValue(null);
+            return;
+          }
+          setValue(
+            metric.modifier.as === 'absolute'
+              ? prior
+              : metric.modifier.as === 'difference'
+                ? current - prior
+                : prior === 0
+                  ? null
+                  : (current - prior) / prior,
+          );
+          return;
+        }
 
-        setValue(
-          metric.modifier?.kind === 'timeComparison' ? (rows[rows.length - 1]?.[2] ?? null) : (rows[0]?.[0] ?? null),
-        );
+        setValue(rows[0]?.[0] ?? null);
       });
 
     return () => {
