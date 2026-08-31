@@ -57,6 +57,8 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
     manualPagination: true,
     rowCount: state.window?.totalRowCount ?? dataset.rowCount ?? 0,
   });
+  // Resolve the row model once per render rather than once per visible row.
+  const rows = table.getRowModel().rows;
   const total = state.window?.totalRowCount ?? dataset.rowCount ?? 0;
   const virtualizer = useVirtualizer({
     count: total,
@@ -97,29 +99,38 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
             <thead>
               {table.getHeaderGroups().map((group) => (
                 <tr key={group.id}>
-                  {group.headers.map((header, index) => (
-                    <th key={header.id} data-align={columnAlignment(dataset.columns[index]!)}>
-                      <SortControls
-                        column={dataset.columns[index] as NonNullable<(typeof dataset.columns)[number]>}
-                        sort={sort}
-                        onChange={(next) => void setTableSort({ datasetId: dataset.id, sort: next })}
-                      />
-                    </th>
-                  ))}
+                  {group.headers.map((header, index) => {
+                    // Columns are generated from dataset.columns, so indexes align.
+                    const column = dataset.columns[index];
+
+                    return column === undefined ? null : (
+                      <th key={header.id} data-align={columnAlignment(column)}>
+                        <SortControls
+                          column={column}
+                          sort={sort}
+                          onChange={(next) => void setTableSort({ datasetId: dataset.id, sort: next })}
+                        />
+                      </th>
+                    );
+                  })}
                 </tr>
               ))}
             </thead>
             <tbody style={{ height: virtualizer.getTotalSize() }}>
               {virtualRows.map((virtualRow) => {
-                const row = table.getRowModel().rows[virtualRow.index - offset];
+                const row = rows[virtualRow.index - offset];
                 if (row === undefined) return null;
                 return (
                   <tr key={virtualRow.key} style={{ transform: `translateY(${virtualRow.start}px)` }}>
-                    {row.getAllCells().map((cell, index) => (
-                      <td key={cell.id} data-align={columnAlignment(dataset.columns[index]!)}>
-                        <table.FlexRender cell={cell} />
-                      </td>
-                    ))}
+                    {row.getAllCells().map((cell, index) => {
+                      const column = dataset.columns[index];
+
+                      return (
+                        <td key={cell.id} {...(column === undefined ? {} : { 'data-align': columnAlignment(column) })}>
+                          <table.FlexRender cell={cell} />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
