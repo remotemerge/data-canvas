@@ -10,6 +10,15 @@ import { asInput, boundedCell, failure, invalidEntity, success } from '@/webmcp/
 const filtersFor = (deps: ToolDependencies, datasetId: string): Filter[] =>
   Object.values(deps.getWorkspace().filters).filter((filter) => filter.datasetId === datasetId && filter.enabled);
 
+// Agent aggregates use the same enabled filters as the table and metric reads.
+const analysisFiltersFor = (deps: ToolDependencies, datasetId: string): AnalysisQuery['filters'] =>
+  filtersFor(deps, datasetId).map((filter) => ({
+    kind: 'comparison',
+    columnId: filter.columnId,
+    operator: filter.operator,
+    ...(filter.value === undefined ? {} : { value: filter.value }),
+  }));
+
 export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   createListRelationshipsTool(deps),
   createGetColumnStatisticsTool(deps),
@@ -46,6 +55,8 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
           title,
           kind,
         })),
+        metrics: Object.values(workspace.metrics),
+        selections: Object.values(workspace.selections),
         filters: Object.values(workspace.filters).map(({ id, datasetId, columnId, operator, enabled }) => ({
           id,
           datasetId,
@@ -69,7 +80,10 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const dataset = workspace.datasets[input.datasetId as string];
       if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${String(input.datasetId)}' does not exist.`);
 
-      // Limit schema expansion to directly related datasets to keep output bounded.
+      const offset = Math.trunc((input.offset as number | undefined) ?? 0);
+      const limit = Math.trunc((input.limit as number | undefined) ?? 5);
+      const columns = dataset.columns.slice(offset, offset + limit);
+      // Page primary columns; only directly related schemas are included when requested.
       const related =
         input.includeRelated === true
           ? Object.values(workspace.relationships)
@@ -93,13 +107,17 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         datasetId: dataset.id,
         name: dataset.name,
         rowCount: dataset.rowCount,
-        columns: dataset.columns.map(({ id, name, logicalType, databaseType, nullable }) => ({
+        columns: columns.map(({ id, name, logicalType, databaseType, nullable }) => ({
           id,
           name,
           logicalType,
           databaseType,
           nullable,
         })),
+        columnsReturned: columns.length,
+        columnsTotal: dataset.columns.length,
+        offset,
+        nextOffset: offset + columns.length < dataset.columns.length ? offset + columns.length : null,
         ...(related.length === 0 ? {} : { related }),
       });
     },
@@ -167,7 +185,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         ...(relationshipIds === undefined ? {} : { relationshipIds }),
         dimensions,
         measures,
-        filters: [],
+        filters: analysisFiltersFor(deps, dataset.id),
         limit: Math.min((input.limit as number | undefined) ?? 50, 200),
       };
       const result = await deps.executeAnalysis(query);
