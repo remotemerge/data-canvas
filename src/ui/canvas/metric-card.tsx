@@ -3,18 +3,22 @@ import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectFilters, selectRevision } from '@/state/selectors/workspace-selectors.ts';
 import { deltaTone, formatNumber, formatValue } from '@/visualization/formatting.ts';
 import { MetricEditor } from '@/ui/canvas/metric-editor.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
 
 export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (error: DomainError) => void }) => {
-  const workspace = useWorkspace((state) => state.workspace);
+  const filterRecord = useWorkspace(selectFilters);
+  const revision = useWorkspace(selectRevision);
   const [value, setValue] = useState<unknown>(null);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
+    // Ignore superseded responses so a slow earlier query cannot overwrite a newer value.
+    let cancelled = false;
     const filters = metric.filters.flatMap((id) => {
-      const filter = workspace.filters[id];
+      const filter = filterRecord[id];
       return filter === undefined || !filter.enabled
         ? []
         : [
@@ -43,7 +47,7 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
         limit: metric.modifier?.kind === 'timeComparison' ? 200 : 1,
       })
       .then((result) => {
-        if (!result.ok) return;
+        if (cancelled || !result.ok) return;
 
         const rows = result.value.rows;
 
@@ -51,7 +55,11 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
           metric.modifier?.kind === 'timeComparison' ? (rows[rows.length - 1]?.[2] ?? null) : (rows[0]?.[0] ?? null),
         );
       });
-  }, [metric, workspace.filters, workspace.revision]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [metric, filterRecord, revision]);
 
   const tone = typeof value === 'number' ? deltaTone(value, metric.format) : 'neutral';
 

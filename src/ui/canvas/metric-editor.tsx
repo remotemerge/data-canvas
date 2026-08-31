@@ -7,6 +7,7 @@ import type { MetricDirection, MetricModifier, TimeComparisonOutput } from '@/do
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectDatasets } from '@/state/selectors/workspace-selectors.ts';
 
 type ModifierKind = MetricModifier['kind'];
 
@@ -31,9 +32,9 @@ export const MetricEditor = ({
   metric: Metric;
   onError(error: DomainError | null): void;
 }): React.JSX.Element => {
-  const workspace = useWorkspace((state) => state.workspace);
+  const datasets = useWorkspace(selectDatasets);
   const { updateMetric } = useActions();
-  const dataset = workspace.datasets[metric.datasetId];
+  const dataset = datasets[metric.datasetId];
   const [kind, setKind] = useState<ModifierKind>(metric.modifier?.kind ?? 'none');
   const [orderBy, setOrderBy] = useState(metric.modifier?.kind === 'runningTotal' ? metric.modifier.orderBy : '');
   const [dateColumnId, setDateColumnId] = useState(

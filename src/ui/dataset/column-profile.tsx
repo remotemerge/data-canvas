@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import { getColumnProfile } from '@/application/queries/column-statistics.ts';
 import type { ColumnProfile as Profile } from '@/application/queries/column-statistics.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectFilters } from '@/state/selectors/workspace-selectors.ts';
 
 // Formats a statistic for display without long decimals.
 const formatNumber = (value: number | undefined): string =>
@@ -11,7 +12,14 @@ const formatNumber = (value: number | undefined): string =>
 
 // Shows bounded aggregate statistics for a column.
 export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: Column }): React.JSX.Element => {
+  /*
+   * Profiling is an engine round trip, so it re-runs only for inputs that change the statistics.
+   * The workspace stays in a ref because getColumnProfile reads it only to resolve the column.
+   */
+  const filterRecord = useWorkspace(selectFilters);
   const workspace = useWorkspace((state) => state.workspace);
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -21,7 +29,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
     setProfile(null);
     setFailed(false);
 
-    void getColumnProfile(registeredDataEngine, workspace, dataset.id, column.id).then((result) => {
+    void getColumnProfile(registeredDataEngine, workspaceRef.current, dataset.id, column.id).then((result) => {
       if (cancelled) return;
 
       if (result.ok) setProfile(result.value);
@@ -31,7 +39,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
     return () => {
       cancelled = true;
     };
-  }, [workspace, dataset.id, column.id]);
+  }, [filterRecord, dataset.id, dataset.revision, column.id]);
 
   if (failed) return <p className="column-profile__status">Statistics are unavailable for this column.</p>;
   if (profile === null) return <p className="column-profile__status">Profiling {column.name}…</p>;

@@ -2,27 +2,26 @@ import { useMemo } from 'react';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectVisualizations } from '@/state/selectors/workspace-selectors.ts';
 import { ChartPanel } from '@/visualization/chart-panel.tsx';
 import { MetricCard } from '@/ui/canvas/metric-card.tsx';
 import { VisualizationBuilder } from '@/ui/canvas/visualization-builder.tsx';
 import { Button } from '@/ui/components/ui/button.tsx';
 
 export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => void }) => {
-  const workspace = useWorkspace((state) => state.workspace);
+  const visualizationRecord = useWorkspace(selectVisualizations);
+  const metricRecord = useWorkspace((state) => state.workspace.metrics);
+  const layout = useWorkspace((state) => state.workspace.layout);
   const actions = useActions();
-  const visualizations = useMemo(() => Object.values(workspace.visualizations), [workspace.visualizations]);
-  const metrics = useMemo(() => Object.values(workspace.metrics), [workspace.metrics]);
-  const layoutById = useMemo(
-    () => new Map(workspace.layout.items.map((item) => [item.visualizationId, item])),
-    [workspace.layout.items],
-  );
+  const visualizations = useMemo(() => Object.values(visualizationRecord), [visualizationRecord]);
+  const metrics = useMemo(() => Object.values(metricRecord), [metricRecord]);
+  const layoutById = useMemo(() => new Map(layout.items.map((item) => [item.visualizationId, item])), [layout.items]);
 
   const resize = async (visualizationId: string, amount: number) => {
-    const current = layoutById.get(visualizationId);
-    if (current === undefined) return;
-    const items = workspace.layout.items.map((item) =>
+    if (!layoutById.has(visualizationId)) return;
+    const items = layout.items.map((item) =>
       item.visualizationId === visualizationId
-        ? { ...item, width: Math.max(3, Math.min(workspace.layout.columns, item.width + amount)) }
+        ? { ...item, width: Math.max(3, Math.min(layout.columns, item.width + amount)) }
         : item,
     );
     const result = await actions.updateLayout({ items });
@@ -47,7 +46,7 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
       ) : (
         <div
           className="visualization-grid"
-          style={{ gridTemplateColumns: `repeat(${workspace.layout.columns}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))` }}
         >
           {visualizations.map((visualization) => {
             const item = layoutById.get(visualization.id);

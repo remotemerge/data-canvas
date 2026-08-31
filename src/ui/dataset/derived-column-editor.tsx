@@ -25,7 +25,7 @@ export const DerivedColumnEditor = ({
   dataset: Dataset;
   onError(error: DomainError | null): void;
 }): React.JSX.Element => {
-  const workspace = useWorkspace((state) => state.workspace);
+  const derivedColumns = useWorkspace((state) => state.workspace.derivedColumns);
   const { createDerivedColumn, removeDerivedColumn } = useActions();
   const [mode, setMode] = useState<FormMode>('arithmetic');
   const [name, setName] = useState('');
@@ -41,8 +41,8 @@ export const DerivedColumnEditor = ({
   );
 
   const existing = useMemo(
-    () => Object.values(workspace.derivedColumns).filter((column) => column.datasetId === dataset.id),
-    [workspace.derivedColumns, dataset.id],
+    () => Object.values(derivedColumns).filter((column) => column.datasetId === dataset.id),
+    [derivedColumns, dataset.id],
   );
 
   const expression = useMemo<DerivedExpression | null>(() => {
@@ -64,7 +64,7 @@ export const DerivedColumnEditor = ({
   const validation =
     expression === null || name.trim() === ''
       ? null
-      : validateDerivedColumn(dataset, { name, expression }, workspace.derivedColumns);
+      : validateDerivedColumn(dataset, { name, expression }, derivedColumns);
 
   const submit = (): void => {
     if (expression === null || validation === null || !validation.ok) return;
