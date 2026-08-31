@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import type {
   ActionResult,
   AddAnnotationInput,
@@ -110,5 +109,5 @@ const humanCommands: WorkspaceCommands = {
   redo: historyCommands.redo,
 };
 
-// React's shared mutation commands.
-export const useActions = (): WorkspaceCommands => useMemo(() => humanCommands, []);
+// React's shared mutation commands. The command table is a module constant, so it is already stable.
+export const useActions = (): WorkspaceCommands => humanCommands;
