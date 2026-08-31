@@ -65,6 +65,7 @@ export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.
             <button
               type="button"
               className="schema__profile-toggle"
+              aria-label={`${profiledColumnId === column.id ? 'Hide' : 'Show'} statistics for ${column.name}`}
               aria-expanded={profiledColumnId === column.id}
               onClick={() => setProfiledColumnId(profiledColumnId === column.id ? null : column.id)}
             >

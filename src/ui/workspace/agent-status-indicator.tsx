@@ -8,7 +8,7 @@ export const AgentStatusIndicator = (): React.JSX.Element => {
     ? 'Agent tools unavailable in this browser'
     : status.executingCount > 0
       ? `Agent is using ${status.executingCount} tool${status.executingCount === 1 ? '' : 's'}`
-      : `${status.registeredCount} agent tools available`;
+      : `${status.registeredCount} agent tool${status.registeredCount === 1 ? '' : 's'} available`;
 
   return (
     <span className="agent-status" data-active={status.executingCount > 0}>

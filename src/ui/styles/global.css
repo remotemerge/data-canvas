@@ -206,7 +206,8 @@ textarea:focus-visible,
 
 .chart-panel__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: var(--dc-space-2);
   justify-content: space-between;
 }
@@ -216,7 +217,7 @@ textarea:focus-visible,
   display: flex;
   flex: 1;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   gap: var(--dc-space-2);
 }
 
@@ -270,7 +271,19 @@ textarea:focus-visible,
 .chart-panel__controls {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
+  margin-left: auto;
   gap: var(--dc-space-2);
+}
+
+@container (max-width: 30rem) {
+  .chart-panel__header h3 {
+    flex-basis: 100%;
+  }
+
+  .chart-panel__title {
+    min-width: 0;
+  }
 }
 
 /* Hide the link-mode label on narrow cards so the title retains space. */
@@ -415,6 +428,27 @@ textarea:focus-visible,
   display: grid;
   gap: var(--dc-space-1);
   color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.annotation-list h4 {
+  margin: 0;
+  font-size: var(--dc-text-sm);
+}
+
+.annotation-list ul {
+  display: grid;
+  gap: var(--dc-space-1);
+  margin: var(--dc-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.annotation-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
   font-size: var(--dc-text-sm);
 }
 
@@ -1627,6 +1661,12 @@ textarea:focus-visible,
   display: flex;
   justify-content: space-between;
   gap: var(--dc-space-2);
+}
+
+.filter-list button,
+.dataset-list__remove,
+.derived-column-editor__list button {
+  white-space: nowrap;
 }
 
 /* Map existing component hooks to semantic theme tokens. */

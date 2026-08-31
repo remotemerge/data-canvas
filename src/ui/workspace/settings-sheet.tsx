@@ -33,7 +33,7 @@ export const SettingsSheet = ({ onError, showHistoryControls }: SettingsSheetPro
           <h2 id="settings-data-title" className="workspace__panel-heading">
             Workspace data
           </h2>
-          <p>Datasets and charts are stored in this browser on this device, and are not backed up.</p>
+          <p>Datasets and charts stay in this browser tab until it is reloaded or closed.</p>
           <ResetWorkspaceDialog />
         </section>
 
