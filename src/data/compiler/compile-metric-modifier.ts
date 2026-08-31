@@ -10,16 +10,7 @@ export interface CompiledModifier {
   parameters: unknown[];
 }
 
-/**
- * Wraps a compiled aggregate in the window function its modifier calls for.
- *
- * `aggregate` is already-compiled SQL such as `SUM("c2")`, so this only ever concatenates trusted
- * fragments. The window's `ORDER BY` reference comes from the same identifier resolver the rest of
- * the compiler uses and is quoted before it arrives.
- *
- * `timeComparison` is absent here on purpose. It needs a gap-filled date spine, so it changes the
- * query's FROM clause rather than only its select list, and it is compiled by `compile-time-spine`.
- */
+// Applies a window modifier to an already-compiled aggregate.
 export const compileMetricModifier = (
   modifier: MetricModifier | undefined,
   aggregate: string,
@@ -29,8 +20,7 @@ export const compileMetricModifier = (
 
   switch (modifier.kind) {
     case 'percentOfTotal':
-      // The denominator is the same aggregate over an empty window, which is the grand total across
-      // every group the query returns. NULLIF keeps an all-zero result from failing the statement.
+      // Divide by the grand total; NULLIF handles an all-zero result.
       return ok({
         sql: `(${aggregate} / NULLIF(SUM(${aggregate}) OVER (), 0))`,
         parameters: [],

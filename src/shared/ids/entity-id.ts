@@ -1,13 +1,7 @@
-/**
- * Stable opaque identifiers for domain entities.
- *
- * Security invariant. This module generates every entity ID and never derives one from a filename,
- * column header, or agent input. Because it is the only source of entity identity, the query
- * compiler can treat a resolved ID as trusted while treating the values around it as untrusted.
- */
+// Stable opaque IDs for domain entities.
 export type EntityId = string;
 
-/** Prefixes make IDs self-describing in logs, errors, and agent-facing payloads. */
+// Entity prefixes used in IDs and agent-facing payloads.
 export const ID_PREFIX = {
   workspace: 'ws',
   dataset: 'ds',
@@ -23,10 +17,5 @@ export const ID_PREFIX = {
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
 
-/**
- * Creates a prefixed, globally unique entity ID, e.g. `ds_3f9c1a2b-...`.
- *
- * Uses `crypto.randomUUID()` rather than a counter so IDs stay unique across reloads and across
- * a persisted workspace being reopened.
- */
+// Creates a prefixed globally unique entity ID.
 export const createEntityId = (prefix: IdPrefix): EntityId => `${prefix}_${crypto.randomUUID()}`;

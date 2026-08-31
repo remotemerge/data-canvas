@@ -11,21 +11,10 @@ import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-/**
- * Upper bound on an explicit key selection.
- *
- * Key mode materializes row keys in application state, so it is capped. A selection larger than
- * this should be expressed as a predicate, which describes "all rows in Q4" without enumerating
- * them.
- */
+// Maximum number of row keys stored for an explicit selection.
 export const MAX_SELECTION_KEYS = 10_000;
 
-/**
- * Replaces the selection for a dataset.
- *
- * One selection per dataset. Two concurrent highlights on the same data would leave the table and
- * charts disagreeing about what is selected, so a new selection supersedes the old.
- */
+// Replaces the current selection for a dataset.
 export const handleSetSelection: ActionHandler<SetSelectionInput> = (workspace, payload) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
@@ -75,17 +64,7 @@ export const handleSetSelection: ActionHandler<SetSelectionInput> = (workspace, 
   });
 };
 
-/**
- * Adds to the selection on a dataset instead of replacing it.
- *
- * Predicates union: "region = EU" extended by "region = APAC" selects both. Keys concatenate and are
- * de-duplicated. With nothing currently selected this is exactly `selection.set`, which is what lets
- * a ctrl-click sequence start on an empty canvas without a special case.
- *
- * A key selection that outgrows `MAX_SELECTION_KEYS` is refused with the same message `set` uses
- * rather than silently truncating — a selection that quietly dropped rows would misreport what is
- * highlighted.
- */
+// Extends the current selection with a predicate or bounded key list.
 export const handleExtendSelection: ActionHandler<ExtendSelectionInput> = (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
@@ -95,8 +74,7 @@ export const handleExtendSelection: ActionHandler<ExtendSelectionInput> = (works
 
   if (existing === undefined) return handleSetSelection(workspace, payload, deps);
 
-  // Modes must agree: a union of a key list and a predicate has no single representation, and
-  // guessing one would make the resulting selection mean something neither click asked for.
+  // Key and predicate modes cannot be combined without changing the selection's meaning.
   if (existing.mode !== payload.mode) {
     return err(
       domainError(
@@ -136,8 +114,7 @@ export const handleExtendSelection: ActionHandler<ExtendSelectionInput> = (works
     return err(domainError('UNSUPPORTED_OPERATION', "Selection mode 'predicate' requires a predicate."));
   }
 
-  // Flattened rather than nested, so extending repeatedly does not build a right-leaning tree of
-  // single-operand `or` nodes that the compiler would have to walk on every query.
+  // Flatten repeated extensions so the compiler does not walk a deep chain of single-operand `or` nodes.
   const operands =
     existing.predicate?.kind === 'or'
       ? [...existing.predicate.operands]

@@ -47,16 +47,14 @@ describe('resolveJoinPath', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // Every step must join from a dataset already in the chain, or the SQL would reference an
-    // alias the FROM clause has not introduced yet.
+    // Each step must join from a dataset already in the chain.
     expect(result.value.steps.map((step) => step.toDatasetId)).toEqual(['ds_customers', 'ds_products']);
     expect(result.value.steps[0]?.fromDatasetId).toBe('ds_orders');
     expect(result.value.steps[1]?.fromDatasetId).toBe('ds_customers');
   });
 
   test('traverses a relationship declared in the opposite direction', () => {
-    // The anchor is the relationship's right side; reachability must not depend on which side the
-    // user happened to pick as "left".
+    // Reachability must not depend on the declared relationship side.
     const result = resolveJoinPath('ds_customers', ['ds_orders'], [relate('rel_1', 'ds_orders', 'ds_customers')]);
 
     expect(result.ok).toBe(true);
@@ -81,7 +79,7 @@ describe('resolveJoinPath', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('NO_JOIN_PATH');
     expect(result.error.message).toContain('ds_products');
-    // The message must be corrective rather than merely descriptive.
+    // The message must help correct the request.
     expect(result.error.message).toContain('Create a relationship');
   });
 

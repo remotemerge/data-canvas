@@ -4,30 +4,20 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 export const MAX_DERIVED_COLUMN_NAME_LENGTH = 80;
 
-/**
- * A column computed from other columns rather than read from the imported file.
- *
- * A derived column compiles to a SQL expression injected into the queries that reference it, not to
- * a materialized table. Materializing would duplicate storage and would need invalidating on every
- * change to the base dataset, and DuckDB evaluates these expressions cheaply enough that the copy
- * buys nothing.
- *
- * `logicalType` is inferred from the expression when the column is created, then corrected against
- * the type DuckDB actually returns on first execution. Inference is a prediction; the engine decides.
- */
+// Column computed from an expression tree at query time.
 export interface DerivedColumn {
   id: EntityId;
-  /** The dataset this column attaches to. Every referenced column must be reachable from it. */
+  // Dataset this column attaches to.
   datasetId: EntityId;
-  /** Display label, rendered as plain text and never used to build a SQL identifier. */
+  // Display label; never used to build a SQL identifier.
   name: string;
   expression: DerivedExpression;
   logicalType: LogicalType;
-  /** True once DuckDB's own result type has confirmed or replaced the inferred type. */
+  // Whether the engine has confirmed the inferred logical type.
   typeVerified: boolean;
   createdBy: 'human' | 'agent' | 'system';
 }
 
-/** Derived column IDs carry the same `col_` prefix as physical ones, so a binding treats them alike. */
+// Derived IDs use the column prefix so bindings treat them like physical columns.
 export const isDerivedColumnId = (columnId: EntityId, derived: Record<EntityId, DerivedColumn>): boolean =>
   Object.hasOwn(derived, columnId);

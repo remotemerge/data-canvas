@@ -4,7 +4,7 @@ export const getDatasetSchemaSchema = {
   type: 'object',
   properties: {
     datasetId: { type: 'string', minLength: 1, maxLength: 100 },
-    /** Includes columns from directly related datasets, so an agent can plan a join in one call. */
+    // Include columns from directly related datasets.
     includeRelated: { type: 'boolean' },
   },
   required: ['datasetId'],

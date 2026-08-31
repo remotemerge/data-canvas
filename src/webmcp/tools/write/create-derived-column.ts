@@ -4,16 +4,7 @@ import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-ty
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 
-/**
- * Adds a derived column from a validated expression tree.
- *
- * The tree is the reason this tool can exist at all. A formula string would be arbitrary SQL behind
- * a friendlier name; a closed node vocabulary is something the compiler can emit safely.
- *
- * Ajv checks the tree's shape through a recursive `$ref`, which cannot express a depth limit. The
- * dispatcher's validator enforces depth, node count, type compatibility, and acyclicity, so both
- * layers run before anything compiles.
- */
+// Adds a derived column from a validated expression tree.
 export const createCreateDerivedColumnTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'create_derived_column',
   description:

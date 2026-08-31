@@ -1,7 +1,4 @@
-/*
- * Theme tokens live as CSS custom properties so the ECharts adapter can read them at runtime
- * instead of duplicating a palette in JavaScript.
- */
+/* Share theme tokens with the ECharts adapter through CSS custom properties. */
 
 :root {
   color-scheme: light;
@@ -54,7 +51,7 @@
   --table-hover: #f8fafc;
   --table-selected: #eff6ff;
 
-  /* Compatibility aliases are removed after all visualization adapters read the semantic names. */
+  /* Remove compatibility aliases after visualization adapters use semantic tokens. */
   --dc-color-surface: var(--background);
   --dc-color-surface-raised: var(--panel);
   --dc-color-border: var(--border);
@@ -71,14 +68,7 @@
   --dc-color-chart-9: #ca8a04;
   --dc-color-chart-10: #dc2626;
 
-  /*
-   * Delta tones. Which direction is good is a per-metric decision the app cannot infer, so these
-   * name the judgement rather than the direction: a metric where a rise is bad renders an increase
-   * in the negative tone.
-   *
-   * Colour is never the only signal. A delta also carries an explicit sign, so the meaning survives
-   * for anyone who cannot distinguish these two hues.
-   */
+  /* Delta colors reinforce the explicit sign; metric direction remains a user choice. */
   --dc-color-positive: #15803d;
   --dc-color-negative: #b91c1c;
 

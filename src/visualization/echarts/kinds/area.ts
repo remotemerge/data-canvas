@@ -1,11 +1,4 @@
-/**
- * The fill is a weight cue, not a second encoding.
- *
- * At full opacity the area dominates the line whose position carries the actual value, and stacked
- * bands become indistinguishable from one another. A faint wash keeps the series legible where they
- * overlap. Unsmoothed for the same reason as `line`: a spline would assert values between the
- * measured points.
- */
+// Use a light area fill so the line remains the value encoding.
 const AREA_FILL_OPACITY = 0.08;
 
 export const buildAreaSeries = (names: string[], x: string | undefined, stacked: boolean) =>

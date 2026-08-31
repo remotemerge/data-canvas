@@ -11,13 +11,7 @@ export const workspaceTableFeatures = tableFeatures({
 });
 export const formatCellValue = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
 
-/**
- * Which edge a column's values align to.
- *
- * Numbers align right so digits of the same magnitude stack into columns and can be compared by
- * eye; everything else reads from the left. The table pairs this with tabular figures, without
- * which right alignment alone still leaves proportional digits ragged.
- */
+// Returns the alignment for a table column.
 export const columnAlignment = (column: Column): 'end' | 'start' =>
   isNumericType(column.logicalType) ? 'end' : 'start';
 

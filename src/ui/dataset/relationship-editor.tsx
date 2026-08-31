@@ -9,7 +9,7 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
-/** Mirrors the validator's rule, so the picker only offers pairs the action would accept. */
+// Mirrors relationship validation for the form's key picker.
 const joinTypeClass = (type: LogicalType): string => {
   if (isNumericType(type)) return 'number';
   if (isTemporalType(type)) return 'temporal';
@@ -18,17 +18,7 @@ const joinTypeClass = (type: LogicalType): string => {
   return type;
 };
 
-/**
- * Creates a relationship between two datasets.
- *
- * The key-column picker offers only type-compatible pairs, and the same `validateRelationship` the
- * action runs is called here to show the rejection reason before the user submits. Running the real
- * validator rather than a UI-local approximation is what keeps the form from ever offering something
- * the dispatcher would refuse.
- *
- * The fan-out warning is measured by the engine during the action, so it appears in the resulting
- * summary rather than in this form: it depends on data, which the form has not read.
- */
+// Creates a relationship using shared validation and engine key-quality checks.
 export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) => void }): React.JSX.Element => {
   const workspace = useWorkspace((state) => state.workspace);
   const actions = useActions();
@@ -52,8 +42,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
   const right = workspace.datasets[rightDatasetId];
   const selectedLeftColumn = left?.columns.find((column) => column.id === leftColumnId);
 
-  // Only columns whose type class matches the chosen left key, so an impossible pair is never
-  // offered. Before a left key is chosen every column is a candidate.
+  // Offer only type-compatible key pairs.
   const rightColumns = (right?.columns ?? []).filter(
     (column) =>
       selectedLeftColumn === undefined ||
@@ -77,8 +66,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
       return;
     }
 
-    // The summary carries the engine's fan-out measurement when there is one, so it is surfaced
-    // here rather than discarded.
+    // Show the fan-out warning returned by the action.
     setNotice(result.value.summary);
     setLeftColumnId('');
     setRightColumnId('');
@@ -211,7 +199,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
                         setKind(suggestion.kind);
                       }}
                     >
-                      {/* Column names come from imported headers: text children only. */}
+                      {/* Imported column names render as text. */}
                       {suggestion.leftColumnName} → {suggestion.rightColumnName}
                     </button>
                     <span className="relationship-editor__reason">{suggestion.reason}</span>

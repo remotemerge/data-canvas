@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { convertArrowCell, convertArrowValue, readArrowRows, readScalarCount } from '@/data/duckdb/arrow-conversion.ts';
 import type { ArrowRowSource } from '@/data/duckdb/arrow-conversion.ts';
 
-/** A minimal stand-in for an Arrow table, matching only the surface the converter reads. */
+// Minimal Arrow table stub used by converter tests.
 const arrowTable = (columns: readonly (readonly unknown[])[], names: readonly string[]): ArrowRowSource => ({
   numRows: columns[0]?.length ?? 0,
   getChildAt: (index) => {
@@ -34,7 +34,7 @@ describe('convertArrowValue', () => {
   });
 
   test('keeps an oversized bigint exact by returning a string', () => {
-    // The precision-loss guard. `Number(9007199254740993n)` is 9007199254740992 — silently wrong.
+    // Verify oversized bigint values keep exact decimal text.
     const oversized = BigInt(Number.MAX_SAFE_INTEGER) + 2n;
 
     expect(convertArrowValue(oversized)).toBe(oversized.toString());
@@ -60,7 +60,7 @@ describe('convertArrowValue', () => {
   });
 
   test('stringifies anything unrecognized rather than passing an object through', () => {
-    // An object reaching React or ECharts unconverted renders as [object Object] or breaks a scale.
+    // Unknown objects become strings for renderers.
     expect(convertArrowValue({ toString: () => 'struct' })).toBe('struct');
   });
 });
@@ -71,7 +71,7 @@ describe('convertArrowCell', () => {
   });
 
   test('uses the UTC day rather than the local one', () => {
-    // A local-time reading would shift the day backwards for anyone west of UTC.
+    // Date-only conversion must use UTC.
     expect(convertArrowCell(new Date(Date.UTC(2026, 0, 15, 0, 0, 0)), 'date')).toBe('2026-01-15');
   });
 
@@ -84,13 +84,7 @@ describe('convertArrowCell', () => {
     expect(convertArrowCell(null, 'string')).toBeNull();
   });
 
-  /*
-   * The representation DuckDB-Wasm actually returns.
-   *
-   * Verified in a browser: a `DATE` column arrives as epoch milliseconds, not as a `Date`. Before
-   * this was handled, the preview rendered `1732492800000` in place of `2024-11-25` — the exact
-   * class of bug that centralizing conversion exists to prevent.
-   */
+  // DuckDB DATE values arrive as epoch milliseconds.
   test('reads a date delivered as epoch milliseconds', () => {
     expect(convertArrowCell(1_732_492_800_000, 'date')).toBe('2024-11-25');
   });
@@ -109,7 +103,7 @@ describe('convertArrowCell', () => {
   });
 
   test('reads the epoch itself rather than treating zero as absent', () => {
-    // A falsy check instead of an explicit null test would turn 1970-01-01 into an empty cell.
+    // Explicit null checks preserve epoch zero.
     expect(convertArrowCell(0, 'date')).toBe('1970-01-01');
   });
 
@@ -125,7 +119,7 @@ describe('convertArrowCell', () => {
   });
 
   test('a numeric column is never mistaken for a temporal one', () => {
-    // The logical type is the only thing distinguishing an epoch value from a plain number.
+    // Logical type distinguishes epoch dates from numeric values.
     expect(convertArrowCell(1_732_492_800_000, 'number')).toBe(1_732_492_800_000);
   });
 });
@@ -171,8 +165,7 @@ describe('readArrowRows', () => {
   });
 
   test('hostile cell content is carried through verbatim as a string', () => {
-    // Escaping is the renderer's job. Mangling the value here would corrupt legitimate data while
-    // still not making an unsafe renderer safe.
+    // Preserve data values; renderers handle escaping.
     const hostile = '<img src=x onerror=alert(1)>';
     const table = arrowTable([[hostile]], ['c0']);
 

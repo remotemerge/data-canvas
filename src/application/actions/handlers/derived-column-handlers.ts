@@ -9,12 +9,7 @@ import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-/**
- * Creates a derived column from a validated expression tree.
- *
- * Definition only. The expression compiles when a query references it, which is why creation needs
- * no engine call and why a derived column costs nothing until it is used.
- */
+// Adds a derived-column definition; the compiler evaluates it when a query uses it.
 export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> = (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
@@ -34,7 +29,7 @@ export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> 
     name: validated.value.name,
     expression: payload.expression,
     logicalType: validated.value.logicalType,
-    // The engine has not run the expression yet, so the inferred type is still a prediction.
+    // The engine has not evaluated the expression, so this type is only an inference.
     typeVerified: false,
     createdBy: deps.actor,
   };
@@ -46,12 +41,7 @@ export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> 
   });
 };
 
-/**
- * Removes a derived column, refusing while anything still references it.
- *
- * Refusing rather than cascading: a derived column can underpin another one and any number of
- * charts, and silently deleting a human's work is worse than an error they can act on.
- */
+// Refuses to remove a derived column while other definitions or charts reference it.
 export const handleRemoveDerivedColumn: ActionHandler<RemoveDerivedColumnInput> = (workspace, payload) => {
   const derived = resolveDerivedColumn(workspace, payload.derivedColumnId);
 

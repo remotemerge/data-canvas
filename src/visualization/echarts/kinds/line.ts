@@ -1,11 +1,4 @@
-/*
- * Symbols are hidden but not disabled: `showSymbol: false` still renders one on hover and on the
- * emphasised point, so a dense series reads as a line rather than a string of beads while a single
- * point remains hoverable.
- *
- * Deliberately unsmoothed. A spline through discrete measurements invents values between them and
- * overshoots real extremes, which would make the chart assert movement the data does not record.
- */
+// Hide symbols for dense lines but keep hover emphasis. Do not smooth measured values.
 export const buildLineSeries = (names: string[], x: string | undefined, stacked: boolean) =>
   names.map((name) => ({
     type: 'line' as const,

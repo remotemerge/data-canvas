@@ -4,13 +4,7 @@ import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-ty
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 
-/**
- * Relates two datasets on validated key columns.
- *
- * The agent supplies dataset and column IDs only. Type compatibility, duplicate pairs, cycles, and
- * key quality are all decided by the same application action a human's relationship editor calls, so
- * neither path can create a join the other could not.
- */
+// Creates a relationship from validated dataset and column IDs.
 export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'create_relationship',
   description:
@@ -37,8 +31,7 @@ export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvas
 
     return success({
       revision: result.value.revision,
-      // The summary carries the fan-out warning when the key sample found one, so an agent learns
-      // the join may inflate totals at the moment it creates it rather than after charting it.
+      // Return the fan-out warning from the action summary.
       summary: result.value.summary,
       relationshipId: result.value.changedEntityIds[0],
     });

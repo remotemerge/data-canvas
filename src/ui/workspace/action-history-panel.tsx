@@ -3,18 +3,10 @@ import { recentHistory } from '@/application/history/action-history.ts';
 import { selectHistory } from '@/state/selectors/workspace-selectors.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
-/** How many entries the panel shows. The full log is capped separately by the ring buffer. */
+// Maximum history entries shown in the panel.
 const VISIBLE_ENTRIES = 50;
 
-/**
- * The shared activity log.
- *
- * Actor badges are the point of this panel: once agents write to the workspace, this is where a
- * human sees which changes were theirs and which were not, ordered by revision.
- *
- * Entries carry no payload values by construction, so nothing rendered here can be a dataset cell.
- * Summaries are still rendered as plain text, since they may quote a column display name.
- */
+// Shows recent activity with actor attribution.
 export const ActionHistoryPanel = (): React.JSX.Element => {
   const history = useWorkspace(selectHistory);
 

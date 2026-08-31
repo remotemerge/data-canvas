@@ -9,12 +9,7 @@ afterEach(() => {
   workspaceStore.setState(initialState, true);
 });
 
-/**
- * `useWorkspace` is a one-line `useStore` wrapper, so rendering React adds no coverage here, and
- * the project runs no DOM layer by design. What matters is the mechanism underneath `useStore`, a
- * selector-driven subscription that fires when the selected value changes and not otherwise. These
- * tests assert that directly against the vanilla store.
- */
+// Verifies the hook's selector-driven store subscription without mounting React.
 describe('store subscription path used by useWorkspace', () => {
   test('a committed revision change reaches selector subscribers', () => {
     const observed: number[] = [];

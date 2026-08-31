@@ -1,13 +1,7 @@
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import type { VisualizationKind } from '@/domain/visualization/visualization.ts';
 
-/**
- * Aggregates whose name belongs in the title.
- *
- * `sum` is the default and reads as the plain quantity — "Sales by Region" already means total
- * sales, so naming it adds nothing. The rest genuinely change what the number is, and a chart of
- * averages titled as though it showed totals would misreport the data.
- */
+// Aggregate labels that add useful meaning to a generated title. `sum` remains implicit.
 const AGGREGATE_LABEL: Partial<Record<AggregateFunction, string>> = {
   avg: 'Average',
   min: 'Minimum',
@@ -20,30 +14,23 @@ const AGGREGATE_LABEL: Partial<Record<AggregateFunction, string>> = {
 
 interface TitleInput {
   kind: VisualizationKind;
-  /** Display name of the measure column, absent for kinds that have no measure. */
+  // Measure display name, when the chart uses one.
   measureName?: string;
-  /** Display name of the dimension or binned column, absent when the chart has no dimension. */
+  // Dimension display name, when the chart uses one.
   dimensionName?: string;
   aggregate?: AggregateFunction;
 }
 
-/**
- * Proposes a title describing what the chart shows.
- *
- * Analytical phrasing rather than the binding's mechanics: "Sales by Order Date", not `sum` over
- * `a`. It is a starting point the user edits, so it favours reading naturally over being exhaustive
- * — nothing here is authoritative, and an empty result simply means the caller has too little bound
- * to describe yet.
- */
+// Suggests an editable title from the chart kind and its bound fields.
 export const suggestVisualizationTitle = ({ kind, measureName, dimensionName, aggregate }: TitleInput): string => {
   const prefix = aggregate === undefined ? undefined : AGGREGATE_LABEL[aggregate];
   const measure =
     measureName === undefined ? undefined : prefix === undefined ? measureName : `${prefix} ${measureName}`;
 
-  // A histogram's y is a count it computes itself, so its subject is the binned column alone.
+  // A histogram computes its own count, so the title names only its binned column.
   if (kind === 'histogram') return dimensionName === undefined ? '' : `Distribution of ${dimensionName}`;
 
-  // A box plot summarises one column's spread, optionally split by a category.
+  // A box plot describes one column's spread, optionally split by a category.
   if (kind === 'boxplot') {
     if (measureName === undefined) return '';
 

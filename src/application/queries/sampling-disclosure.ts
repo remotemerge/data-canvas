@@ -2,18 +2,12 @@ import type { SamplingDisclosure } from '@/application/queries/adaptive-sampling
 import { temporalUnitLabel } from '@/application/queries/adaptive-sampling.ts';
 import type { CellValue } from '@/data/duckdb/arrow-conversion.ts';
 
-/**
- * Turns a sampling decision into the text the UI shows and the sentence that explains it.
- *
- * Kept out of the React component so the same wording reaches a badge, a tooltip, and any future
- * agent-facing summary. The explanation states what was actually done, not that "sampling occurred":
- * a user who cannot tell which number is approximate has not been informed.
- */
+// Converts a sampling decision into the badge label and explanation shown to users.
 
 export interface DisclosureText {
-  /** Short badge label. */
+  // Short badge label.
   label: string;
-  /** Full sentence for the tooltip, naming the strategy and its effect on the numbers. */
+  // Full sentence for the tooltip, naming the strategy and its effect on the numbers.
   explanation: string;
 }
 
@@ -56,30 +50,10 @@ export const describeSampling = (disclosure: SamplingDisclosure): DisclosureText
   }
 };
 
-/**
- * Appends an aggregated "Other" row to the retained groups.
- *
- * The bucket is the whole-population total minus the sum of the retained rows. Deriving it by
- * subtraction rather than by reading the remaining groups is what keeps the operation bounded: the
- * unretained groups may number in the millions, and reading them is exactly the work sampling exists
- * to avoid.
- *
- * A chart whose bars no longer add up to the total the user knows is worse than a slow chart, so the
- * bucket is never dropped — but a measure that cannot be summed meaningfully reports `null` rather
- * than a fabricated figure.
- *
- * `measureStartIndex` is where the measure columns begin. Everything before it is a dimension and is
- * replaced by the bucket's label.
- */
+// Appends an `Other` row by subtracting retained sums from the whole-population totals.
 export const OTHER_BUCKET_LABEL = 'Other';
 
-/**
- * Aggregates whose per-group values sum to the whole-population value.
- *
- * Only these can be reconciled by subtraction. An `avg`, `min`, `max`, or `median` over the whole
- * population is not the sum of its per-group results, and `count_distinct` double-counts any value
- * appearing in more than one group — folding either would state a number that is simply wrong.
- */
+// Aggregates that can produce an exact `Other` row by subtraction.
 const ADDITIVE_AGGREGATES: readonly string[] = ['count', 'sum'] as const;
 
 export const isAdditiveAggregate = (aggregate: string): boolean => ADDITIVE_AGGREGATES.includes(aggregate);
@@ -110,8 +84,7 @@ export const foldOtherBucket = (
       if (typeof value === 'number') retainedSum += value;
     }
 
-    // Clamped at zero. Floating-point drift on a large sum can otherwise produce a faintly negative
-    // remainder, which would render as a bar pointing the wrong way.
+    // Clamp floating-point residue so `Other` cannot become a negative bar.
     other[index] = Math.max(total - retainedSum, 0);
   }
 

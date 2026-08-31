@@ -7,7 +7,7 @@ const restore = (state: RestoreWorkspaceInput['state'], changedEntityIds: Entity
   payload: { state, changedEntityIds },
 });
 
-/** Builds a private metadata delta. It never appears in summaries or agent responses. */
+// Builds the internal metadata delta used by undo and redo.
 export const invertAction = (
   action: ApplicationAction,
   before: Workspace,
@@ -54,9 +54,7 @@ export const invertAction = (
       }
       return restore(inverse, action.payload.changedEntityIds);
     }
-    // Dataset lifecycle actions are non-invertible: the browser may no longer hold the source file,
-    // and `dataset.remove` has already dropped the DuckDB relation that the metadata describes.
-    // Restoring the metadata alone would leave every view querying a relation that does not exist.
+    // Dataset lifecycle actions cannot be restored from metadata: the source file or relation may be gone.
     case 'dataset.beginImport':
     case 'dataset.import':
     case 'dataset.failImport':

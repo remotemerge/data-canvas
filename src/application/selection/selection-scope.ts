@@ -3,20 +3,10 @@ import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/** Matches the join resolver's bound, so a selection never claims to reach further than a query can. */
+// Maximum relationship hops allowed for selection propagation.
 const MAX_PROPAGATION_DEPTH = 8;
 
-/**
- * The relationship chain from the selection's dataset to a target dataset.
- *
- * Returns `undefined` when no chain exists. That absence is the whole scope rule: a selection on one
- * dataset means nothing to an unrelated one, because there is no defined correspondence between
- * their rows. Propagating anyway would silently filter a chart by a predicate over columns it does
- * not have.
- *
- * Breadth-first over an acyclic graph, so the first chain found is the only one — the same property
- * `resolve-join-path` relies on, and the reason this returns a single path rather than a set.
- */
+// Finds the relationship chain between two datasets, if one exists.
 export const propagationPath = (
   workspace: Workspace,
   fromDatasetId: EntityId,
@@ -52,6 +42,6 @@ export const propagationPath = (
   return undefined;
 };
 
-/** True when a selection on one dataset has a defined meaning for another. */
+// Returns whether selection can propagate between two datasets.
 export const isWithinSelectionScope = (workspace: Workspace, fromDatasetId: EntityId, toDatasetId: EntityId): boolean =>
   propagationPath(workspace, fromDatasetId, toDatasetId) !== undefined;

@@ -189,16 +189,14 @@ textarea:focus-visible,
   background: var(--dc-color-surface-raised);
 }
 
-/* The card is a column so its body can take the height the header and badges leave. Without this
-   the chart falls back to its own min-height and a taller card is just empty space below it. */
+/* Let the chart fill the space left by the card header and badges. */
 .chart-panel {
   display: flex;
   flex-direction: column;
   gap: var(--dc-space-2);
 }
 
-/* `min-height: 0` lets the body shrink below its content's intrinsic height, which a flex item
-   otherwise refuses to do — without it a tall chart pushes the card past its grid row. */
+/* Let the card body shrink below its content height. */
 .chart-panel__body {
   display: flex;
   flex: 1;
@@ -213,8 +211,7 @@ textarea:focus-visible,
   justify-content: space-between;
 }
 
-/* The title and its provenance disclosure share one line. Without this the `details` keeps its
-   block default and wraps under the title, growing the header until it collides with the controls. */
+/* Keep the title and provenance disclosure on one line. */
 .chart-panel__header h3 {
   display: flex;
   flex: 1;
@@ -223,9 +220,7 @@ textarea:focus-visible,
   gap: var(--dc-space-2);
 }
 
-/* Chart titles are user- or agent-supplied and must truncate rather than push the controls away.
-   The minimum keeps a few characters legible instead of collapsing to zero once the provenance
-   badge and header controls have taken their room. */
+/* Truncate long titles so the controls retain room. */
 .chart-panel__title {
   min-width: 4rem;
   overflow: hidden;
@@ -233,8 +228,7 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 
-/* Shrinks before the title does: the badge is secondary metadata, so on a narrow panel the chart's
-   name is what must stay readable. */
+/* Let provenance yield space before the chart title. */
 .provenance {
   display: inline-flex;
   flex: 0 1 auto;
@@ -254,8 +248,7 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
-/* The history list is a transient disclosure, so it floats over the chart rather than displacing
-   it — expanding it must not resize the plot underneath. */
+/* Float history details so opening them does not resize the chart. */
 .provenance details[open] > :not(summary) {
   position: absolute;
   z-index: 2;
@@ -280,9 +273,7 @@ textarea:focus-visible,
   gap: var(--dc-space-2);
 }
 
-/* On a narrow card the selection control would otherwise squeeze the title down to a few
-   characters. The label is redundant next to the dropdown's own values, so it drops out first and
-   the title keeps the room. */
+/* Hide the link-mode label on narrow cards so the title retains space. */
 @container (max-width: 30rem) {
   .chart-panel .link-mode-control__label {
     position: absolute;
@@ -294,9 +285,7 @@ textarea:focus-visible,
   }
 }
 
-/* ECharts sizes its canvas from this element's box, so it has to fill the body rather than sit at
-   an intrinsic height. The min-height is the floor a chart stays readable at; above it the chart
-   takes whatever the card was given. */
+/* Let ECharts fill the chart body while retaining its readability floor. */
 .chart-panel__chart {
   flex: 1;
   width: 100%;
@@ -309,9 +298,7 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-/* Approximation is a property of the number, so the badge sits with the chart rather than in a
-   corner where it reads as chrome. Bordered instead of coloured: this is information, not a
-   warning, and a red badge would suggest something went wrong. */
+/* Keep the sampling badge with the chart; its border indicates metadata, not an error. */
 .sampling-badge {
   display: inline-block;
   align-self: flex-start;
@@ -323,8 +310,7 @@ textarea:focus-visible,
   cursor: help;
 }
 
-/* Visually hidden but reachable: the full explanation is the accessible name, so a screen-reader
-   user gets the same detail a pointer user gets from the tooltip. */
+/* Keep the full sampling explanation available to assistive technology. */
 .sampling-badge__explanation {
   position: absolute;
   width: 1px;
@@ -351,7 +337,7 @@ textarea:focus-visible,
   animation: dc-spin 0.8s linear infinite;
 }
 
-/* The skeleton reserves the space the chart will occupy, so arriving rows do not shift the layout. */
+/* Reserve chart space while rows load. */
 .query-skeleton {
   display: grid;
   align-content: end;
@@ -390,7 +376,7 @@ textarea:focus-visible,
   }
 }
 
-/* Motion here is decorative; the text and the bar carry the meaning without it. */
+/* Disable decorative motion for reduced-motion users. */
 @media (prefers-reduced-motion: reduce) {
   .query-progress__spinner,
   .query-skeleton__bar {
@@ -406,7 +392,7 @@ textarea:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 
-/* The sign carries the same meaning as the colour, so this reinforces rather than encodes. */
+/* Color reinforces the signed delta; it does not carry meaning alone. */
 .metric-card__value[data-tone="positive"] {
   color: var(--dc-color-positive);
 }
@@ -415,7 +401,7 @@ textarea:focus-visible,
   color: var(--dc-color-negative);
 }
 
-/* Opened by clicking a mark, so it sits under the chart inside the panel and must not widen it. */
+/* Keep the annotation editor within the chart panel. */
 .annotation-editor {
   display: grid;
   gap: var(--dc-space-2);
@@ -467,17 +453,8 @@ textarea:focus-visible,
   }
 }
 
-/* Header, update prompt, body. The prompt row is `auto` and collapses to nothing when no update is
-   pending; naming it matters because an unnamed third child would otherwise get an implicit row.
- *
- * The workspace is exactly viewport-height. It cannot grow with its content: the data table
- * virtualises against the height it is given, so a page that grew to fit the table would feed back
- * into the measurement that sizes it and render every row. */
-/* The update prompt renders nothing until a new build is cached, so a fixed three-row template
-   cannot be used: with the prompt absent the body was auto-placed into the middle `auto` row and
-   the trailing `1fr` row held the leftover viewport as dead space below the panels. The header is
-   fixed and every other child sizes to its content; `.workspace__body` claims the remaining height
-   through `flex: 1` below. */
+/* Keep the optional update prompt from leaving an empty grid row. */
+/* Keep the workspace within the viewport so the table's window stays bounded. */
 .workspace {
   display: flex;
   flex-direction: column;
@@ -572,14 +549,8 @@ textarea:focus-visible,
   text-transform: uppercase;
 }
 
-/* `minmax(0, 1fr)` rather than `1fr`: a grid track's default floor is its content's width, so a wide
-   data table would stretch the middle column and push the inspector off-screen. */
-/* `minmax(0, 1fr)` rather than `1fr`: a grid track's default floor is its content's width, so a wide
-   data table would stretch the middle column and push the inspector off-screen.
- *
- * The row grows to the tallest column rather than being capped, so a panel taller than the viewport
- * extends the page instead of having its lower controls cut off. The canvas column then matches that
- * height, which is what keeps the data panel aligned with the bottom of the longer panel. */
+/* Let the middle grid track shrink below the table's intrinsic width. */
+/* Let the workspace row grow with its tallest panel so controls remain reachable. */
 .workspace__body {
   display: grid;
   flex: 1;
@@ -588,12 +559,7 @@ textarea:focus-visible,
   overflow: hidden;
 }
 
-/* The panels scroll when their content is taller than the viewport.
- *
- * Every control in them has to be reachable, and the two alternatives both fail: clipping cuts the
- * inspector off mid-control, and growing the page feeds back into the height the data table
- * virtualises against, which renders every row. So the panel scrolls itself — the scrollbar appears
- * only when the content genuinely does not fit, and never for the canvas or the chart. */
+/* Scroll panels when their contents exceed the available height. */
 .workspace__panel {
   display: flex;
   flex-direction: column;
@@ -610,17 +576,7 @@ textarea:focus-visible,
   gap: var(--dc-space-4);
 }
 
-/* Divides the panel's groups from each other.
- *
- * Stated as an exclusion rather than a list of allowed predecessors, because the elements above a
- * group vary with state: the dataset list renders a `<ul>` when populated and a bare placeholder
- * paragraph when empty, and enumerating those left the empty panel with a rule above one section
- * but not the next.
- *
- * A heading takes a rule when something precedes it, since it then opens a new group, but never
- * immediately after another rule — the section following a heading belongs to it, and a border
- * there would separate the title from its own content. The gap above matches the padding below,
- * keeping the rule centred between the groups. */
+/* Add dividers between panel groups without separating headings from their content. */
 .workspace__panel-content > *:not(.workspace__panel-heading) + section,
 .workspace__panel-content > * + .workspace__panel-heading {
   border-top: 1px solid var(--dc-color-border);
@@ -639,31 +595,27 @@ textarea:focus-visible,
   border-left: 1px solid var(--dc-color-border);
 }
 
-/* Confirm sits after cancel, so the destructive action is not under the cursor when the dialog
-   opens. */
+/* Keep the destructive action after cancel in the dialog. */
 .workspace__dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--dc-space-2);
 }
 
-/* The gap carries the space below each rule and the padding carries the space above it, so the two
-   must match to keep a divider centred between the sections it separates. */
+/* Center section dividers within the surrounding spacing. */
 .settings {
   display: grid;
   gap: var(--dc-space-4);
   align-content: start;
 }
 
-/* Between sections only. A rule above the first would sit directly under the sheet title, which is
-   already separated from the content by its own weight. */
+/* Add dividers between settings sections, not above the first. */
 .settings > * + * {
   border-top: 1px solid var(--dc-color-border);
   padding-top: var(--dc-space-4);
 }
 
-/* The bottom-anchoring above belongs to the inspector column this notice used to end. Inside the
-   settings sheet it is one section among several and is placed by the grid. */
+/* Do not apply the inspector's bottom anchoring inside the settings sheet. */
 .settings .privacy-notice {
   margin-top: 0;
 }
@@ -689,24 +641,19 @@ textarea:focus-visible,
 .workspace__canvas {
   display: flex;
   flex-direction: column;
-  /* The canvas is the workspace's primary surface and takes the width it is given; centring here
-     would leave charts and tables floating in a narrow column. Individual notices constrain
-     themselves instead. */
+  /* Stretch canvas content to the available width. */
   align-items: stretch;
-  /* Content-first rather than centred: a preview table must start at the top and grow downwards. */
+  /* Start canvas content at the top so preview tables grow downward. */
   justify-content: flex-start;
   gap: var(--dc-space-4);
   padding: var(--dc-space-4);
   background: var(--workspace);
-  /* Clipped, not scrollable: the canvas splits into the chart region and the data panel, and each
-     sizes to what this column gives them. */
+  /* Keep the canvas as the bounded chart-and-table region. */
   min-height: 0;
   overflow: hidden;
 }
 
-/* Charts take the height the data panel leaves. `min-height: 0` lets this region shrink to what is
-   left rather than insisting on its content's height and pushing the panel off-screen. It does not
-   scroll: the data table is the workspace's only scrolling surface. */
+/* Let the chart region use space left by the data panel without scrolling. */
 .workspace__views {
   display: flex;
   flex: 1;
@@ -714,27 +661,23 @@ textarea:focus-visible,
   min-height: 0;
 }
 
-/* The grid's bottom margin is redundant inside this region: the data panel's handle and title bar
-   already separate the two. */
+/* The data panel handle and title bar already separate the views. */
 .workspace__views > .visualization-grid {
   margin-bottom: 0;
 }
 
-/* The grid and its items give up their intrinsic floors here so the row shrinks with the region
-   instead of overflowing it. `.chart-panel__chart` keeps its own minimum, which is what stops a
-   chart being squashed to nothing. */
+/* Let chart grid items shrink with their available region. */
 .workspace__views > .visualization-grid,
 .workspace__views .visualization-grid__item {
   min-height: 0;
 }
 
-/* Inside the workspace the chart shares a fixed column with the data panel, so it takes the height
-   actually available. The larger floor is for a chart standing on its own. */
+/* Use the available height for charts embedded above the data panel. */
 .workspace__views .chart-panel__chart {
   min-height: 12rem;
 }
 
-/* Banners stay readable rather than stretching the full canvas width. */
+/* Keep status banners compact instead of stretching across the canvas. */
 .workspace__canvas > .engine-status,
 .workspace__canvas > .action-error {
   align-self: center;
@@ -744,12 +687,11 @@ textarea:focus-visible,
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* The panel's height is its own; it must not be stretched or compressed by the flex column. */
+  /* Keep the data panel at its own height in the flex column. */
   flex: none;
 }
 
-/* With no chart on the canvas the table takes everything the builder does not need, rather than
-   holding to a fraction that would reserve empty space for charts that do not exist. */
+/* Let the table fill remaining space when no chart exists. */
 .data-panel[data-fills="true"] {
   flex: 1;
 }
@@ -763,8 +705,7 @@ textarea:focus-visible,
   height: auto;
 }
 
-/* Wider than it looks: the visible rule is 1px but the hit area is the full padding box, which is
-   what makes the handle grabbable without hunting for it. */
+/* Give the resize handle a full-width hit area. */
 .data-panel__handle {
   position: relative;
   flex: none;
@@ -796,8 +737,7 @@ textarea:focus-visible,
   padding-block: var(--dc-space-1);
 }
 
-/* Inside the panel the row count needs no margin of its own: the title bar directly above it
-   already separates it from the handle, and the gap cost roughly a row of data. */
+/* The title bar already separates the row count from the handle. */
 .data-panel__body .data-table__status {
   margin-bottom: 0;
 }
@@ -816,9 +756,7 @@ textarea:focus-visible,
   min-height: 0;
 }
 
-/* Both placeholders stand in for a region rather than labelling a control, so each centres in the
-   space its region would occupy: the canvas hero before any import, and the view placeholder in the
-   chart area under the builder. */
+/* Center placeholders within their regions. */
 .workspace__canvas > .workspace__empty,
 .workspace__views > .workspace__empty {
   margin-block: auto;
@@ -826,15 +764,12 @@ textarea:focus-visible,
   text-align: center;
 }
 
-/* The builder sits directly above and reads as a form, so the placeholder needs clear air beneath
-   it rather than looking like the form's own trailing caption. Padding rather than a margin: the
-   auto margins above do the centring, and setting `margin-top` here would cancel them. */
+/* Leave space below the builder before its placeholder. */
 .workspace__views > .workspace__empty {
   padding-top: var(--dc-space-6);
 }
 
-/* The canvas hero centres itself (above); in a side panel the same placeholder is one compact row
-   of prose in a column of left-aligned controls, so it stays left-aligned and full width. */
+/* Keep the side-panel placeholder left-aligned. */
 .workspace__empty {
   max-width: 32rem;
   color: var(--dc-color-text-muted);
@@ -864,8 +799,7 @@ textarea:focus-visible,
 }
 
 .density__option {
-  /* Matches the 2rem height shared by every other control, so a row of these lines up with the
-     buttons and selects around it. */
+  /* Match the height of the surrounding controls. */
   min-height: 2rem;
   padding: var(--dc-space-1) var(--dc-space-3);
   border: 1px solid var(--dc-color-border);
@@ -904,8 +838,7 @@ textarea:focus-visible,
   list-style: none;
 }
 
-/* The rule divides one entry from the next, so the last one does not get it: a trailing border
-   reads as a section boundary with nothing below it. */
+/* Add dividers between history entries, not after the last one. */
 .history__entry:not(:last-child) {
   padding-bottom: var(--dc-space-3);
   border-bottom: 1px solid var(--dc-color-border);
@@ -927,7 +860,7 @@ textarea:focus-visible,
   letter-spacing: 0.04em;
 }
 
-/* Actor colour is the fastest way to scan who changed what once agents write to the workspace. */
+/* Use actor color to make history entries scannable. */
 .history__actor--human {
   color: var(--dc-color-accent);
 }
@@ -1001,8 +934,7 @@ textarea:focus-visible,
   color: var(--destructive-strong);
 }
 
-/* The native file input is replaced by a styled button but stays in the DOM and focusable, so
-   keyboard and assistive-technology users reach the same control rather than a decorative one. */
+/* Keep the native file input focusable beneath the styled button. */
 .import__input {
   position: absolute;
   width: 1px;
@@ -1094,7 +1026,7 @@ textarea:focus-visible,
   cursor: not-allowed;
 }
 
-/* Long filenames are user-supplied and must not push the panel wider than its column. */
+/* Truncate long filenames within the panel. */
 .dataset-list__name {
   min-width: 0;
   overflow: hidden;
@@ -1132,7 +1064,7 @@ textarea:focus-visible,
   color: var(--destructive-strong);
 }
 
-/* The cascade confirmation states what else would be deleted, so it must not be truncated. */
+/* Keep cascade details visible in the confirmation. */
 .dataset-list__warning {
   flex-basis: 100%;
   margin: var(--dc-space-1) 0 0;
@@ -1178,7 +1110,7 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-/* The fan-out measurement arrives here; it is the one message the user must not miss. */
+/* Keep fan-out warnings prominent. */
 .relationship-editor__notice {
   color: var(--dc-color-accent);
 }
@@ -1217,7 +1149,7 @@ textarea:focus-visible,
   stroke-width: 1.5;
 }
 
-/* A left join keeps unmatched rows, so it is drawn dashed to distinguish it from an inner join. */
+/* Use a dashed line for left joins that retain unmatched rows. */
 .relationship-graph__edge[data-join="left"] {
   stroke-dasharray: 4 3;
 }
@@ -1277,8 +1209,7 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-/* Matches the 2rem height of the icon buttons beside it; without this the select sits 5px shorter
-   and the header controls read as a staggered row rather than one line. */
+/* Match the select height to adjacent icon buttons. */
 .link-mode-control__select {
   height: 2rem;
   padding: 0 var(--dc-space-2);
@@ -1307,8 +1238,7 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-/* A selection can carry an imported cell value, so a long one truncates rather than pushing the
-   header controls off screen. */
+/* Truncate selected values so header controls retain space. */
 .selection-summary__text {
   max-width: 16rem;
   overflow: hidden;
@@ -1339,9 +1269,7 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-/* The shared row for a form's submit/cancel pair. Buttons are inline-level, so without a flex
-   parent they butt together with no gap and wrap at ragged widths. Wraps rather than overflowing,
-   since these forms sit inside panels and chart cards that get narrow. */
+/* Align form actions and allow them to wrap in narrow panels. */
 .form-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1366,10 +1294,7 @@ textarea:focus-visible,
   list-style: none;
 }
 
-/* One compact line per column: type glyph, name, stats control. Type, nullability, and the physical
-   name used to print on a second line under every row, which tripled the list's height and made a
-   twenty-column dataset a wall of repeated words. They moved into the row's tooltip, leaving the
-   names — the thing actually being scanned — as the only text competing for attention. */
+/* Keep column rows compact; detailed type and statistics appear in the profile. */
 .schema__column {
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr) auto;
@@ -1395,7 +1320,7 @@ textarea:focus-visible,
   color: var(--dc-color-accent);
 }
 
-/* The glyph carries the type visually; this keeps the word itself in the accessibility tree. */
+/* Keep type text accessible when the glyph conveys it visually. */
 .schema__type-label {
   position: absolute;
   width: 1px;
@@ -1405,7 +1330,7 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 
-/* Column headers come from the imported file and can be arbitrarily long or unbroken. */
+/* Bound imported column names within the table. */
 .schema__name {
   min-width: 0;
   overflow: hidden;
@@ -1413,8 +1338,7 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 
-/* The control is a per-row action, so it stays invisible until the row is hovered or it is focused;
-   twenty always-visible buttons read as a column of chrome beside the names. */
+/* Reveal row actions on hover or focus to reduce visual noise. */
 .schema__profile-toggle {
   padding: 0 var(--dc-space-2);
   border: 1px solid var(--dc-color-border);
@@ -1432,9 +1356,8 @@ textarea:focus-visible,
   opacity: 1;
 }
 
-/* A profile expands under its column, so it takes the full row rather than joining the flex flow. */
-/* The profile expands beneath its column's row, so it spans every track of that row's grid rather
-   than being squeezed into the name's column. */
+/* Let an expanded profile span the row beneath its column. */
+/* Span the expanded profile across all grid tracks. */
 .column-profile,
 .column-profile__status {
   grid-column: 1 / -1;
@@ -1472,7 +1395,7 @@ textarea:focus-visible,
   list-style: none;
 }
 
-/* Frequent values are imported cell content and can be long or unbroken. */
+/* Truncate frequent values within their list. */
 .column-profile__values li {
   display: flex;
   justify-content: space-between;
@@ -1565,7 +1488,7 @@ textarea:focus-visible,
   padding: var(--dc-space-2) var(--dc-space-3);
   border-bottom: 1px solid var(--dc-color-border);
   text-align: left;
-  /* Cell values are imported content; one pathological value must not stretch the whole table. */
+  /* Prevent one imported cell value from widening the table. */
   max-width: 20rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1596,9 +1519,7 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
-/* The viewport fills whatever the data panel was resized to rather than claiming a fixed slice of
-   the window, so dragging the panel changes how many rows are visible. The min-height keeps a few
-   rows on screen when a chart-embedded table has no panel to size it. */
+/* Follow the resized panel while retaining a readable minimum height. */
 .data-table__viewport {
   flex: 1;
   min-height: 8rem;
@@ -1658,15 +1579,14 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
-/* Numeric columns align right so magnitudes line up digit by digit. Tabular figures are what make
-   that alignment hold: proportional digits vary in width and leave the columns ragged. */
+/* Right-align numeric values and use tabular figures for comparison. */
 .data-table__table th[data-align="end"],
 .data-table__table td[data-align="end"] {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-/* The header's sort control fills the cell, so it carries the alignment rather than the cell. */
+/* Let the header control define the column alignment. */
 .data-table__table th[data-align="end"] .data-table__sort {
   width: 100%;
   text-align: right;
@@ -1705,8 +1625,7 @@ textarea:focus-visible,
   gap: var(--dc-space-2);
 }
 
-/* Final system pass. These rules keep existing domain component hooks while moving their visuals
-   onto the shared semantic tokens. */
+/* Map existing component hooks to semantic theme tokens. */
 .workspace__panel,
 .chart-panel,
 .metric-card,
@@ -1720,8 +1639,7 @@ textarea:focus-visible,
   background: var(--panel);
 }
 
-/* The panel is the query container for its own header: a chart is narrow because of its column
-   span, not because the viewport is small, so a media query would be the wrong signal here. */
+/* Use a container query because chart width depends on its grid span. */
 .chart-panel {
   container-type: inline-size;
   padding: var(--dc-space-3);

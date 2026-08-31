@@ -8,18 +8,7 @@ import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { CUSTOMERS_COLUMNS, ORDERS_COLUMNS, PRODUCTS_COLUMNS } from '../application/action-fixtures.ts';
 
-/**
- * The planner's correctness gate.
- *
- * An optimizer that changes answers is a defect rather than a speedup, and the only way to know it
- * does not is to compile both forms of the same query and compare. Compiled SQL is compared rather
- * than executed rows because these tests run under `bun test` without a browser, where DuckDB-Wasm
- * is unavailable; the compiled statement is what determines the rows, so an identical statement
- * guarantees identical results.
- *
- * Where a rewrite deliberately changes the statement — projection pruning narrows the SELECT list —
- * the assertion is on what the rewrite is allowed to change and what it must not.
- */
+// Verifies that planned queries preserve query semantics.
 
 const ordersToCustomers: Relationship = {
   id: 'rel_1' as EntityId,
@@ -51,7 +40,7 @@ const plannerContext = (...relationships: Relationship[]): PlannerContext => ({ 
 
 const compilerContext = (...relationships: Relationship[]): QueryContext => ({ datasets, relationships });
 
-/** Compiles a query with and without the planning pass. */
+// Compiles a query with and without the planning pass.
 const bothForms = (query: AnalysisQuery, ...relationships: Relationship[]) => {
   const unplanned = compileAnalysisQuery(query, compilerContext(...relationships));
   const planned = planQuery(query, plannerContext(...relationships));
@@ -173,8 +162,7 @@ describe('planner equivalence', () => {
   });
 
   test('predicate simplification preserves the rows a redundant range selects', () => {
-    // `revenue > 10 AND revenue > 50` selects exactly `revenue > 50`, so the simplified statement
-    // must bind only the tighter bound while describing the same set of rows.
+    // Keep only the tighter bound while preserving the selected rows.
     const query: AnalysisQuery = {
       datasetId: 'ds_orders' as EntityId,
       dimensions: [],
@@ -210,7 +198,7 @@ describe('planner equivalence', () => {
     expect(unplanned.ok && compiled.ok).toBe(true);
     if (!unplanned.ok || !compiled.ok) return;
 
-    // Fewer columns is the point; the WHERE clause and its bound values must be untouched.
+    // Pruning changes selected columns, not filters.
     expect(compiled.value.resultColumns.length).toBeLessThan(unplanned.value.resultColumns.length);
     expect(compiled.value.parameters).toEqual(unplanned.value.parameters);
     expect(compiled.value.sql).toContain('WHERE ("revenue" > ?)');

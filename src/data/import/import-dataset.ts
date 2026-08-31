@@ -12,33 +12,20 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/**
- * Pre-ingestion validation of a chosen file.
- *
- * Everything decidable without touching the engine happens here, so an oversized or unsupported
- * file is refused before a single byte is read into the worker.
- *
- * The file is `unknown` on the way in. `File` is a DOM type and the application layer that calls
- * this must not assume a browser, so narrowing happens at this boundary.
- */
+// Validates a chosen file before reading it into the engine.
 
 export interface ValidatedFile {
   file: File;
-  /** Display text only. Never used to build an identifier, never used to name a relation. */
+  // Display name only; never used for identifiers or relations.
   fileName: string;
   byteSize: number;
   extension: string;
   sourceKind: DatasetSourceKind;
-  /** Explicit delimiter where the sniffer is unreliable; `undefined` leaves detection to DuckDB. */
+  // Explicit delimiter; `undefined` lets DuckDB sniff it.
   delimiter: string | undefined;
 }
 
-/**
- * Structural check for a `File`.
- *
- * Duck-typed rather than `instanceof File` so the module stays testable outside a browser and does
- * not fail against a `File` from another realm.
- */
+// Checks File-like input without relying on a browser `File` constructor.
 const isFileLike = (value: unknown): value is File =>
   typeof value === 'object' &&
   value !== null &&
@@ -46,14 +33,7 @@ const isFileLike = (value: unknown): value is File =>
   typeof (value as File).size === 'number' &&
   typeof (value as File).arrayBuffer === 'function';
 
-/**
- * Validates the file against every pre-ingestion bound.
- *
- * The extension decides the parser. MIME type is not trusted for the decision: browsers report
- * `.csv` variously as `text/csv`, `application/vnd.ms-excel`, or an empty string depending on the
- * platform, so treating it as authoritative would reject valid files on some machines and not
- * others. The extension allowlist is the check that actually constrains which parser runs.
- */
+// Validates file type and size limits before ingestion.
 export const validateImportFile = (file: unknown): Result<ValidatedFile, DomainError> => {
   if (!isFileLike(file)) {
     return err(domainError('IMPORT_FAILED', 'No readable file was supplied for import.'));
@@ -92,7 +72,7 @@ export const validateImportFile = (file: unknown): Result<ValidatedFile, DomainE
   });
 };
 
-/** Refuses a schema too wide for the schema panel and the table to present usefully. */
+// Rejects schemas too wide for the UI.
 export const validateColumnCount = (columnCount: number): Result<void, DomainError> => {
   if (columnCount === 0) {
     return err(domainError('IMPORT_FAILED', 'The file contains no columns.'));
@@ -109,12 +89,6 @@ export const validateColumnCount = (columnCount: number): Result<void, DomainErr
   return ok(undefined);
 };
 
-/**
- * The single import failure the engine reports for anything DuckDB raised.
- *
- * Privacy constraint. A DuckDB parser error quotes the offending line — `Error ... near "4,alice"` —
- * so interpolating it would put file contents into an error message that reaches both the UI and,
- * through the dispatcher, an agent. The engine's own message is dropped rather than forwarded.
- */
+// Maps DuckDB import errors to a value-free typed error.
 export const ingestionFailure = (): DomainError =>
   domainError('IMPORT_FAILED', 'The file could not be parsed. Check that it is well-formed and matches its extension.');

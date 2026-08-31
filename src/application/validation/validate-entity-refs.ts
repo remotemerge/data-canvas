@@ -11,16 +11,7 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/*
- * Reference resolution against current workspace state.
- *
- * Every handler resolves its IDs here before touching state. Because the query compiler only ever
- * receives a resolved entity, an ID that does not exist cannot reach SQL generation — the check is
- * structural rather than a convention handlers are trusted to follow.
- *
- * Error messages name entities by ID and display name only. IDs are application-generated and
- * display names are shown in the UI already, so neither discloses dataset contents.
- */
+// Resolve entity IDs before handlers mutate state or build queries.
 
 export const resolveDataset = (workspace: Workspace, datasetId: EntityId): Result<Dataset, DomainError> => {
   const dataset = workspace.datasets[datasetId];
@@ -45,7 +36,7 @@ export const resolveColumn = (dataset: Dataset, columnId: EntityId): Result<Colu
     : ok(column);
 };
 
-/** Convenience for the common `datasetId` + `columnId` pair, resolved in dependency order. */
+// Resolves the common dataset-and-column reference pair.
 export const resolveDatasetColumn = (
   workspace: Workspace,
   datasetId: EntityId,
@@ -83,11 +74,7 @@ export const resolveFilter = (workspace: Workspace, filterId: EntityId): Result<
     : ok(filter);
 };
 
-/*
- * Metrics and annotations have no dedicated error code in `DomainErrorCode`. `UNSUPPORTED_OPERATION`
- * carries the failure instead of widening the published code union, which agents branch on and
- * which must stay stable.
- */
+// Metrics and annotations share UNSUPPORTED_OPERATION in the public error-code union.
 
 export const resolveMetric = (workspace: Workspace, metricId: EntityId): Result<Metric, DomainError> => {
   const metric = workspace.metrics[metricId];

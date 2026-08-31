@@ -1,24 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 
-/**
- * The single-mutation-path guard.
- *
- * The architecture's defining property is that a human click and an agent tool call reach the same
- * validation, revision, and history behaviour. That holds only while `setState` is unreachable
- * outside the dispatcher — a component that writes the store directly would silently create the
- * second mutation path and the two surfaces would drift apart.
- *
- * Enforced here rather than in lint config, which is owned by the maintainer and stays as authored.
- */
+// Guards the single workspace mutation path.
 
-/**
- * Where a store write is legitimate.
- *
- * The workspace store and the dispatcher's commit are the pair the rule is about.
- * `engine-status.ts` is listed because it owns a *different* store: engine readiness is session
- * state, never part of the workspace aggregate, so it is not revisioned or attributable and the
- * dispatcher has nothing to say about it. The distinction is checked below rather than assumed.
- */
+// Modules allowed to write state.
 const MUTATION_ALLOWLIST = [
   'src/state/workspace-store.ts',
   'src/application/actions/dispatcher.ts',
@@ -51,8 +35,7 @@ describe('store mutation boundary', () => {
   });
 
   test('no React component imports the workspace store', async () => {
-    // Components read through `useWorkspace` and write through `useActions`. Importing the store
-    // gives a component both `getState` and `setState`, which is the escape hatch to close.
+    // Components read through useWorkspace and write through useActions.
     const sources = await scan('src/ui/**/*.{ts,tsx}');
 
     expect(sources.length).toBeGreaterThan(0);
@@ -63,8 +46,7 @@ describe('store mutation boundary', () => {
   });
 
   test('the allowlisted files are the ones that genuinely need a store write', async () => {
-    // Guards against the allowlist rotting into a list of exemptions for files that no longer
-    // write state, which would quietly widen the boundary.
+    // Keep exemptions limited to current state writers.
     const sources = await Promise.all(MUTATION_ALLOWLIST.map((file) => Bun.file(file).text()));
 
     for (const source of sources) expect(source.length).toBeGreaterThan(0);
@@ -75,8 +57,7 @@ describe('store mutation boundary', () => {
   });
 
   test('the engine-status exemption does not reach the workspace store', async () => {
-    // The exemption is only defensible while that module writes its own session store. If it ever
-    // imported the workspace store, it would become the second mutation path this file forbids.
+    // A session-store module must not import the workspace store.
     const source = await Bun.file('src/state/engine-status.ts').text();
 
     expect(source).not.toContain('workspace-store');

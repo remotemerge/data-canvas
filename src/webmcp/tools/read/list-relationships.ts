@@ -3,16 +3,10 @@ import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-ty
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { asInput, invalidEntity, success } from '@/webmcp/tools/tool-helpers.ts';
 
-/** Bound on returned proposals, kept well inside the shared output budget. */
+// Maximum suggestions returned by this tool.
 const MAX_LISTED_SUGGESTIONS = 5;
 
-/**
- * Lists existing relationships and, on request, candidate ones.
- *
- * Carries `untrustedContentHint` because it returns dataset-derived column names. Suggestions are
- * proposals: this tool creates nothing, and an agent acting on one must still call
- * `create_relationship`, which re-validates from scratch.
- */
+// Lists existing and optional suggested relationships.
 export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'list_relationships',
   description:

@@ -2,17 +2,7 @@ type Cell = string | number | boolean | null;
 
 const toNumber = (value: Cell): number => (typeof value === 'number' ? value : Number(value ?? 0));
 
-/**
- * Builds a box plot from the five-number summary DuckDB computed.
- *
- * ECharts' `boxplot` type expects `[min, Q1, median, Q3, max]` per box in that exact order, so the
- * rows are mapped positionally rather than through `encode`. The compiler emits the summary in the
- * same order, and `summaryOffset` says where it starts: a categorized box plot puts the category
- * first, an uncategorized one starts at zero.
- *
- * The outlier count rides along as tooltip data instead of as scatter points. Drawing the outliers
- * would need their values, and the query deliberately returns only how many there are.
- */
+// Maps DuckDB's five-number summary to an ECharts boxplot. Outlier count stays tooltip-only.
 export const buildBoxplotSeries = (
   rows: readonly Cell[][],
   summaryOffset: number,

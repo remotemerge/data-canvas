@@ -29,11 +29,7 @@ const setup = () => {
 };
 
 describe('WebMCP tool surface exclusions', () => {
-  /*
-   * No agent-triggered export or import. A tool that writes a file containing the workspace's data
-   * has data-exfiltration shape and serves no analytical scenario, so its absence is asserted rather
-   * than left to review. See docs/decisions/0012-no-agent-export-tool.md.
-   */
+  // Agent tools do not export or import workspace files.
   test('registers no export or import tool', () => {
     const { deps } = setup();
     const names = createToolDefinitions(deps).map((tool) => tool.name);

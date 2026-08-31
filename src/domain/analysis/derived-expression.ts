@@ -1,14 +1,7 @@
 import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/**
- * The vocabulary a derived column may be built from.
- *
- * Security invariant. Every node is a closed enum the compiler knows how to emit, and no branch
- * carries free text that reaches SQL. A formula string parsed into SQL would be arbitrary SQL under
- * another name, which is the one capability this architecture exists to deny an agent. The only
- * strings here are `literal` values, and those become bound parameters rather than SQL text.
- */
+// Closed expression vocabulary for derived columns. Literal values become bound parameters.
 export type DerivedExpression =
   | { kind: 'column'; columnId: EntityId }
   | { kind: 'literal'; value: number | string | boolean | null }
@@ -42,13 +35,7 @@ export type ComparisonOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte';
 
 export const COMPARISON_OPERATORS: readonly ComparisonOperator[] = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'] as const;
 
-/**
- * One `WHEN … THEN …` arm. Both sides are expressions, so an arm can compare two columns.
- *
- * The result field is named `result` rather than `then`. An object carrying a `then` property is
- * treated as a promise by `await`, so a plain data object with that name is a trap waiting for the
- * first time one of these is returned from an async function.
- */
+// One `WHEN`/`THEN` arm with expression branches.
 export interface DerivedCondition {
   left: DerivedExpression;
   operator: ComparisonOperator;
@@ -66,17 +53,11 @@ export const DERIVED_EXPRESSION_KINDS: readonly DerivedExpression['kind'][] = [
   'cast',
 ] as const;
 
-/*
- * Structural limits.
- *
- * Depth bounds recursion in the compiler and in every walker below; node count bounds the size of
- * the SQL fragment one column can expand into. Both exist because an agent supplies these trees, and
- * an unbounded tree is a way to make compilation cost arbitrary without ever writing SQL.
- */
+// Bounds for expression depth and total nodes.
 export const MAX_EXPRESSION_DEPTH = 8;
 export const MAX_EXPRESSION_NODES = 64;
 
-/** Every direct child of a node, so walkers do not each re-encode the tree's shape. */
+// Returns every direct child of an expression node.
 export const childExpressions = (expression: DerivedExpression): DerivedExpression[] => {
   switch (expression.kind) {
     case 'arithmetic':
@@ -93,12 +74,7 @@ export const childExpressions = (expression: DerivedExpression): DerivedExpressi
   }
 };
 
-/**
- * Depth of the deepest branch, counting the root as 1.
- *
- * Recursive rather than iterative because the depth cap is enforced against this result: a tree deep
- * enough to overflow the stack here would already exceed any cap a caller sets.
- */
+// Returns maximum expression depth, counting the root as one.
 export const expressionDepth = (expression: DerivedExpression): number => {
   const children = childExpressions(expression);
 
@@ -108,12 +84,7 @@ export const expressionDepth = (expression: DerivedExpression): number => {
 export const expressionNodeCount = (expression: DerivedExpression): number =>
   1 + childExpressions(expression).reduce((total, child) => total + expressionNodeCount(child), 0);
 
-/**
- * Every column ID the tree references, including through `datePart` and `bin`.
- *
- * Used for reference validation, for cycle detection across derived columns, and by the compiler to
- * decide which datasets a query must reach.
- */
+// Returns all column IDs referenced by an expression tree.
 export const expressionColumnIds = (expression: DerivedExpression): EntityId[] => {
   const own = expression.kind === 'column' || expression.kind === 'datePart' || expression.kind === 'bin';
 

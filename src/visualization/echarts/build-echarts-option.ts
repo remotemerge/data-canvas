@@ -18,9 +18,9 @@ export interface ChartTheme {
   text: string;
   muted: string;
   border: string;
-  /** Split-line colour. Quieter than `border`, because grid lines sit behind the marks. */
+  // Grid split-line colour.
   grid: string;
-  /** Axis-line colour. Distinct from `grid` so the baseline reads without competing with the data. */
+  // Axis-line colour.
   axis: string;
   tooltipBackground: string;
   tooltipText: string;
@@ -38,20 +38,14 @@ interface TooltipParams {
   encode?: { x?: number[]; y?: number[] };
 }
 
-/**
- * Renders one hovered mark as a marker swatch, its series, and its formatted values.
- *
- * Every dataset-derived string is passed through `escapeText`, because a column header or category
- * value carrying markup would otherwise execute inside the tooltip's HTML. `marker` is ECharts' own
- * swatch span and is the one fragment interpolated raw.
- */
+// Builds an escaped tooltip for a hovered mark.
 const formatTooltip = (raw: unknown, dimensions: string[]): string => {
   const params = raw as TooltipParams;
   const swatch = typeof params.marker === 'string' ? params.marker : '';
   const heading = escapeText(params.seriesName ?? params.name ?? '');
   const value = params.value;
 
-  // A dataset-driven series hands back the whole row; positional kinds hand back a bare value.
+  // Dataset-backed series return full rows; positional series return a scalar.
   const pairs = Array.isArray(value)
     ? value.flatMap((cell, index) => {
         const label = (params.dimensionNames ?? dimensions)[index];
@@ -63,16 +57,10 @@ const formatTooltip = (raw: unknown, dimensions: string[]): string => {
   return [`${swatch}${heading}`, ...pairs].filter((line) => line !== '').join('<br/>');
 };
 
-/** Opacity applied to a mark outside the selection. Dimmed, not hidden: the context is the point. */
+// Opacity for marks outside a highlight selection.
 const DIMMED_OPACITY = 0.25;
 
-/**
- * Per-mark opacity for `highlight` mode.
- *
- * Returned as an ECharts `itemStyle` callback so dimming costs one predicate evaluation per mark at
- * render time and no re-query. Absent when nothing is selected, so an unselected chart carries no
- * per-item callback at all.
- */
+// Returns per-mark opacity for highlight mode.
 const highlightStyle = (
   highlight: HighlightPredicate | undefined,
 ): { itemStyle: { opacity: (params: { dataIndex: number }) => number } } | undefined => {
@@ -85,26 +73,13 @@ const highlightStyle = (
   };
 };
 
-/** Decides whether the row at an index is inside the selection. */
+// Returns whether a result row is selected.
 export type HighlightPredicate = (rowIndex: number) => boolean;
 
-/**
- * Whether a legend would tell the reader anything.
- *
- * A legend maps colours to series, so with one series it maps the only colour to the only thing on
- * screen. That costs vertical space and, because a measure column is named after its aggregate, it
- * usually renders as `sum` — a label that describes the SQL rather than the data. The user's
- * `showLegend` preference still gates it; this only removes the case where it is pure noise.
- */
+// Returns whether the chart should display a legend.
 const legendIsInformative = (seriesCount: number, showLegend: boolean): boolean => showLegend && seriesCount > 1;
 
-/**
- * The axis label for a result whose time buckets were widened.
- *
- * `undefined` for every other result, so an unwidened chart carries no axis name and looks exactly
- * as it did before. Only widening needs the label: it is the one strategy that changes what the x
- * positions mean, and an axis still reading as daily when the marks are monthly is a wrong chart.
- */
+// Axis label shown when time buckets were widened.
 const temporalAxisName = (result: ChartResult): string | undefined => {
   const strategy = result.disclosure?.strategy;
 
@@ -121,9 +96,7 @@ export const buildEChartsOption = (
   const emphasis = highlightStyle(highlight);
   const dimensions = columnNames(result);
   const xName = dimensions[0];
-  // Binned dimensions occupy leading result columns exactly as plain ones do, so both count when
-  // deciding where the measures start. Omitting them treated the bucketed x column as a measure,
-  // which drew a second series of dates against the value axis.
+  // Count binned dimensions with plain dimensions when locating measures.
   const groupedCount = visualization.query.dimensions.length + (visualization.query.binnedDimensions ?? []).length;
   const measureNames = dimensions.slice(groupedCount);
   const common = {
@@ -139,13 +112,7 @@ export const buildEChartsOption = (
       formatter: (params: unknown) => formatTooltip(params, dimensions),
     },
   };
-  /**
-   * Chart chrome recedes so the marks carry the chart.
-   *
-   * Ticks are dropped because the labels already mark their own positions, and the category axis
-   * keeps its baseline while the value axis drops it — a value axis is read off its split lines, so
-   * a line there only boxes the plot in.
-   */
+  // Configures chart chrome so marks remain prominent.
   const categoryAxisStyle = {
     axisLabel: { color: theme.muted },
     axisTick: { show: false },
@@ -158,20 +125,12 @@ export const buildEChartsOption = (
     axisLine: { show: false },
     splitLine: { lineStyle: { color: theme.grid } },
   };
-  /**
-   * `containLabel` measures the labels and reserves exactly what they need, so these are the margins
-   * outside the labels rather than the plot's own insets. They stay tight because every pixel here
-   * is taken from the marks.
-   *
-   * The axis `name` is the exception: `containLabel` does not measure it, so a chart carrying one
-   * reserves the extra room itself or the granularity label is clipped off the bottom edge.
-   */
+  // Margins outside labels; reserve extra space for an axis name.
   const axisNameHeight = temporalAxisName(result) === undefined ? 0 : 24;
   const gridSpacing = { top: 16, right: 16, bottom: 12 + axisNameHeight, left: 12, containLabel: true };
   if (visualization.kind === 'donut') {
     const marks = buildAnnotationMarks(annotations, visualization, result);
-    // A donut's slices are its categories, so its legend names the rows rather than the series. It
-    // stays keyed to the user's preference alone.
+    // A donut legend names slices, so it follows the user's legend preference.
     return {
       ...common,
       legend: { show: visualization.presentation.showLegend },
@@ -180,8 +139,7 @@ export const buildEChartsOption = (
       ),
     };
   }
-  // Box plot and heatmap map rows positionally rather than through the dataset's `encode`, because
-  // ECharts expects a fixed tuple per mark for both. They return before the shared axis assembly.
+  // Box plots and heatmaps map fixed row tuples positionally.
   if (visualization.kind === 'boxplot') {
     const offset = visualization.query.dimensions.length;
     const { series, categories } = buildBoxplotSeries(result.rows, offset);
@@ -204,8 +162,7 @@ export const buildEChartsOption = (
       ...common,
       dataset: undefined,
       grid: { show: visualization.presentation.showGrid, ...gridSpacing },
-      // Both heatmap axes are categorical, so both keep a baseline and neither draws split lines
-      // through the cells.
+      // Categorical heatmap axes keep baselines and omit split lines through cells.
       xAxis: { type: 'category', data: xCategories, ...categoryAxisStyle },
       yAxis: { type: 'category', data: yCategories, ...categoryAxisStyle },
       visualMap: { min, max, calculable: true, orient: 'horizontal', left: 'center', textStyle: { color: theme.text } },
@@ -232,15 +189,12 @@ export const buildEChartsOption = (
     ...common,
     legend: { show: legendIsInformative(series.length, visualization.presentation.showLegend) },
     grid: { show: visualization.presentation.showGrid, ...gridSpacing },
-    // A histogram's x is the bucket's lower bound, which is continuous: a category axis would space
-    // the bins evenly and hide gaps where no rows fell.
-    // A continuous x is still a horizontal axis: it keeps the baseline and omits split lines, so
-    // only the y axis rules the plot and the two sets never cross into a mesh.
+    // Histogram buckets use a continuous x-axis so gaps remain visible.
+    // Keep the baseline and omit split lines through the plot.
     xAxis: {
       type: continuousX ? 'value' : 'category',
       ...categoryAxisStyle,
-      // Widening a time bucket changes the question the chart answers, so the axis has to name the
-      // granularity that actually produced these marks rather than the one that was requested.
+      // Label widened temporal buckets with the unit actually rendered.
       ...(axisName === undefined
         ? {}
         : { name: axisName, nameLocation: 'middle', nameGap: 28, nameTextStyle: { color: theme.muted } }),

@@ -7,17 +7,11 @@ export const formatNumber = (value: number, format?: MetricFormat): string =>
     ...(format?.maximumFractionDigits === undefined
       ? { maximumFractionDigits: 2 }
       : { maximumFractionDigits: format.maximumFractionDigits }),
-    // An explicit `+` marks a comparison as a change rather than a level. A running total shows no
-    // sign, so it stays opt-in through the format.
+    // Show an explicit plus only for delta values; running totals remain unsigned.
     ...(format?.showSign === true ? { signDisplay: 'exceptZero' as const } : {}),
   }).format(value);
 
-/**
- * Whether a delta should read as an improvement, a regression, or neither.
- *
- * Direction comes from the metric because the app cannot infer it. Revenue up is good and churn up
- * is not, and both are a `sum` over a number.
- */
+// Classifies a delta using the metric's configured direction.
 export type DeltaTone = 'positive' | 'negative' | 'neutral';
 
 export const deltaTone = (value: number, format?: MetricFormat): DeltaTone => {

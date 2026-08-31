@@ -4,12 +4,7 @@ import { selectLayoutColumns } from '@/state/selectors/workspace-selectors.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
-/**
- * Preset densities.
- *
- * Discrete presets rather than a free numeric input: canvas density is a coarse layout choice, and
- * every value between them produces near-identical grids.
- */
+// Discrete canvas-density presets.
 const DENSITY_PRESETS: readonly { label: string; columns: number }[] = [
   { label: 'Comfortable', columns: 6 },
   { label: 'Balanced', columns: 12 },
@@ -20,13 +15,7 @@ interface CanvasDensityControlProps {
   onError: (error: DomainError | null) => void;
 }
 
-/**
- * Changes canvas density through the shared dispatcher.
- *
- * This is a real feature and also the smallest complete demonstration of the mutation path: it
- * validates, commits atomically, increments the revision, and appends a history entry, without
- * needing a dataset.
- */
+// Changes canvas density through the shared dispatcher.
 export const CanvasDensityControl = ({ onError }: CanvasDensityControlProps): React.JSX.Element => {
   const columns = useWorkspace(selectLayoutColumns);
   const { updateLayout } = useActions();

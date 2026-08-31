@@ -41,13 +41,7 @@ const bindingFrom = (input: ReturnType<typeof asInput>, fallback?: VisualBinding
   ...(input.binSeries === undefined ? {} : { binSeries: input.binSeries as BinStrategy }),
 });
 
-/**
- * Derives the analysis query from a binding.
- *
- * The distribution kinds each need a different query shape, so they branch here rather than falling
- * through to the grouped-aggregate default: a histogram counts rows per bucket, and a box plot asks
- * for a five-number summary instead of measures.
- */
+// Builds the analysis query for a visualization binding.
 const queryFrom = (
   datasetId: string,
   input: ReturnType<typeof asInput>,
@@ -92,8 +86,7 @@ const queryFrom = (
       : [{ columnId: binding.series, strategy: binding.binSeries }]),
   ];
 
-  // A binned channel moves out of `dimensions` into `binnedDimensions`, or the column would be
-  // grouped raw and binned at once.
+  // Move binned channels to binnedDimensions.
   const binnedIds = new Set(binned.map((entry) => entry.columnId));
 
   return {
@@ -260,8 +253,7 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
       return dispatch(
         deps,
         {
-          // Both actions take the same payload, so an agent extending a selection reaches exactly
-          // the handler a ctrl-clicking human does.
+          // Both actions use the same payload as a human ctrl-click.
           type: input.additive === true ? 'selection.extend' : 'selection.set',
           payload: {
             datasetId: input.datasetId as string,

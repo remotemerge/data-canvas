@@ -68,17 +68,9 @@ const Inspector = ({ activeDataset, onError }: PanelProps): React.JSX.Element =>
 );
 
 /**
- * The workspace shell.
+ * Workspace shell.
  *
- * XSS constraint. Every dataset-derived string in this subtree renders as plain text. Never add
- * `dangerouslySetInnerHTML` anywhere under `src/ui/`, because imported cell values, column headers,
- * filenames, and agent-authored annotation text all flow through these components.
- *
- * The header shows the revision counter on purpose. It makes the optimistic-concurrency model
- * observable when a human and an agent edit the workspace at the same time.
- *
- * No component here mutates the store. Every change goes through `useActions`, the same dispatcher
- * the WebMCP adapter calls.
+ * Dataset-derived strings render as text. Mutations go through the shared dispatcher used by WebMCP.
  */
 export const WorkspacePage = (): React.JSX.Element => {
   const name = useWorkspace(selectWorkspaceName);
@@ -88,8 +80,7 @@ export const WorkspacePage = (): React.JSX.Element => {
   const narrow = useMediaQuery('(max-width: 1023px)');
   const compact = useMediaQuery('(max-width: 479px)');
 
-  // The most recent dispatch failure. Held locally rather than in the store: a rejected action is
-  // this view's transient concern, not shared workspace state.
+  // Keep rejected-action errors local; they are not workspace state.
   const [actionError, setActionError] = useState<DomainError | null>(null);
 
   return (
@@ -157,9 +148,7 @@ export const WorkspacePage = (): React.JSX.Element => {
             </div>
           ) : (
             <>
-              {/* An empty canvas is a builder and a one-line placeholder, so it takes only the
-                  height it needs and the data panel grows into the rest. Reserving chart space for
-                  charts that do not exist would push the table into a strip for nothing. */}
+              {/* The table fills remaining space when no chart exists. */}
               <div className="workspace__views" data-empty={!hasVisualizations}>
                 <WorkspaceCanvas onError={setActionError} />
               </div>

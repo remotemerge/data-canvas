@@ -11,19 +11,10 @@ import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-/** Bound on the display name so a pathological filename cannot bloat state or the history panel. */
+// Maximum display-name length for dataset metadata and history entries.
 export const MAX_DATASET_NAME_LENGTH = 200;
 
-/**
- * Commits the `loading` placeholder that the rest of the import resolves.
- *
- * Ingestion of a large file takes seconds, so the placeholder exists to make that visible. It is a
- * dispatched action rather than component state for the same reason every other change is: a human
- * and an agent must see the same in-progress import, and only the store can give them that.
- *
- * `relationId` is empty until the engine creates the relation. Nothing may query the dataset while
- * `importStatus` is `loading`, which is what makes the empty value safe rather than a hole.
- */
+// Adds a loading dataset for the import to resolve.
 export const handleBeginDatasetImport: ActionHandler<BeginDatasetImportInput> = (workspace, payload) => {
   const name = payload.name.trim();
 
@@ -55,7 +46,7 @@ export const handleBeginDatasetImport: ActionHandler<BeginDatasetImportInput> = 
     workspace: {
       ...workspace,
       datasets: { ...workspace.datasets, [dataset.id]: dataset },
-      // The first import becomes active so the UI has something to show without a second action.
+      // Make the first imported dataset active so the UI has content immediately.
       activeDatasetId: workspace.activeDatasetId ?? dataset.id,
     },
     changedEntityIds: [dataset.id],
@@ -63,13 +54,7 @@ export const handleBeginDatasetImport: ActionHandler<BeginDatasetImportInput> = 
   });
 };
 
-/**
- * Resolves a loading dataset to `ready` using the engine's inspection of the real relation.
- *
- * Ingestion belongs to the data engine; this handler owns validation and the resulting `Dataset`
- * metadata. When no engine is wired the import fails with `ENGINE_UNAVAILABLE` rather than
- * committing a dataset describing a relation that does not exist.
- */
+// Completes a loading dataset after the engine creates its relation.
 export const handleImportDataset: ActionHandler<ImportDatasetInput> = async (workspace, payload, deps) => {
   const existing = resolveDataset(workspace, payload.datasetId);
 
@@ -107,14 +92,7 @@ export const handleImportDataset: ActionHandler<ImportDatasetInput> = async (wor
   });
 };
 
-/**
- * Marks a loading dataset as failed.
- *
- * The failure is committed rather than merely surfaced in the UI so the workspace never keeps a
- * dataset stuck at `loading` after an import that will not finish. `reason` reaches an agent
- * through the history summary, so callers pass a `DomainError.message`, which is already
- * constrained to contain no file contents.
- */
+// Marks a loading dataset as failed and records safe error text.
 export const handleFailDatasetImport: ActionHandler<FailDatasetImportInput> = (workspace, payload) => {
   const existing = resolveDataset(workspace, payload.datasetId);
 
@@ -132,8 +110,7 @@ export const handleFailDatasetImport: ActionHandler<FailDatasetImportInput> = (w
   return ok({
     workspace: {
       ...rest,
-      // A failed dataset must not stay active: every downstream view would query a relation that
-      // was never created.
+      // A failed dataset has no relation for downstream views to query.
       ...(nextActive === undefined ? {} : { activeDatasetId: nextActive }),
       datasets: { ...workspace.datasets, [dataset.id]: dataset },
     },

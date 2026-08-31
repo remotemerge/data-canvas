@@ -10,7 +10,7 @@ const ORDERS = 'ds_orders';
 const CUSTOMERS = 'ds_customers';
 const PRODUCTS = 'ds_products';
 
-/** Links orders to customers, leaving products unrelated to either. */
+// Links orders to customers, leaving products unrelated to either.
 const withRelationship = (workspace: Workspace): Workspace => ({
   ...workspace,
   relationships: {

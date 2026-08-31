@@ -54,8 +54,7 @@ describe('validateRelationship', () => {
   });
 
   test('treats string and category as the same key class', () => {
-    // `category` is `string` narrowed by cardinality, so joining them is legitimate; rejecting it
-    // would make a key unjoinable purely because it happened to have few distinct values.
+    // Category is a string refinement, so it remains compatible with text keys.
     const result = validateRelationship(workspaceWithJoinableDatasets(), {
       leftDatasetId: 'ds_customers',
       rightDatasetId: 'ds_products',
@@ -102,7 +101,7 @@ describe('validateRelationship', () => {
   });
 
   test('rejects a cycle with RELATIONSHIP_CYCLE', () => {
-    // orders→customers and customers→products exist; products→orders would close the loop.
+    // The third edge would close the orders-customers-products loop.
     const workspace = withRelationships(
       relate('rel_1', 'ds_orders', 'ds_customers'),
       relate('rel_2', 'ds_customers', 'ds_products'),

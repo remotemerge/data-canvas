@@ -23,13 +23,7 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/**
- * Checks the parts of the tree Ajv cannot express.
- *
- * JSON Schema can describe the node shapes through a `$ref`, but it has no way to bound recursion
- * depth or total node count. Those limits live here, which is why the domain validator runs on
- * every tree even after Ajv has accepted it.
- */
+// Validates expression limits that JSON Schema cannot express.
 const validateStructure = (expression: DerivedExpression): Result<void, DomainError> => {
   const depth = expressionDepth(expression);
 
@@ -57,12 +51,7 @@ const validateStructure = (expression: DerivedExpression): Result<void, DomainEr
   return ok(undefined);
 };
 
-/**
- * Rejects enum values outside the closed sets the compiler can emit.
- *
- * The type system already forbids these, but a tree arriving from a WebMCP call is `unknown` cast
- * into shape, so the guarantee has to be re-established at runtime before the compiler trusts it.
- */
+// Rejects expression enum values the compiler cannot emit.
 const validateNodes = (expression: DerivedExpression): Result<void, DomainError> => {
   switch (expression.kind) {
     case 'arithmetic':
@@ -128,16 +117,7 @@ const validateNodes = (expression: DerivedExpression): Result<void, DomainError>
   return ok(undefined);
 };
 
-/**
- * Walks the derived-column reference graph looking for a cycle.
- *
- * A derived column may build on another, so the references form a graph rather than a tree. Left
- * unchecked, a mutual reference would make the compiler recurse until the stack gave out. The rule
- * and the reasoning are the same as for relationship cycles.
- *
- * `candidateId` is the column being created or replaced, and `expression` its proposed definition,
- * so the check runs against the graph as it would be rather than as it is.
- */
+// Checks whether a proposed derived-column definition introduces a reference cycle.
 const findsCycle = (
   candidateId: EntityId,
   expression: DerivedExpression,
@@ -166,7 +146,7 @@ const findsCycle = (
 };
 
 export interface DerivedColumnCandidate {
-  /** Present when replacing an existing definition, absent when creating one. */
+  // Existing definition ID when replacing a derived column.
   id?: EntityId;
   name: string;
   expression: DerivedExpression;
@@ -177,13 +157,7 @@ export interface ValidatedDerivedColumn {
   logicalType: LogicalType;
 }
 
-/**
- * Validates a derived column against the dataset and the existing derived columns.
- *
- * Runs the checks in the order that produces the most useful message: structure first, because a
- * pathological tree should be rejected before anything walks it repeatedly; then node vocabulary;
- * then references and types; then cycles, which need a resolvable graph to be meaningful.
- */
+// Validates a derived-column definition against dataset state and existing definitions.
 export const validateDerivedColumn = (
   dataset: Dataset,
   candidate: DerivedColumnCandidate,
@@ -211,9 +185,7 @@ export const validateDerivedColumn = (
 
   const candidateId = candidate.id ?? '';
 
-  // Cycles are checked before types. Inference resolves against the graph *without* the column
-  // being replaced, so a self-reference would otherwise be reported as a missing column and hide
-  // the real problem.
+  // Check cycles before inference so a self-reference is reported as a cycle, not a missing column.
   if (candidateId !== '' && findsCycle(candidateId, candidate.expression, derivedColumns)) {
     return err(
       domainError('UNSUPPORTED_OPERATION', 'This definition would make the derived column reference itself.', {
@@ -222,8 +194,7 @@ export const validateDerivedColumn = (
     );
   }
 
-  // A new column has no ID yet, so it cannot close a loop through its own name. What it can do is
-  // reference one that is already cyclic, which this covers.
+  // New columns cannot self-reference by ID, but they can reference an existing cyclic definition.
   for (const referenced of expressionColumnIds(candidate.expression)) {
     const definition = derivedColumns[referenced];
 
@@ -236,8 +207,7 @@ export const validateDerivedColumn = (
     }
   }
 
-  // Only derived columns on the same dataset are in scope. A derived column referencing another
-  // dataset's column would need a join path the expression has no way to name.
+  // Derived expressions can reference columns only from their own dataset.
   const sameDataset = Object.values(derivedColumns).filter(
     (column) => column.datasetId === dataset.id && column.id !== candidate.id,
   );

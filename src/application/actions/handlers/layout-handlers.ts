@@ -4,24 +4,14 @@ import { resolveVisualization } from '@/application/validation/validate-entity-r
 import { domainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-/**
- * Canvas density bounds.
- *
- * A single column stacks charts vertically; the upper bound keeps a grid cell wide enough to render
- * a readable chart at any practical viewport width.
- */
+// Supported canvas column range.
 export const MIN_LAYOUT_COLUMNS = 1;
 export const MAX_LAYOUT_COLUMNS = 24;
 
-/** Bound on placed items, keeping layout proportional to the number of charts a canvas can hold. */
+// Maximum number of visualization items in the layout.
 export const MAX_LAYOUT_ITEMS = 200;
 
-/**
- * Updates the canvas layout.
- *
- * Omitted fields keep their current value, so changing density does not disturb placement and
- * repositioning does not reset density.
- */
+// Merges supplied layout fields with the current layout.
 export const handleUpdateLayout: ActionHandler<UpdateLayoutInput> = (workspace, payload) => {
   const columns = payload.columns ?? workspace.layout.columns;
 
@@ -44,8 +34,7 @@ export const handleUpdateLayout: ActionHandler<UpdateLayoutInput> = (workspace, 
       );
     }
 
-    // Every placed item must address a real visualization; otherwise the canvas reserves space for
-    // a chart that will never render.
+    // Reject slots for missing visualizations so the canvas cannot reserve empty chart space.
     for (const item of payload.items) {
       const visualization = resolveVisualization(workspace, item.visualizationId);
 

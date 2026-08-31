@@ -8,17 +8,11 @@ import { UndoRedoControls } from '@/ui/workspace/undo-redo-controls.tsx';
 
 interface SettingsSheetProps {
   onError: (error: DomainError | null) => void;
-  /** Undo and redo live here only at widths where the header cannot show them. */
+  // Show undo and redo when the header is too narrow.
   showHistoryControls: boolean;
 }
 
-/**
- * Workspace-level settings.
- *
- * These belong here rather than in the inspector: the inspector edits whatever is selected, while
- * density, storage, and the privacy notice apply to the workspace no matter what is selected. Left
- * in the right rail they pushed the per-dataset editors down and were read once and then ignored.
- */
+// Workspace-level settings shown in the settings sheet.
 export const SettingsSheet = ({ onError, showHistoryControls }: SettingsSheetProps): React.JSX.Element => (
   <Sheet>
     <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open settings" />}>

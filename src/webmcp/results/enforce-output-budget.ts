@@ -1,15 +1,9 @@
 export const MAX_TOOL_OUTPUT_LENGTH = 1500;
 
-/** Kept whole when a payload is trimmed: they identify the result rather than carry its bulk. */
+// Fields retained when trimming a payload.
 const SCALAR_KEYS = new Set(['ok', 'revision', 'code', 'summary', 'error', 'datasetId', 'name', 'rowCount']);
 
-/**
- * The array fields that carry a result's bulk, in increasing order of importance.
- *
- * Entries are dropped from the end of this list backwards, so `rows` — the bulkiest and the least
- * useful without its header — is sacrificed before `columns` and `columnIds`, which name the
- * identifiers the analysis tools require.
- */
+// Result arrays trimmed from least to most important.
 const TRIMMABLE_KEYS = ['columnIds', 'columns', 'visualizations', 'filters', 'related', 'rows'] as const;
 
 interface ToolPayload {
@@ -23,15 +17,7 @@ interface ToolPayload {
 
 const serializedLength = (value: object): number => JSON.stringify(value).length;
 
-/**
- * Shrinks an oversized payload without changing its shape.
- *
- * Dropping every field but `summary` — the previous behaviour — made `get_dataset_schema` unusable
- * on an ordinary 21-column dataset: the column list was the whole point of the call, and the
- * analysis tools take column *IDs*, so an agent that could not read them could not go on to query
- * anything. Entries are removed from the longest list until the payload fits, and each trimmed field
- * reports how many of its entries survived so the agent can page for the rest or narrow its request.
- */
+// Trims an oversized payload while preserving its shape.
 const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed)) {
@@ -41,7 +27,7 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   const lists = TRIMMABLE_KEYS.flatMap((key) => (Array.isArray(parsed[key]) ? [[key, parsed[key]] as const] : []));
   for (const [key, value] of lists) result[key] = [...value];
 
-  // Trailing fields are sacrificed first so the most useful ones keep their entries the longest.
+  // Trim trailing fields first so earlier fields keep their entries.
   for (
     let index = lists.length - 1;
     index >= 0 && serializedLength({ ...result, truncated: true }) > MAX_TOOL_OUTPUT_LENGTH;
@@ -50,9 +36,7 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
     const [key, original] = lists[index]!;
     const kept = result[key] as unknown[];
 
-    // The counters are themselves part of the payload, so their cost is measured while trimming
-    // rather than added afterwards — appending them later would push a just-fitting result back
-    // over budget. `kept` is the live array, so each pop shrinks the measured size.
+    // Include trim counters in the size calculation before returning.
     const measured = (): number =>
       serializedLength({
         ...result,
@@ -77,8 +61,7 @@ export const enforceOutputBudget = (serialized: string): string => {
     const parsed = JSON.parse(serialized) as ToolPayload;
     const trimmed = JSON.stringify({ ...trimToBudget(parsed), ok: parsed.ok === true });
 
-    // A payload whose scalar fields alone exceed the budget cannot be trimmed structurally; a hard
-    // slice would emit invalid JSON, so it degrades to the summary-only form instead.
+    // Scalar fields alone exceed the budget, so return valid summary-only JSON.
     return trimmed.length <= MAX_TOOL_OUTPUT_LENGTH
       ? trimmed
       : JSON.stringify({

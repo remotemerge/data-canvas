@@ -4,49 +4,22 @@ import type { Dataset } from '@/domain/dataset/dataset.ts';
 import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
 import { Button } from '@/ui/components/ui/button.tsx';
 
-/**
- * Panel height bounds, as a fraction of the workspace body.
- *
- * The floor keeps enough rows visible for the table to still be a view rather than a header, and the
- * ceiling reserves space for the charts so dragging can never hide the canvas entirely.
- */
+// Panel height bounds as a fraction of workspace height.
 const MIN_HEIGHT_FRACTION = 0.15;
 const MAX_HEIGHT_FRACTION = 0.65;
 
-/**
- * Opening share of the workspace.
- *
- * The panel's handle, title bar, and row count take roughly 60px before any row renders, so a third
- * of the body left only about five rows visible. This is chosen against what the chart region needs
- * to avoid scrolling — its builder, margins, and the card's own floor — so the table gains rows from
- * space that was otherwise slack rather than from the chart.
- */
+// Default open share of the workspace body.
 const DEFAULT_HEIGHT_FRACTION = 0.45;
 
-/** Keyboard resize step, as a fraction of the body. Matches roughly a few table rows per press. */
+// Keyboard resize step as a fraction of the workspace body.
 const KEYBOARD_STEP = 0.05;
 
 const clampFraction = (value: number): number => Math.min(Math.max(value, MIN_HEIGHT_FRACTION), MAX_HEIGHT_FRACTION);
 
-/**
- * The workspace's bottom data panel: a resizable, collapsible home for the row-level table.
- *
- * Sized independently of the charts rather than taking whatever vertical space they leave. The table
- * is a primary analytical view, and as a leftover it collapsed into a shallow strip as soon as a
- * chart grew.
- *
- * The height is a fraction rather than a pixel count so it survives a window resize proportionally,
- * and it is view state rather than workspace state — a panel size is not something an agent acts on
- * or that belongs in the undo history.
- */
+// Resizable bottom panel for the row-level table.
 export const DataPanel = ({
   dataset,
-  /**
-   * Take all remaining height instead of the stored fraction.
-   *
-   * Set while the canvas holds no chart. The fraction is kept rather than overwritten, so adding a
-   * first chart returns the panel to whatever height the user had already dragged it to.
-   */
+  // Uses all remaining height while the canvas has no chart.
   fills = false,
 }: {
   dataset: Dataset;
@@ -66,13 +39,11 @@ export const DataPanel = ({
 
     if (bounds.height <= 0) return;
 
-    // Measured from the bottom, because the handle sits at the panel's top edge: dragging it up
-    // grows the panel.
+    // Measure from the bottom because the handle is on the panel's top edge.
     setFraction(clampFraction((bounds.bottom - clientY) / bounds.height));
   }, []);
 
-  // Bound to the window rather than the handle so a fast drag that outruns the pointer keeps
-  // resizing, and so releasing outside the panel still ends it.
+  // Listen on window so fast drags and outside releases still finish.
   useEffect(() => {
     if (!resizing) return;
 
@@ -107,13 +78,7 @@ export const DataPanel = ({
       style={collapsed || fills ? undefined : { height: `${fraction * 100}%` }}
       aria-label="Data"
     >
-      {/*
-        A separator rather than a button: it reports its position so a screen-reader user can hear
-        how the space is split, and the arrow keys resize it without a pointer.
-
-        Absent while the panel fills the canvas: with no chart above it there is no boundary to move,
-        so a control that cannot change anything would only mislead.
-      */}
+      {/* The separator resizes the panel with pointer or keyboard input and is absent when it fills the canvas. */}
       {fills ? null : (
         <div
           className="data-panel__handle"
@@ -150,8 +115,7 @@ export const DataPanel = ({
           {collapsed ? <LuChevronUp size={15} aria-hidden="true" /> : <LuChevronDown size={15} aria-hidden="true" />}
         </Button>
       </div>
-      {/* Unmounted rather than hidden when collapsed: the table windows its rows through DuckDB, so
-          keeping it mounted would leave it fetching for a view nobody is looking at. */}
+      {/* Unmount the collapsed table to stop windowed reads. */}
       {collapsed ? null : (
         <div className="data-panel__body">
           <WorkspaceTable dataset={dataset} />

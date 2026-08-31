@@ -7,33 +7,26 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/**
- * Join-path resolution.
- *
- * Because cycles are rejected when a relationship is created, the graph is a forest and the path
- * between two datasets is unique when it exists. That is what lets this module walk breadth-first
- * and return the first path found without any tie-breaking rule the caller would have to reason
- * about.
- */
+// Resolves relationship paths through the acyclic dataset graph.
 
-/** One step of a resolved path: the relationship to join, and which side is already in the query. */
+// One step in a resolved join path.
 export interface JoinStep {
   relationship: Relationship;
-  /** The dataset already present in the FROM/JOIN chain when this step runs. */
+  // Dataset already present in the join chain.
   fromDatasetId: EntityId;
-  /** The dataset this step brings into the query. */
+  // Dataset added by this step.
   toDatasetId: EntityId;
 }
 
-/** A dataset reachable from the anchor, with the alias the compiler assigns to it. */
+// Dataset reachable from the anchor with its compiler alias.
 export interface JoinPlan {
-  /** Ordered joins. Each step's `fromDatasetId` is guaranteed already present when it runs. */
+  // Ordered joins; each step starts from a dataset already in the chain.
   steps: JoinStep[];
-  /** Every dataset in the query, anchor first, in the order they enter the FROM/JOIN chain. */
+  // Query datasets in FROM/JOIN order, anchor first.
   datasetIds: EntityId[];
 }
 
-/** Depth guard. A path longer than this in an acyclic graph means an implausibly wide schema. */
+// Maximum relationship hops in a resolved path.
 export const MAX_JOIN_DEPTH = 8;
 
 const noJoinPath = (datasetId: EntityId): DomainError =>
@@ -43,13 +36,7 @@ const noJoinPath = (datasetId: EntityId): DomainError =>
     { datasetId },
   );
 
-/**
- * Finds the relationship chain connecting `anchorId` to `targetId`.
- *
- * Breadth-first, so the returned chain is the shortest — which in an acyclic graph is also the only
- * one. Traversal ignores the direction a relationship was declared in: which dataset a user happened
- * to pick as "left" is a UI detail, not a statement about reachability.
- */
+// Finds the relationship chain connecting two datasets.
 const findPath = (
   anchorId: EntityId,
   targetId: EntityId,
@@ -84,17 +71,7 @@ const findPath = (
   return undefined;
 };
 
-/**
- * Builds the join plan covering every dataset the query references.
- *
- * `requiredDatasetIds` is derived by the caller from the columns the query actually names, so a
- * query that never leaves its anchor produces an empty plan and compiles to exactly the SQL it did
- * before joins existed.
- *
- * When `allowedRelationshipIds` is supplied the search is restricted to those relationships, which
- * is how an explicit `relationshipIds` on the query constrains the path rather than merely
- * annotating it.
- */
+// Builds a join plan for every dataset referenced by a query.
 export const resolveJoinPath = (
   anchorId: EntityId,
   requiredDatasetIds: readonly EntityId[],
@@ -128,8 +105,7 @@ export const resolveJoinPath = (
 
     if (path === undefined) return err(noJoinPath(targetId));
 
-    // A path may traverse datasets already joined by an earlier target. Only the new tail is
-    // appended, so each dataset enters the chain exactly once and no relation is joined twice.
+    // Append only the new tail so each dataset enters the chain once.
     for (const step of path) {
       if (datasetIds.includes(step.toDatasetId)) continue;
 
@@ -141,12 +117,7 @@ export const resolveJoinPath = (
   return ok({ steps, datasetIds });
 };
 
-/**
- * Maps each column ID the query names to the dataset that owns it.
- *
- * A column belonging to no known dataset is a caller error rather than an unreachable join, so it is
- * reported by the compiler as `COLUMN_NOT_FOUND` — this function simply omits it.
- */
+// Maps known column IDs to their owning datasets.
 export const datasetIdsForColumns = (columnIds: readonly EntityId[], datasets: readonly QueryDataset[]): EntityId[] => {
   const owners: EntityId[] = [];
 

@@ -39,8 +39,7 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
           },
         ],
         filters,
-        // A time comparison returns one row per period, and the card shows the most recent. The
-        // other modifiers still collapse to a single row.
+        // Time comparisons return one row per period; the card shows the most recent. Other modifiers return one row.
         limit: metric.modifier?.kind === 'timeComparison' ? 200 : 1,
       })
       .then((result) => {

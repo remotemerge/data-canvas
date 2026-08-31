@@ -3,19 +3,10 @@ import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/** Matches the compiler's traversal bound, so nothing is offered that a query could not reach. */
+// Maximum relationship hops exposed to callers.
 const MAX_REACHABLE_DEPTH = 8;
 
-/**
- * Every dataset joinable to an anchor, excluding the anchor itself.
- *
- * Traversal is breadth-first and bounded, and follows relationships in both directions: which side
- * a user declared as "left" is a UI detail, not a limit on what a query can reach.
- *
- * This is what the visualization builder offers as selectable columns and what the visualization
- * handler validates a cross-dataset binding against, so both agree on reachability with the compiler
- * rather than each deciding separately.
- */
+// Returns datasets reachable from an anchor, excluding the anchor.
 export const reachableDatasets = (workspace: Workspace, anchorId: EntityId): Dataset[] => {
   const relationships = Object.values(workspace.relationships);
   const found: Dataset[] = [];

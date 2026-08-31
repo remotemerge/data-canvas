@@ -53,7 +53,7 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
           }
         },
       },
-      // Cross-origin exposure is intentionally omitted. Data Canvas v1 tools stay same-origin.
+      // Keep v1 tools same-origin; omit cross-origin exposure.
       { signal: controller.signal },
     );
     setToolStatus({ registeredCount: controllers.size });

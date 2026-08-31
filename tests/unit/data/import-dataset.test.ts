@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { ingestionFailure, validateColumnCount, validateImportFile } from '@/data/import/import-dataset.ts';
 import { MAX_COLUMN_COUNT, MAX_FILE_BYTES, fileExtension } from '@/data/import/import-limits.ts';
 
-/** Builds a `File` without materializing its bytes, so size limits are testable cheaply. */
+// Builds a `File` without materializing its bytes, so size limits are testable cheaply.
 const fileOfSize = (name: string, size: number): File => {
   const file = new File(['x'], name);
 
@@ -125,8 +125,7 @@ describe('validateColumnCount', () => {
 
 describe('ingestionFailure', () => {
   test('is generic, carrying nothing the parser saw', () => {
-    // DuckDB parse errors quote the offending line, so the engine's own message is dropped rather
-    // than forwarded into an error that reaches the UI and an agent.
+    // Drop DuckDB parser details before errors reach the UI or agents.
     const error = ingestionFailure();
 
     expect(error.code).toBe('IMPORT_FAILED');

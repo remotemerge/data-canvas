@@ -69,11 +69,7 @@ export interface WorkspaceCommands {
 
 const historyCommands = createUndoRedo({ dispatcher, store: workspaceStore });
 
-/*
- * Human commands are attributed `actor: 'human'` and omit `expectedRevision`: the person issuing
- * them is looking at current state, so there is no earlier observation to assert against. Agent
- * writes, whose decisions may predate a human's edit, supply it.
- */
+// Human commands omit expectedRevision; agent writes supply the revision they observed.
 const humanCommands: WorkspaceCommands = {
   beginDatasetImport: (input) =>
     dispatcher.execute({ type: 'dataset.beginImport', payload: input }, { actor: 'human' }),
@@ -114,14 +110,5 @@ const humanCommands: WorkspaceCommands = {
   redo: historyCommands.redo,
 };
 
-/**
- * The only mutation path available to React.
- *
- * Components call these commands and never `workspaceStore.setState`. Because the commands are the
- * same dispatcher calls the WebMCP adapter makes, a human click and an agent tool call reach
- * identical validation, revision, and history behaviour.
- *
- * The command object is a module-level constant, so the `useMemo` returns a stable reference and
- * commands are safe in dependency arrays.
- */
+// React's shared mutation commands.
 export const useActions = (): WorkspaceCommands => useMemo(() => humanCommands, []);

@@ -9,25 +9,11 @@ import { measureAsync } from '@/shared/perf/performance-marks.ts';
 
 interface DatasetImportButtonProps {
   onError: (error: DomainError | null) => void;
-  /**
-   * Import is the primary action only where it is the one thing to do — the empty canvas. In the
-   * always-present sidebar it is one tool among many, so it renders quietly and leaves the screen
-   * with a single blue call to action.
-   */
+  // Whether the button is shown as the primary empty-state action.
   emphasis?: 'primary' | 'secondary';
 }
 
-/**
- * Picks a local file and drives the import through the shared dispatcher.
- *
- * No engine access whatsoever. The component validates nothing itself beyond calling the shared
- * pre-ingestion check for immediate feedback; the same check runs again inside the engine, which is
- * what makes it a guarantee rather than a courtesy — an agent-initiated import never passes here.
- *
- * The three-step sequence mirrors the action model: commit `loading`, ingest, then commit `ready`
- * or `error`. The `datasetId` from the first commit threads through the rest, so a failure always
- * has a specific dataset to mark rather than leaving a stranded placeholder.
- */
+// Selects a local file and imports it through the shared dispatcher.
 export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetImportButtonProps): React.JSX.Element => {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -73,16 +59,14 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
 
     onError(imported.error);
 
-    // The placeholder must not stay at `loading`. Marking it failed is itself a dispatched action,
-    // so the failure is revisioned and visible to an agent reading the workspace.
+    // Mark the placeholder failed through the dispatcher.
     await failDatasetImport({ datasetId, reason: imported.error.message });
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
 
-    // Resetting the input lets the same file be chosen twice in a row, which otherwise fires no
-    // change event and looks like the button has stopped working.
+    // Clear the input so choosing the same file fires change again.
     event.target.value = '';
 
     if (file === undefined) return;
@@ -98,11 +82,7 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
 
   return (
     <div className="import">
-      {/*
-        The visible button owns the interaction and forwards clicks here, so this input is hidden
-        from the accessibility tree: left exposed it was a second tab stop announcing an unnamed
-        "Choose File", duplicating the button that already carries the name.
-      */}
+      {/* The visible button owns the interaction, so the file input is hidden from the accessibility tree. */}
       <input
         ref={inputRef}
         id={inputId}
@@ -135,13 +115,7 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
   );
 };
 
-/**
- * Reports import progress honestly per phase.
- *
- * Only the reading phase gets a determinate bar, because only it knows how much is left. DuckDB
- * reports nothing during ingestion, so inventing a percentage there would produce the stalled-at-90%
- * bar that teaches users to distrust progress indicators.
- */
+// Reports determinate progress only while the file is being read.
 const ImportProgressReadout = ({ progress }: { progress: ImportProgress }): React.JSX.Element => {
   if (progress.phase !== 'reading' || progress.totalBytes === undefined || progress.totalBytes === 0) {
     return (

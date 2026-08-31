@@ -19,13 +19,13 @@ import { useWorkspace } from '@/state/use-workspace.ts';
 
 const CHART_KINDS = VISUALIZATION_KINDS.filter((kind) => kind !== 'table');
 
-/** A column offered by the builder, tagged with the dataset it came from so provenance stays visible. */
+// Column offered by the builder with its source dataset.
 interface ScopedColumn {
   column: Column;
   dataset: Dataset;
 }
 
-/** Groups scoped columns by dataset, preserving the anchor-first order the caller supplied. */
+// Groups columns by dataset while preserving caller order.
 const groupByDataset = (columns: readonly ScopedColumn[]): { dataset: Dataset; columns: Column[] }[] => {
   const groups: { dataset: Dataset; columns: Column[] }[] = [];
 
@@ -57,9 +57,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const [binCount, setBinCount] = useState(20);
   const dataset = datasets[datasetId];
 
-  // Columns from datasets joinable to the anchor become selectable, anchor first. The same
-  // reachability helper the handler validates against, so the form cannot offer an unreachable
-  // column that the dispatcher would then reject.
+  // Offer columns from datasets reachable from the anchor.
   const related = useMemo(
     () => (dataset === undefined ? [] : reachableDatasets(workspace, dataset.id)),
     [workspace, dataset],
@@ -75,8 +73,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
 
   const numericColumns = scopedColumns.filter((scoped) => scoped.column.logicalType === 'number');
 
-  // A histogram bins its x column, so it offers numeric and temporal columns rather than the
-  // dimensions the grouped kinds accept.
+  // Histograms bin x, so they offer numeric and temporal columns.
   const binnable = scopedColumns.filter(
     (scoped) =>
       scoped.column.logicalType === 'number' ||
@@ -95,15 +92,8 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   });
 
   /*
-   * A temporal dimension on a series chart is bucketed rather than grouped by raw value.
-   *
-   * Grouping by a raw timestamp makes one group per distinct instant, which for daily data over a
-   * year is hundreds of marks packed into a few hundred pixels. Binning states the granularity
-   * explicitly, and it is what lets the sampling policy widen the unit when the span outgrows the
-   * plot — an unbinned dimension gives it nothing to widen.
-   *
-   * Day is the floor, never the final answer: the policy coarsens to weeks or months as needed, and
-   * a short span stays daily.
+   * Bucket temporal dimensions before querying. Raw timestamps can produce one group per instant,
+   * leaving the chart with too many marks. The sampling policy can widen the bucket later.
    */
   const seriesDimension = dimensionColumns.find((scoped) => scoped.column.id === x)?.column;
   const temporalDimension = seriesDimension !== undefined && isTemporalType(seriesDimension.logicalType);
@@ -129,21 +119,19 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const measureName = columnName(y);
   const dimensionName = columnName(x);
 
-  // The title state holds a user override only, so an untouched field keeps tracking the binding
-  // rather than freezing whatever the first column choice suggested.
+  // Keep an empty override tied to the current suggestion.
   const suggestedTitle = suggestVisualizationTitle({
     kind,
     ...(measureName === undefined ? {} : { measureName }),
     ...(dimensionName === undefined ? {} : { dimensionName }),
-    // A box plot derives its own quantiles, so naming an aggregate would describe a step it never runs.
+    // Box plots compute quantiles themselves; they do not use an aggregate choice.
     ...(kind === 'boxplot' ? {} : { aggregate }),
   });
   const effectiveTitle = title.trim() === '' ? suggestedTitle : title;
 
   const create = async () => {
     if (dataset === undefined || validation === null || !validation.ok) return;
-    // Each distribution kind needs its own query shape: a histogram counts rows per bucket, a box
-    // plot asks for a five-number summary, and the rest group as before.
+    // Distribution kinds use dedicated query shapes.
     const query =
       kind === 'histogram'
         ? {
@@ -163,8 +151,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
             }
           : {
               datasetId,
-              // A bucketed temporal dimension moves to `binnedDimensions`, which is the shape the
-              // compiler bins on and the sampling policy widens.
+              // Binned dimensions use the compiler's `binnedDimensions` shape.
               dimensions: x === '' || temporalDimension ? [] : [x],
               ...(x === '' || !temporalDimension
                 ? {}
@@ -237,8 +224,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
       </label>
       <label>
         Title
-        {/* Empty means "use the suggestion", shown as the placeholder so the generated title is
-            visible before creating. Typing overrides it; clearing the field returns to tracking. */}
+        {/* Empty uses the generated suggestion as a placeholder; text overrides it. */}
         <input
           value={title}
           maxLength={120}
@@ -291,8 +277,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           <select value={x} onChange={(event) => setX(event.target.value)}>
             <option value="">Choose</option>
             {groupByDataset(dimensionColumns).map((group) => (
-              // Grouped by source dataset so a column's provenance is legible when a chart spans a
-              // join and two datasets contribute similarly named columns.
+              // Group by dataset so provenance stays visible for joined columns.
               <optgroup key={group.dataset.id} label={group.dataset.name}>
                 {group.columns.map((column) => (
                   <option key={column.id} value={column.id}>
@@ -304,7 +289,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           </select>
         </label>
       )}
-      {/* A histogram's measure is the bucket count, so offering one would let it contradict the chart. */}
+      {/* Histogram y is its bucket count, so it has no measure selector. */}
       {kind === 'histogram' ? null : (
         <label>
           Measure
@@ -322,7 +307,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           </select>
         </label>
       )}
-      {/* A box plot computes its own quantiles, so an aggregate choice would have nothing to act on. */}
+      {/* Box plots compute quantiles, so they have no aggregate selector. */}
       {kind === 'histogram' || kind === 'boxplot' ? null : (
         <label>
           Aggregate

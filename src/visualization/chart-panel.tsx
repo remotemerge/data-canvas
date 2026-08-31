@@ -51,21 +51,10 @@ const readTheme = (): ChartTheme => {
   };
 };
 
-/**
- * Width buckets the temporal granularity is chosen from.
- *
- * Rounded hard, because this width feeds a re-query. Reporting every pixel of a panel drag would
- * fire a query per frame, and the bucket unit only changes across wide ranges anyway — the rounding
- * costs nothing the user can see while collapsing a resize into at most a few queries.
- */
+// Width bucket used to choose temporal granularity.
 const PLOT_WIDTH_QUANTUM = 200;
 
-/**
- * Tracks a chart body's width, quantised, for the sampling policy.
- *
- * `undefined` until the element is measured so the first query runs on the point budget alone
- * rather than on a guessed width.
- */
+// Quantized chart width used by the sampling policy.
 const usePlotWidth = (ref: React.RefObject<HTMLDivElement | null>): number | undefined => {
   const [width, setWidth] = useState<number | undefined>(undefined);
 
@@ -113,18 +102,14 @@ const EChart = ({
 }) => {
   const actions = useActions();
   const [annotationAnchor, setAnnotationAnchor] = useState<AnnotationAnchor | null>(null);
-  // Selectors must return a stable reference. `Object.values(...).filter(...)` inside the selector
-  // allocates a new array on every store read, so `useSyncExternalStore` sees a changed snapshot
-  // each render and loops until React throws "Maximum update depth exceeded". The record itself is
-  // stable between mutations, so the derivation belongs in `useMemo` rather than in the selector.
+  // Derive dependent arrays in useMemo; selectors must return stable references.
   const annotationRecord = useWorkspace((state) => state.workspace.annotations);
   const annotations = useMemo(
     () => Object.values(annotationRecord).filter((item) => item.visualizationId === visualization.id),
     [annotationRecord, visualization.id],
   );
   const selectionRecord = useWorkspace((state) => state.workspace.selections);
-  // `find` returns an element reference rather than a new object, so this one is already stable —
-  // but it is derived from the record for the same reason, keeping the rule uniform.
+  // The selected visualization object is already a stable record reference.
   const selection = useMemo(
     () => Object.values(selectionRecord).find((item) => item.datasetId === visualization.datasetId),
     [selectionRecord, visualization.datasetId],
@@ -132,13 +117,11 @@ const EChart = ({
   const workspace = useWorkspace((state) => state.workspace);
   const themeRevision = useThemeRevision();
   const propagated = propagateSelection(workspace, visualization);
-  // Only `highlight` dims here. `filter` already removed the excluded rows from `result`, so dimming
-  // as well would fade every remaining mark.
+  // Highlight mode dims marks; filter mode has already removed them from the result.
   const highlightPredicate = useMemo(() => {
     if (propagated.effect !== 'highlight' || propagated.predicate === undefined) return undefined;
 
-    // `key` carries the column ID for dimension columns, which is what a selection predicate
-    // references; measure columns key on their alias and simply never match.
+    // Dimension keys carry column IDs used by selection predicates.
     const columnIndexById = new Map(result.columns.map((column, index) => [column.key, index]));
     const predicate = propagated.predicate;
 
@@ -163,8 +146,7 @@ const EChart = ({
       }
       const predicate = categorySelectionFromClick(visualization, event as never);
       if (predicate === null) return;
-      // Ctrl/cmd-click adds to the selection; a plain click replaces it, and clicking the current
-      // selection again clears it.
+      // Ctrl/cmd-click extends selection; plain click replaces it; clicking again clears it.
       if (isAdditiveClick(clicked as { event?: { ctrlKey?: boolean; metaKey?: boolean } })) {
         void actions.extendSelection({
           datasetId: visualization.datasetId,
@@ -231,13 +213,7 @@ export const ChartPanel = ({
 }: {
   visualization: Visualization;
   onError: (error: DomainError) => void;
-  /**
-   * Layout actions owned by the canvas, rendered inside this header.
-   *
-   * They belong to the grid item rather than the chart, but floating them over the panel left them
-   * on their own baseline and overhanging its edge. Passing them in keeps the layout concern with
-   * the canvas while letting one flex row align every control in the header.
-   */
+  // Layout controls rendered in the chart header.
   resizeControls?: React.ReactNode;
 }) => {
   const workspace = useWorkspace((state) => state.workspace);
@@ -250,13 +226,11 @@ export const ChartPanel = ({
 
   useEffect(() => {
     const controller = new AbortController();
-    // The previous result is deliberately left in place. Clearing it here would blank the canvas for
-    // the duration of every query, which on a multi-second one reads as the chart having broken.
+    // Keep the previous result visible while the next query runs.
     setLoading(true);
     void executeVisualizationQuery(visualization, workspace, undefined, controller.signal, plotWidth).then((next) => {
       if (controller.signal.aborted) return;
-      // A superseded result carries no rows. Adopting it would replace a good chart with an empty
-      // one, so it is dropped and the newer query's result arrives instead.
+      // Ignore superseded results so they cannot blank the chart.
       if (next.ok && next.value.stale === true) return;
       if (next.ok) {
         setResult(next.value);
@@ -267,8 +241,7 @@ export const ChartPanel = ({
     return () => {
       controller.abort();
     };
-    // `plotWidth` re-runs the query because it can change the temporal bucket, and it is quantised
-    // so a resize settles into at most a few re-queries rather than one per frame.
+    // Quantize width changes so resizing triggers only a few re-queries.
   }, [visualization, workspace.filters, workspace.selections, workspace.revision, plotWidth]);
 
   const remove = async () => {
@@ -303,9 +276,7 @@ export const ChartPanel = ({
         </div>
       )}
       {result?.disclosure === undefined ? null : <SamplingBadge disclosure={result.disclosure} />}
-      {/* The body absorbs the card's leftover height, which is what gives the chart room to grow
-          when the panel widens or the table is collapsed. It is also the element measured for the
-          temporal bucket, so the width feeding that decision is the plot's own. */}
+      {/* The body provides chart height and supplies the measured plot width. */}
       <div ref={bodyRef} className="chart-panel__body">
         {result !== null && result.rows.length === 0 ? (
           <p className="chart-panel__empty">No data matches current filters.</p>

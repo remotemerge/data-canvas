@@ -9,7 +9,7 @@ import type { SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import { createEntityId, ID_PREFIX, type EntityId } from '@/shared/ids/entity-id.ts';
 
-/** Monotonic counter, incremented exactly once per committed action. */
+// Monotonic revision incremented once per committed action.
 export type WorkspaceRevision = number;
 
 export const CURRENT_SCHEMA_VERSION = 2;
@@ -27,14 +27,7 @@ export interface WorkspaceLayout {
   items: WorkspaceLayoutItem[];
 }
 
-/**
- * The single canonical workspace aggregate.
- *
- * Entities are normalized `Record<EntityId, T>` maps rather than arrays so that actions can address
- * one entity without rewriting a list, and so revision diffs stay cheap.
- *
- * Raw analytical rows are absent by design. They live in DuckDB, never here.
- */
+// Canonical normalized workspace aggregate. Raw analytical rows remain in DuckDB.
 export interface Workspace {
   id: EntityId;
   schemaVersion: number;
@@ -44,14 +37,9 @@ export interface Workspace {
   activeDatasetId?: EntityId;
 
   datasets: Record<EntityId, Dataset>;
-  /**
-   * Columns computed from an expression tree rather than imported.
-   *
-   * Workspace-level rather than nested in `Dataset` because one may reference another, and the
-   * reference graph is validated as a whole. Kept acyclic for the same reason relationships are.
-   */
+  // Workspace-level derived columns kept in an acyclic reference graph.
   derivedColumns: Record<EntityId, DerivedColumn>;
-  /** Governed joins between datasets. The relationship graph is kept acyclic; see the validator. */
+  // Governed joins between datasets.
   relationships: Record<EntityId, Relationship>;
   visualizations: Record<EntityId, Visualization>;
   filters: Record<EntityId, Filter>;

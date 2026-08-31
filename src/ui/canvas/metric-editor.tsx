@@ -23,12 +23,7 @@ const DIRECTION_LABEL: Readonly<Record<MetricDirection, string>> = {
   neutral: 'Neither',
 };
 
-/**
- * Edits a metric's modifier and its delta presentation.
- *
- * The direction control exists because no amount of inspection tells the app whether a rise is good
- * news. It is the one piece of the metric only a person can supply.
- */
+// Edits a metric's modifier and delta presentation.
 export const MetricEditor = ({
   metric,
   onError,
@@ -71,8 +66,7 @@ export const MetricEditor = ({
   const save = (): void => {
     if (modifier === null) return;
 
-    // A percent change is a ratio and a difference is a level, so the format follows the modifier
-    // rather than being set separately and drifting out of step with it.
+    // Percent change is a ratio; difference is a level, so format follows the modifier.
     const percent = modifier.kind === 'timeComparison' && modifier.as === 'percentChange';
     const comparison = modifier.kind === 'timeComparison' && modifier.as !== 'absolute';
 

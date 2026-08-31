@@ -5,17 +5,11 @@ import type { ColumnProfile as Profile } from '@/application/queries/column-stat
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
-/** Formats a statistic for display, keeping long decimals from overflowing the panel. */
+// Formats a statistic for display without long decimals.
 const formatNumber = (value: number | undefined): string =>
   value === undefined || !Number.isFinite(value) ? '—' : String(Math.round(value * 1000) / 1000);
 
-/**
- * Shows a column's statistical profile.
- *
- * The values come from aggregates in DuckDB rather than from any row read into JavaScript, so the
- * cost is the same whether the dataset has a thousand rows or ten million. Frequent values are
- * dataset content and are rendered as plain text.
- */
+// Shows bounded aggregate statistics for a column.
 export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: Column }): React.JSX.Element => {
   const workspace = useWorkspace((state) => state.workspace);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -78,7 +72,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
             <ul className="column-profile__values">
               {profile.topValues.map((entry, index) => (
                 <li key={`${String(entry.value)}-${index}`}>
-                  {/* Rendered as text content, never as markup: these are imported cell values. */}
+                  {/* Imported values render as text, never markup. */}
                   <span>{String(entry.value ?? '—')}</span> <small>{entry.count}</small>
                 </li>
               ))}

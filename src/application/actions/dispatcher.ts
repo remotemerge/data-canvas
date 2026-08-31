@@ -58,12 +58,7 @@ import type { Result } from '@/shared/result/result.ts';
 import { workspaceStore } from '@/state/workspace-store.ts';
 import type { WorkspaceState } from '@/state/workspace-store.ts';
 
-/**
- * What the dispatcher needs in order to reach state and the outside world.
- *
- * Passing the store rather than importing a singleton lets tests drive an isolated dispatcher, and
- * lets the data engine be swapped for the real one without touching a handler.
- */
+// Dependencies injected into the dispatcher.
 export interface DispatcherDeps {
   store: {
     getState(): WorkspaceState;
@@ -72,7 +67,7 @@ export interface DispatcherDeps {
   dataEngine: DataEnginePort;
 }
 
-/** Dispatches one action to its handler. Exhaustive over `ApplicationAction` by construction. */
+// Routes an action to its handler; the switch is exhaustive over `ApplicationAction`.
 const runHandler = (
   workspace: Workspace,
   action: ApplicationAction,
@@ -143,31 +138,12 @@ const runHandler = (
 const abortedError = (): DomainError =>
   domainError('UNSUPPORTED_OPERATION', 'The action was cancelled before it was committed.', { aborted: true });
 
-/**
- * Reads the signal's current state.
- *
- * A function rather than an inline check: the dispatcher tests the same signal twice around an
- * `await`, and control-flow narrowing from the first test would otherwise convince the compiler the
- * second is unreachable, even though the signal can abort in between.
- */
+// Reads the signal at each check around an `await`; it may change between checks.
 const isAborted = (context: ActionContext): boolean => context.signal?.aborted ?? false;
 
-/**
- * Creates the application's single mutation entry point.
- *
- * Sequence, in order: revision check → semantic validation and side effects → atomic commit →
- * history append. Every step before the commit is free of state changes, so a rejected action
- * leaves the workspace exactly as it was.
- */
+// Creates the application's single mutation entry point.
 export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
-  /**
-   * Serializes execution.
-   *
-   * Two `execute` calls arriving together would otherwise both read the same revision, both pass
-   * their revision checks, and the second commit would silently overwrite the first — the precise
-   * failure the revision mechanism exists to prevent. Chaining onto a single promise makes
-   * read-validate-commit atomic with respect to other actions.
-   */
+  // Serializes action execution so revision checks cannot race.
   let queue: Promise<unknown> = Promise.resolve();
 
   const run = async (action: ApplicationAction, context: ActionContext): Promise<Result<ActionResult, DomainError>> => {
@@ -175,8 +151,7 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     const workspace = deps.store.getState().workspace;
 
-    // Revision check first: a stale caller must be rejected before any validation or side effect
-    // runs, since its decision was made against a workspace that no longer exists.
+    // Reject stale actions before validation or side effects.
     if (context.expectedRevision !== undefined && context.expectedRevision !== workspace.revision) {
       return err(
         domainError(
@@ -191,8 +166,7 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     if (!outcome.ok) return outcome;
 
-    // Handlers may await the data engine, so re-check abortion before committing. Abandoning here
-    // costs the completed work but never leaves partially applied state.
+    // Handlers may await the engine. Check cancellation again before committing their result.
     if (isAborted(context)) return err(abortedError());
 
     const actionId = createEntityId(ID_PREFIX.action);
@@ -211,9 +185,7 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
       ...(context.origin === undefined ? {} : { origin: context.origin }),
     };
 
-    // One `setState` call. Splitting the workspace and history writes would let a subscriber
-    // observe changed entities at an unchanged revision, breaking the concurrency contract that
-    // `expectedRevision` rests on.
+    // Commit workspace and history together so subscribers never observe only one update.
     deps.store.setState((state) => {
       const undoStack =
         context.origin === 'undo'
@@ -253,8 +225,7 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
     execute: (action, context) => {
       const result = queue.then(() => run(action, context));
 
-      // The queue must not stay rejected. `run` already returns failures as values, so this only
-      // guards against an unexpected throw poisoning every subsequent action.
+      // Keep the queue usable after an unexpected throw; normal failures are returned as values.
       queue = result.catch(() => undefined);
 
       return result;
@@ -262,11 +233,5 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
   };
 };
 
-/**
- * The application's dispatcher instance.
- *
- * The engine arrives through the registry rather than by direct import, so this module carries no
- * DuckDB dependency. Until bootstrap registers and starts one, engine-backed actions fail with
- * `ENGINE_UNAVAILABLE` while metadata-only actions stay fully functional.
- */
+// Shared application dispatcher.
 export const dispatcher = createDispatcher({ store: workspaceStore, dataEngine: registeredDataEngine });

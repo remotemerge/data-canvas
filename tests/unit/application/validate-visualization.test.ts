@@ -12,7 +12,7 @@ const REVENUE = 'col_revenue';
 
 const check = (kind: VisualizationKind, binding: VisualBinding) => validateVisualization(dataset, kind, binding);
 
-/** One valid binding per kind, so the table below can assert every kind has a satisfiable rule. */
+// One valid binding per kind, so the table below can assert every kind has a satisfiable rule.
 const validBinding: Record<VisualizationKind, VisualBinding> = {
   line: { x: DATE, y: [REVENUE] },
   area: { x: DATE, y: [REVENUE] },

@@ -69,8 +69,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const dataset = workspace.datasets[input.datasetId as string];
       if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${String(input.datasetId)}' does not exist.`);
 
-      // Directly related datasets only. Following the graph transitively would return a schema whose
-      // size grows with the workspace, which the output budget would then truncate arbitrarily.
+      // Limit schema expansion to directly related datasets to keep output bounded.
       const related =
         input.includeRelated === true
           ? Object.values(workspace.relationships)
@@ -155,9 +154,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const measures = input.measures as MeasureSpec[];
       const columnIds = [...dimensions, ...measures.flatMap((measure) => (measure.columnId ? [measure.columnId] : []))];
 
-      // A column may belong to any dataset in the workspace: whether it is actually reachable from
-      // the anchor is the compiler's decision, and it reports `NO_JOIN_PATH` with the unreachable
-      // dataset named. Rejecting non-anchor columns here would mask that better error.
+      // Let the compiler report unreachable columns with NO_JOIN_PATH.
       const known = new Set(
         Object.values(workspace.datasets).flatMap((candidate) => candidate.columns.map((column) => column.id)),
       );

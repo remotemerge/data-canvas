@@ -20,14 +20,9 @@ export interface ChartResult {
   rows: readonly (string | number | boolean | null)[][];
   rowCount: number;
   sampled: boolean;
-  /**
-   * How the result was reduced, when it was.
-   *
-   * Present exactly when `sampled` is true. The UI renders it as a badge with an explanation; a
-   * sampled result with no disclosure would be the silent approximation this design forbids.
-   */
+  // Reduction applied to an approximate result, present when `sampled` is true.
   disclosure?: SamplingDisclosure;
-  /** True when a newer query for the same chart superseded this one. The caller discards it. */
+  // True when a newer query superseded this result; callers must discard it.
   stale?: boolean;
 }
 
@@ -40,8 +35,7 @@ export const resolveVisualizationQuery = (visualization: Visualization, workspac
       operator: filter.operator,
       ...(filter.value === undefined ? {} : { value: filter.value }),
     }));
-  // Only `filter` mode changes the query. `highlight` keeps the full result and dims unselected
-  // marks in the renderer, so the chart's totals stay stable while showing what is selected.
+  // Filter changes the query; highlight keeps all rows and dims unmatched marks in the renderer.
   const propagated = propagateSelection(workspace, visualization);
   const selectionFilter =
     propagated.effect === 'filter' && propagated.predicate !== undefined ? [propagated.predicate] : [];
@@ -53,16 +47,7 @@ export const resolveVisualizationQuery = (visualization: Visualization, workspac
   };
 };
 
-/**
- * Estimates how many rows the chart query would return, so sampling can be decided before running it.
- *
- * A `count_distinct` over the grouped dimensions rather than a full run: it returns one row whatever
- * the dataset's size, which is what makes asking the question cheaper than answering it. A query
- * with no dimensions groups to a single row and needs no estimate at all.
- *
- * A failed estimate returns `undefined` and the caller proceeds unsampled. Failing to predict the
- * size must not fail the query.
- */
+// Estimates grouped result size before running the chart query.
 const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery): Promise<number | undefined> => {
   const grouped = [...query.dimensions, ...(query.binnedDimensions ?? []).map((bin) => bin.columnId)];
 
@@ -83,8 +68,7 @@ const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery):
 
   if (row === undefined) return undefined;
 
-  // Distinct counts multiply across dimensions in the worst case. Over-estimating only makes the
-  // policy more cautious, which is the safe direction: it never silently under-samples.
+  // Multiplying distinct counts overestimates safely; it can trigger sampling, but never under-sample.
   return row.reduce<number>((product, value) => product * Math.max(Number(value) || 0, 1), 1);
 };
 
@@ -93,23 +77,15 @@ export const executeVisualizationQuery = async (
   workspace: Workspace,
   engine: DataEnginePort = registeredDataEngine,
   signal?: AbortSignal,
-  /**
-   * The rendered plot's width in pixels, when the caller has measured it.
-   *
-   * Only ever narrows a temporal chart's buckets to what the panel can legibly show. Omitted by
-   * every non-rendering caller — a WebMCP tool has no plot — and those keep the point budget alone.
-   */
+  // Optional rendered width used to choose a legible temporal bucket.
   plotWidth?: number,
 ): Promise<Result<ChartResult, DomainError>> => {
   const resolved = resolveVisualizationQuery(visualization, workspace);
 
-  // Keyed per visualization, so changing a filter aborts this chart's in-flight query while leaving
-  // every other chart's alone. Without the key a superseded query would run to completion in the
-  // worker and only have its result discarded, which is the cost this is here to avoid.
+  // Scope supersession to this visualization so one chart's filter does not cancel another's query.
   const scheduling = { key: `visualization:${visualization.id}`, ...(signal === undefined ? {} : { signal }) };
 
-  // A KPI or table is never approximated, so it skips the estimate entirely rather than computing
-  // one it would refuse to act on.
+  // KPI and table results are exact and do not need a sampling estimate.
   const estimatedRows = requiresExactResult(visualization.kind)
     ? undefined
     : await estimateResultRows(engine, resolved);
@@ -130,8 +106,7 @@ export const executeVisualizationQuery = async (
 
   if (!result.ok) return result;
 
-  // A superseded query yields no rows. Returning an empty chart result would blank the canvas, so
-  // the stale marker is passed through and the caller keeps what it is already showing.
+  // Preserve the stale marker so callers keep the previous chart while empty rows are ignored.
   if (result.value.stale === true) {
     return ok({ columns: result.value.columns, rows: [], rowCount: 0, sampled: false, stale: true });
   }
@@ -140,15 +115,13 @@ export const executeVisualizationQuery = async (
 
   const strategy = plan.disclosure?.strategy;
 
-  // Top-N is the one strategy needing post-processing: the engine returned the retained groups, and
-  // the population total is what turns the remainder into a bucket the chart's total reconciles with.
+  // Top-N needs the population total to build its `Other` bucket.
   if (strategy?.kind === 'topN' && plan.totalQuery !== undefined) {
     const totals = await engine.executeAnalysis(plan.totalQuery);
     const measureStartIndex = plan.query.dimensions.length + (plan.query.binnedDimensions ?? []).length;
     const additive = plan.query.measures.map((measure) => isAdditiveAggregate(measure.aggregate));
 
-    // Without the total there is nothing to subtract from, so the retained groups are returned as
-    // they are. A missing bucket is honest; a fabricated one is not.
+    // Without a total, return retained groups without inventing an `Other` value.
     const rows = totals.ok
       ? foldOtherBucket(result.value.rows, measureStartIndex, totals.value.rows[0] ?? [], additive)
       : result.value.rows;

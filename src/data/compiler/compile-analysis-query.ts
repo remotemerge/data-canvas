@@ -27,47 +27,25 @@ export interface CompiledQuery {
   sql: string;
   parameters: readonly unknown[];
   resultColumns: ResultColumn[];
-  /** Datasets the query reads, anchor first. Single-element unless the query crosses a join. */
+  // Datasets read by the query, with the anchor first.
   datasetIds: EntityId[];
-  /** True when the query joins at least one relationship, so callers can apply the fan-out check. */
+  // True when the query crosses a relationship.
   joined: boolean;
 }
 
 export type QueryDataset = Pick<Dataset, 'id' | 'relationId' | 'columns'>;
 
-/**
- * Everything the compiler may read besides the query itself.
- *
- * A single dataset is still accepted directly, so the many callers that never cross a join stay
- * unchanged and cannot accidentally opt into join resolution.
- */
+// Data and planner metadata needed to compile a query.
 export interface QueryContext {
   datasets: readonly QueryDataset[];
   relationships?: readonly Relationship[];
-  /**
-   * Derived columns available to this query, keyed by ID.
-   *
-   * A derived column is compiled inline wherever it is referenced rather than resolved to a
-   * physical name, so it reaches the compiler as a definition rather than as a `Column`.
-   */
+  // Derived columns available to the query, keyed by ID.
   derivedColumns?: Record<EntityId, DerivedColumn>;
-  /**
-   * Planner hint: non-anchor datasets in the order they should enter the FROM/JOIN chain.
-   *
-   * Only reorders the targets join resolution already had to reach; a dataset named here that the
-   * query does not reference is ignored, and one the query does reference but this omits is still
-   * joined. That containment is what makes the hint unable to change the result set.
-   */
+  // Planner hint ordering non-anchor datasets in the FROM/JOIN chain.
   joinOrder?: readonly EntityId[];
 }
 
-/**
- * Deterministic table aliases.
- *
- * Generated from the join order, never derived from a dataset name, a filename, or agent input.
- * This is what keeps the join from introducing a new string-interpolation site: `t0`, `t1`, … always
- * satisfy the identifier allowlist, so `quoteIdentifier` can never reject or be bypassed here.
- */
+// Generates the safe table aliases used for joined datasets.
 export const joinAlias = (index: number): string => `t${index}`;
 
 const missingColumn = (columnId: EntityId): DomainError =>
@@ -76,12 +54,7 @@ const missingColumn = (columnId: EntityId): DomainError =>
 const normalizeContext = (context: QueryDataset | QueryContext): QueryContext =>
   'datasets' in context ? context : { datasets: [context] };
 
-/**
- * Builds the reference resolver and the FROM/JOIN clause for a resolved plan.
- *
- * Both are produced together because they must agree on which alias belongs to which dataset; a
- * split would let a column reference name an alias the FROM clause never introduced.
- */
+// Builds the column resolver and matching FROM/JOIN clause for a resolved plan.
 const buildFromClause = (
   plan: JoinPlan,
   datasets: readonly QueryDataset[],
@@ -98,9 +71,7 @@ const buildFromClause = (
 
   if (anchor === undefined) return err(domainError('DATASET_NOT_FOUND', 'The query anchor dataset was not resolved.'));
 
-  // A single-dataset query keeps its historical unaliased shape. Aliasing it would change every
-  // existing compiled statement for no gain, and the alias only earns its place once two relations
-  // can contribute the same physical column name.
+  // Keep single-dataset queries unaliased; aliases are needed only when relations are joined.
   const unjoined = plan.steps.length === 0;
 
   const referenceFor = (dataset: QueryDataset, column: Column): string =>
@@ -154,9 +125,7 @@ const buildFromClause = (
       );
     }
 
-    // `LEFT` is emitted relative to the traversal direction rather than the stored left/right
-    // fields: a left join preserves the rows already in the chain, which is the dataset the step
-    // joins *from*, whichever side of the relationship that happens to be.
+    // Emit LEFT JOIN relative to traversal direction so the existing chain remains the preserved side.
     const keyword = step.relationship.join === 'left' ? 'LEFT JOIN' : 'INNER JOIN';
 
     fragments.push(
@@ -167,13 +136,7 @@ const buildFromClause = (
   return ok({ sql: fragments.join(' '), resolve });
 };
 
-/**
- * Compiles an `AnalysisQuery` to parameterized SQL.
- *
- * Every identifier is emitted through `quoteIdentifier` and every value is a bound parameter,
- * including across a join: relationship key columns become alias-qualified identifiers, and the
- * aliases themselves are generated from the join order rather than from any caller-supplied text.
- */
+// Compiles an `AnalysisQuery` to parameterized SQL.
 export const compileAnalysisQuery = (
   query: AnalysisQuery,
   context: QueryDataset | QueryContext,
@@ -185,8 +148,7 @@ export const compileAnalysisQuery = (
     return err(domainError('DATASET_NOT_FOUND', 'The query does not target the resolved dataset.'));
   }
 
-  // A derived reference contributes the columns its expression reads, not itself: the derived ID
-  // belongs to no relation, so join resolution must see through it to the physical columns.
+  // Join resolution follows derived references to the physical columns they read.
   const throughDerived = (columnId: EntityId): EntityId[] => {
     const derived = derivedColumns[columnId];
 
@@ -209,9 +171,7 @@ export const compileAnalysisQuery = (
 
   const requiredDatasetIds = datasetIdsForColumns(referencedColumnIds, datasets);
 
-  // The planner's hint only permutes datasets the query already requires. Restricting it to that
-  // intersection is what keeps a hint from widening the query: an unrecognized ID cannot add a join,
-  // and a required ID the hint omits is still appended.
+  // Restrict the hint to required datasets so it cannot add or remove a join.
   const orderedDatasetIds =
     joinOrder === undefined
       ? requiredDatasetIds
@@ -231,24 +191,15 @@ export const compileAnalysisQuery = (
   const { resolve } = from.value;
 
   const select: string[] = [];
-  /*
-   * Grouped expressions are recorded as SELECT positions rather than repeated as SQL.
-   *
-   * A parameterised dimension — a binned column, or a derived expression carrying literals — emits
-   * placeholders. Repeating its text in GROUP BY would emit those placeholders a second time while
-   * the parameter list still bound them once, so the statement arrived with more placeholders than
-   * values and DuckDB rejected it. A positional reference names the same expression without
-   * re-emitting it, which keeps placeholders and parameters in step by construction.
-   */
+  // Use SELECT positions in GROUP BY so parameterized expressions are not emitted twice.
   const groupBy: string[] = [];
   const resultColumns: ResultColumn[] = [];
-  /** Records the SELECT position of the expression just pushed, which is what GROUP BY refers to. */
+  // Records the SELECT position used by GROUP BY.
   const groupBySelectPosition = (): void => {
     groupBy.push(`${select.length}`);
   };
 
-  // Dimension parameters precede the WHERE values, because a binned or derived dimension binds its
-  // boundaries in the SELECT list. Collected separately so the final order matches the statement.
+  // Dimension parameters come first because their placeholders appear in SELECT.
   const dimensionParameters: unknown[] = [];
   const derivedContext = { resolve, derivedColumns };
 
@@ -286,8 +237,7 @@ export const compileAnalysisQuery = (
     select.push(compiled.value.sql);
     dimensionParameters.push(...compiled.value.parameters);
 
-    // A quantile bin compiles to a window function, which SQL forbids in GROUP BY at all — its
-    // buckets are already one row per input row, so it is left ungrouped entirely.
+    // Quantile bins use a window function, which cannot appear in GROUP BY.
     if (bin.strategy.kind !== 'quantile') groupBySelectPosition();
 
     resultColumns.push({
@@ -308,8 +258,7 @@ export const compileAnalysisQuery = (
       if (!compiled.ok) return compiled;
       reference = compiled.value.sql;
       dimensionParameters.push(...compiled.value.parameters);
-      // A synthetic column carries the derived type into `compileAggregate`, so a `sum` over a
-      // non-numeric derived column is rejected on the same rule as a physical one.
+      // Preserve the derived type so aggregate validation matches physical columns.
       column = {
         id: derived.id,
         name: derived.name,
@@ -342,9 +291,7 @@ export const compileAnalysisQuery = (
     });
   }
 
-  // A box plot replaces the measure list with a five-number summary plus an outlier count. The
-  // count rather than the rows: returning the outliers themselves would make the result size depend
-  // on the data and would disclose individual records.
+  // Box plots return a five-number summary and an outlier count, never outlier rows.
   if (query.distribution !== undefined) {
     const target = resolve(query.distribution.columnId);
     if (target === undefined) return err(missingColumn(query.distribution.columnId));
@@ -353,9 +300,7 @@ export const compileAnalysisQuery = (
       const category = resolve(query.distribution.categoryColumnId);
       if (category === undefined) return err(missingColumn(query.distribution.categoryColumnId));
       select.unshift(category.sql);
-      // Prepending shifts every already-recorded SELECT position by one, so the existing positional
-      // entries are renumbered rather than left pointing at the wrong expression. A box plot binds
-      // no other dimension today, which makes this a no-op in practice and correct if that changes.
+      // The category shifts existing SELECT positions by one.
       for (const [index, position] of groupBy.entries()) groupBy[index] = `${Number(position) + 1}`;
       groupBy.unshift('1');
       resultColumns.unshift({
@@ -372,7 +317,7 @@ export const compileAnalysisQuery = (
       ['q2', quartile(0.5)],
       ['q3', quartile(0.75)],
       ['q4', `MAX(${target.sql})`],
-      // Tukey's rule, computed in the engine so only the tally crosses the boundary.
+      // Compute Tukey's outlier count in DuckDB so individual outliers do not cross the boundary.
       [
         'outliers',
         `COUNT(*) FILTER (WHERE ${target.sql} < ${quartile(0.25)} - 1.5 * (${quartile(0.75)} - ${quartile(0.25)}) OR ${target.sql} > ${quartile(0.75)} + 1.5 * (${quartile(0.75)} - ${quartile(0.25)}))`,
@@ -386,8 +331,7 @@ export const compileAnalysisQuery = (
   }
 
   if (select.length === 0) {
-    // A bare projection selects the anchor's own columns only. Widening it across a join would
-    // return whatever the join happened to reach, which no caller asked for.
+    // A bare projection selects only the anchor's columns.
     for (const column of anchor.columns) {
       const resolved = resolve(column.id);
       if (resolved === undefined) return err(missingColumn(column.id));
@@ -405,8 +349,7 @@ export const compileAnalysisQuery = (
     whereParameters.push(...compiled.value.parameters);
   }
 
-  // A time comparison rewrites the whole statement around a generated date spine, so it is compiled
-  // once the FROM and WHERE fragments exist but before the plain SELECT is assembled.
+  // Time comparisons replace the ordinary SELECT with a generated date-spine query.
   const comparison = query.measures.find((measure) => measure.modifier?.kind === 'timeComparison');
 
   if (comparison !== undefined) {
@@ -443,8 +386,7 @@ export const compileAnalysisQuery = (
     });
   }
 
-  // Dimension parameters bind ahead of the filter values, matching where each appears: the SELECT
-  // list is emitted before the WHERE clause.
+  // Bind dimension parameters before WHERE values because SELECT is emitted first.
   const parameters: unknown[] = [...dimensionParameters, ...whereParameters];
 
   const orderBy: string[] = [];
@@ -487,7 +429,7 @@ export const compileAnalysisQuery = (
   });
 };
 
-/** Collects every column a filter tree names, so join resolution sees filtered columns too. */
+// Collects column IDs named by a filter tree.
 function collectFilterColumnIds(expression: AnalysisQuery['filters'][number]): EntityId[] {
   if (expression.kind === 'comparison') return [expression.columnId];
   if (expression.kind === 'not') return collectFilterColumnIds(expression.operand);

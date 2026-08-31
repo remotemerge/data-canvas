@@ -15,21 +15,15 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/*
- * Relationship validation.
- *
- * Stricter than the other validators on purpose. A malformed filter returns no rows; a malformed
- * join returns rows that look right and are not — it can multiply a `sum` without any visible
- * symptom. Everything that can be decided before the relationship exists is decided here.
- */
+// Validate relationship structure before a join can change query results.
 
-/** Above this many right-hand rows per key value, a `many_to_one` or `one_to_one` claim fans out. */
+// Sample fan-out threshold for `many_to_one` and `one_to_one` relationships.
 export const FAN_OUT_RATIO_THRESHOLD = 1.05;
 
-/** Rows sampled when measuring key uniqueness. Bounded so creation stays interactive on large data. */
+// Number of rows sampled for key-quality warnings.
 export const KEY_QUALITY_SAMPLE_ROWS = 10_000;
 
-/** Kinds asserting that the right-hand key identifies at most one row. */
+// Relationship kinds that require a unique right-hand key.
 const RIGHT_KEY_MUST_BE_UNIQUE: readonly RelationshipKind[] = ['one_to_one', 'many_to_one'] as const;
 
 export interface RelationshipCandidate {
@@ -42,18 +36,11 @@ export interface RelationshipCandidate {
 export interface ValidatedRelationship {
   leftDataset: Dataset;
   rightDataset: Dataset;
-  /** Resolved key columns, in the order the caller declared them. */
+  // Resolved key columns in caller-declared order.
   keys: { left: Column; right: Column }[];
 }
 
-/**
- * Collapses the logical type vocabulary to the classes a join key may match across.
- *
- * Types are compared by class rather than by identity so a `category` key can join a `string` key —
- * the same values, differently classified by cardinality — while a number-to-text join is still
- * rejected. `boolean` and `unknown` fall into their own classes, which makes them joinable only to
- * themselves.
- */
+// Maps logical types to the compatibility classes used for join keys.
 const joinTypeClass = (type: LogicalType): string => {
   if (isNumericType(type)) return 'number';
   if (isTemporalType(type)) return 'temporal';
@@ -69,14 +56,7 @@ const incompatible = (left: Column, right: Column): DomainError =>
     { leftColumnId: left.id, rightColumnId: right.id },
   );
 
-/**
- * Detects whether adding an edge between two datasets would close a cycle.
- *
- * A cycle makes join-path resolution non-deterministic — two different paths would connect the same
- * pair of datasets and produce different numbers — so it is rejected at creation rather than
- * disambiguated at query time. Because existing relationships are already acyclic, the new edge
- * closes a cycle exactly when its endpoints are already connected.
- */
+// Returns whether a new relationship would close a cycle in the relationship graph.
 export const wouldCreateCycle = (
   relationships: readonly Relationship[],
   leftDatasetId: EntityId,
@@ -102,12 +82,7 @@ export const wouldCreateCycle = (
   return false;
 };
 
-/**
- * Validates everything decidable without reading data.
- *
- * The key-quality measurement is deliberately separate: it needs the engine, and every check here
- * must be able to run in a plain unit test and inside a handler that has already failed fast.
- */
+// Validates relationship structure without reading dataset rows.
 export const validateRelationship = (
   workspace: Workspace,
   candidate: RelationshipCandidate,
@@ -190,8 +165,7 @@ export const validateRelationship = (
 
   const relationships = Object.values(workspace.relationships);
 
-  // A second relationship over the same pair would make the join path ambiguous, which is the same
-  // correctness hazard as a cycle rather than a richer way to express a join.
+  // A second relationship over the same pair would make join-path resolution ambiguous.
   if (relationships.some((existing) => connectsDatasets(existing, leftDataset.value.id, rightDataset.value.id))) {
     return err(
       domainError(
@@ -219,19 +193,13 @@ export const validateRelationship = (
 };
 
 export interface KeyQualityMeasurement {
-  /** Sampled right-hand rows per distinct key value. 1 means the key is unique in the sample. */
+  // Sampled right-hand rows per distinct key; 1 means unique in the sample.
   rowsPerKey: number;
   sampledRows: number;
   distinctKeys: number;
 }
 
-/**
- * Turns a key-quality measurement into a warning, or `undefined` when the declared kind holds.
- *
- * A warning rather than a rejection: the sample is bounded, so it can only ever be evidence. A hard
- * refusal on sampled evidence would block legitimate joins on data the sample happened to miss.
- * The measurement is stated numerically so the user can judge it rather than trust a verdict.
- */
+// Converts sampled key quality into a warning for relationships that require unique keys.
 export const describeFanOutRisk = (kind: RelationshipKind, measurement: KeyQualityMeasurement): string | undefined => {
   if (!RIGHT_KEY_MUST_BE_UNIQUE.includes(kind)) return undefined;
   if (measurement.distinctKeys === 0) return undefined;

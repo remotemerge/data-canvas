@@ -18,11 +18,10 @@ if (!container) {
 }
 
 /*
- * DuckDB starts alongside the first render rather than blocking it.
+ * Start DuckDB alongside the initial render.
  *
- * Instantiating the Wasm module takes long enough to be visible, and nothing in the shell needs the
- * engine to paint. The import button stays disabled and the engine banner reports progress until
- * `startEngine` resolves, so readiness is communicated rather than the app appearing inert.
+ * The shell can paint without the engine. The import control and status banner communicate
+ * readiness while startup runs.
  */
 void startEngine();
 const toolDependencies: ToolLifecycleDependencies = {

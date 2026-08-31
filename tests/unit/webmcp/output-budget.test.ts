@@ -15,11 +15,7 @@ test('oversized output remains valid JSON and carries a truncation marker', () =
   expect(JSON.parse(output)).toMatchObject({ ok: true, revision: 4, truncated: true });
 });
 
-/*
- * A 21-column schema exceeds the budget once the entity IDs are counted. Returning only the summary
- * would strip the column list the analysis tools need, leaving an agent unable to name a column at
- * all, so the list is shortened rather than dropped.
- */
+// Preserve schema columns when trimming oversized output so callers can still address fields.
 test('a schema over budget keeps columns rather than degrading to its summary', () => {
   const output = enforceOutputBudget(
     JSON.stringify({

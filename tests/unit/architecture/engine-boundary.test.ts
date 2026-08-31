@@ -1,27 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 
-/**
- * The data-engine containment guard.
- *
- * DuckDB-Wasm may be imported only by the engine adapter. The rule exists because a connection
- * object reaching a React component or a WebMCP handler would let that caller run SQL of its own
- * choosing, bypassing the compiler that makes "no agent SQL" structural rather than a policy.
- *
- * Enforced here rather than in lint config, which is owned by the maintainer and stays as authored.
- */
+// Guards DuckDB containment and SQL identifier boundaries.
 
 const ENGINE_PACKAGE = '@duckdb/duckdb-wasm';
 
-/** The only directory allowed to know DuckDB exists. */
+// Engine adapter directory.
 const ENGINE_DIRECTORY = 'src/data/duckdb/';
 
-/** Matches static imports, type-only imports, re-exports, and dynamic `import()` calls. */
+// Matches import and re-export forms.
 const SPECIFIER_PATTERN = /(?:from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g;
 
 const collectSpecifiers = (source: string): string[] =>
   [...source.matchAll(SPECIFIER_PATTERN)].map(([, specifier]) => specifier ?? '');
 
-/** Bans the package root and any subpath, including the `?url` asset imports the bootstrap uses. */
+// Disallowed DuckDB package paths.
 const importsEngine = (specifier: string): boolean =>
   specifier === ENGINE_PACKAGE || specifier.startsWith(`${ENGINE_PACKAGE}/`);
 
@@ -49,8 +41,7 @@ describe('data engine boundary', () => {
   });
 
   test('the engine adapter genuinely holds the dependency', async () => {
-    // Without this the first test would pass simply because nothing imports DuckDB at all, which
-    // would make the boundary meaningless rather than enforced.
+    // Ensure the test does not pass vacuously when no source imports DuckDB.
     const sources = await scan(`${ENGINE_DIRECTORY}**/*.ts`);
     const importers = sources.filter(([, source]) => collectSpecifiers(source).some(importsEngine));
 
@@ -58,8 +49,7 @@ describe('data engine boundary', () => {
   });
 
   test('no connection or engine module escapes into the UI', async () => {
-    // The port is the UI's entire vocabulary for the engine. Importing the concrete engine would
-    // also drag a Wasm worker into the render path.
+    // Keep the engine port as the UI's only engine vocabulary.
     const sources = await scan('src/ui/**/*.{ts,tsx}');
 
     expect(sources.length).toBeGreaterThan(0);
@@ -72,13 +62,7 @@ describe('data engine boundary', () => {
   });
 
   test('SQL identifiers are quoted only through identifier-safety', async () => {
-    // Every SQL string in the application must obtain identifiers from one module. A relation or
-    // column name interpolated directly would defeat the allowlist that keeps hostile filenames
-    // and headers out of SQL.
-    //
-    // Scoped to files that actually emit SQL. A double-quote before a template placeholder is only
-    // a hand-quoted identifier in that context; elsewhere it is ordinary quoted text — CSV fields
-    // and JSON both legitimately contain it.
+    // SQL identifiers must come from the allowlisted identifier module.
     const sources = await scan('src/**/*.{ts,tsx}');
     const violations = sources
       .filter(([file]) => file !== 'src/data/duckdb/identifier-safety.ts')
@@ -90,8 +74,7 @@ describe('data engine boundary', () => {
   });
 
   test('the SQL-emitting files are the ones the identifier rule scopes to', async () => {
-    // Without this, the rule above would pass vacuously if the SQL ever moved somewhere the
-    // keyword filter no longer matches.
+    // Ensure the SQL scan has not become vacuous.
     const sources = await scan('src/**/*.{ts,tsx}');
     const sqlFiles = sources
       .filter(([, source]) => /\b(?:SELECT|CREATE TABLE|DESCRIBE)\b/.test(source))

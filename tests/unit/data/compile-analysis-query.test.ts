@@ -30,7 +30,7 @@ export const compilerDataset: Dataset = {
   ],
 };
 
-/** The compiler dataset plus a temporal column, for the binning cases only. */
+// Compiler dataset plus a temporal column for binning tests.
 const temporalDataset: Dataset = {
   ...compilerDataset,
   columns: [
@@ -88,18 +88,12 @@ describe('compileAnalysisQuery', () => {
       compilerDataset,
     );
     expect(result.ok && result.value.sql).toContain('SUM("c1") AS "m0"');
-    // Grouped by SELECT position rather than by repeating the expression, which is what keeps a
-    // parameterised dimension's placeholders and its bound values in step.
+    // Group by SELECT position so parameter binding stays aligned.
     expect(result.ok && result.value.sql).toContain('GROUP BY 1');
     expect(result.ok && result.value.sql).toContain('ORDER BY "m0" DESC');
   });
 
-  /*
-   * A binned dimension emits a placeholder in the SELECT list. Repeating the expression in GROUP BY
-   * emitted a second placeholder while the parameter list still bound one value, so the statement
-   * reached DuckDB with more placeholders than parameters and every temporally bucketed chart failed
-   * to run. Grouping by position emits the expression exactly once.
-   */
+  // Grouping by position emits the binned expression once.
   test('a binned dimension binds exactly as many parameters as it emits placeholders', () => {
     const result = compileAnalysisQuery(
       {

@@ -26,8 +26,7 @@ describe('readable point target', () => {
     expect(readableChartPoints(10_000)).toBe(300);
   });
 
-  /* The legibility target is an upper bound on readability, never a licence to exceed the
-     performance budget — it only ever asks for fewer points than the hard cap allows. */
+  // The legibility target can request fewer points, never more than the hard cap.
   test('never exceeds the performance budget', () => {
     expect(readableChartPoints(100_000)).toBeLessThan(MAX_CHART_POINTS);
   });

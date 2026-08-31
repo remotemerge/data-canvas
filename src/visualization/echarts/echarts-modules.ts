@@ -10,8 +10,7 @@ import {
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 
-// Registered explicitly rather than importing all of ECharts. Each chart type and component is a
-// separate bundle entry, so the distribution kinds add only what they actually draw.
+// Register only the ECharts modules used by the application.
 use([
   BarChart,
   BoxplotChart,

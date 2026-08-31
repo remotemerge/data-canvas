@@ -1,29 +1,9 @@
-/**
- * Serializes engine work and discards results nobody is waiting for any more.
- *
- * Two problems are solved together:
- *
- * 1. **Staleness.** When a user filters or scrolls faster than queries complete, an older, slower
- *    result can arrive after a newer one and overwrite it. Each request carries a logical key; a
- *    newer request on the same key supersedes the in-flight one, whose result is then dropped.
- * 2. **Pile-up.** DuckDB-Wasm executes sequentially per connection, so unbounded concurrent
- *    requests only queue inside the worker where nothing can cancel them.
- *
- * The key-based superseding is load-bearing rather than a flicker optimization. WebMCP tool
- * handlers are written single-argument and so carry no `AbortSignal`, which makes this the primary
- * mechanism keeping an agent's rapid successive requests from accumulating.
- */
+// Serializes engine work and drops results superseded by newer requests.
 
-/**
- * The outcome of a scheduled query.
- *
- * `stale` is a value rather than a rejection because being superseded is the expected result of
- * normal interaction, not a failure. Callers branch on it and return without touching state; an
- * exception would force every call site into a try/catch that means "this was fine".
- */
+// Outcome of a scheduled query; superseded work is a value, not an error.
 export type ScheduledResult<T> = { stale: true } | { stale: false; value: T };
 
-/** Distinguishes an internal cancellation from a genuine engine failure. */
+// Identifies scheduler cancellation.
 export class QueryAbortedError extends Error {
   constructor() {
     super('The query was aborted before it completed.');
@@ -32,10 +12,7 @@ export class QueryAbortedError extends Error {
 }
 
 export interface ScheduleOptions {
-  /**
-   * Logical work identity, e.g. `table-window` or `viz:<id>`. Requests sharing a key supersede one
-   * another; requests with different keys are independent and both complete.
-   */
+  // Logical work key; requests sharing a key supersede one another.
   key: string;
   signal?: AbortSignal;
 }
@@ -46,30 +23,21 @@ interface PendingEntry {
 
 export interface QueryScheduler {
   schedule<T>(run: (signal: AbortSignal) => Promise<T>, options: ScheduleOptions): Promise<ScheduledResult<T>>;
-  /** Marks every in-flight query stale. Used when the engine is disposed or a dataset is removed. */
+  // Marks all in-flight queries stale during disposal or dataset removal.
   abortAll(): void;
 }
 
 export const createQueryScheduler = (): QueryScheduler => {
-  /**
-   * Monotonic issue order. Comparing tokens rather than timestamps keeps supersession exact: two
-   * requests issued within the same millisecond still order deterministically.
-   */
+  // Monotonic request token used to order supersession.
   let nextToken = 0;
 
-  /** The newest token per key. An arriving result is current only if its token still matches. */
+  // Newest token for each key.
   const latest = new Map<string, PendingEntry>();
 
-  /** Controllers for in-flight work, so a superseded or aborted query can stop early. */
+  // Abort controllers for in-flight queries.
   const controllers = new Map<number, AbortController>();
 
-  /**
-   * Runs queries one at a time.
-   *
-   * Chaining onto a single promise rather than firing concurrently: the engine holds one
-   * connection, so concurrent calls would serialize inside the worker anyway, but without the
-   * scheduler ever getting the chance to skip work already known to be stale.
-   */
+  // Runs a query serially and skips work already superseded.
   let queue: Promise<unknown> = Promise.resolve();
 
   const isCurrent = (key: string, token: number): boolean => latest.get(key)?.token === token;
@@ -82,8 +50,7 @@ export const createQueryScheduler = (): QueryScheduler => {
 
     nextToken += 1;
 
-    // Supersede before queuing, not when execution starts: a request queued behind a slow query
-    // must already be marked obsolete if a newer one arrives while it waits.
+    // Mark a request stale before queuing it so it can be skipped while waiting.
     const superseded = latest.get(options.key);
 
     if (superseded !== undefined) controllers.get(superseded.token)?.abort();
@@ -100,15 +67,13 @@ export const createQueryScheduler = (): QueryScheduler => {
     }
 
     const result = queue.then(async (): Promise<ScheduledResult<T>> => {
-      // Skipping superseded work before it reaches the engine is the whole point: the newer query
-      // for this key starts sooner because the obsolete one never ran.
+      // Skip superseded work before it reaches the engine.
       if (!isCurrent(options.key, token) || controller.signal.aborted) return { stale: true };
 
       try {
         const value = await run(controller.signal);
 
-        // Re-checked after the await. A newer request for the same key may have arrived while the
-        // engine worked, in which case this result must not reach the caller.
+        // A newer same-key request may have arrived while the engine worked.
         return isCurrent(options.key, token) ? { stale: false, value } : { stale: true };
       } catch (error) {
         if (controller.signal.aborted || !isCurrent(options.key, token)) return { stale: true };
@@ -121,7 +86,7 @@ export const createQueryScheduler = (): QueryScheduler => {
       }
     });
 
-    // The queue must not stay rejected: one failing query would otherwise poison every later one.
+    // Keep the queue usable after an unexpected rejection.
     queue = result.catch(() => undefined);
 
     return result;

@@ -14,23 +14,10 @@ const WINDOW_SIZE = 500;
 const ROW_HEIGHT = 34;
 const EMPTY_SORT: SortSpec[] = [];
 
-/**
- * Rows rendered beyond the viewport.
- *
- * Measured against the 1M-row fixture rather than picked: below roughly 20 rows a fast scroll
- * outruns the render and shows blank bands, while above it the extra DOM costs more per frame than
- * the smoothness is worth. Each overscanned row is a full row of cells, so this multiplies by the
- * column count.
- */
+// Number of extra rows rendered beyond the viewport.
 const OVERSCAN_ROWS = 20;
 
-/**
- * How close to a window edge scrolling gets before the next window is fetched.
- *
- * Without it the fetch only starts once the boundary is crossed, so the rows immediately after it
- * are always blank for one round trip. Fetching a fifth of a window early hides that latency behind
- * the scroll that is already in progress.
- */
+// Fetches the next window before scrolling reaches its edge.
 const PREFETCH_MARGIN = Math.floor(WINDOW_SIZE / 5);
 
 export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Element => {
@@ -80,8 +67,7 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
   const virtualRows = virtualizer.getVirtualItems();
   const firstVisible = virtualRows[0]?.index ?? 0;
   const lastVisible = virtualRows[virtualRows.length - 1]?.index ?? firstVisible;
-  // The window is chosen from whichever edge is closer to leaving the current one, so scrolling in
-  // either direction triggers the fetch before the blank rows would appear.
+  // Fetch when either edge of the current window is close.
   const anchor = lastVisible + PREFETCH_MARGIN >= offset + WINDOW_SIZE ? lastVisible + PREFETCH_MARGIN : firstVisible;
   const wantedOffset = Math.max(Math.floor(anchor / WINDOW_SIZE) * WINDOW_SIZE, 0);
   useEffect(() => setOffset(wantedOffset), [wantedOffset]);

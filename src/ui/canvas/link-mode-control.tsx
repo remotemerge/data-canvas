@@ -15,13 +15,7 @@ const DESCRIPTIONS: Record<SelectionLinkMode, string> = {
   filter: 'Restricts this chart to the selection',
 };
 
-/**
- * Chooses how one chart responds to selection.
- *
- * A select rather than a toggle: the three modes are not an on/off pair, and the earlier boolean
- * control could not express `filter` at all. Each option carries its own description so the
- * difference between dimming and re-querying is stated rather than implied by a label.
- */
+// Selects how a chart responds to selection.
 export const LinkModeControl = ({
   visualizationId,
   linkMode,

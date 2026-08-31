@@ -7,13 +7,7 @@ interface DatasetSchemaPanelProps {
   dataset: Dataset | undefined;
 }
 
-/**
- * One glyph per logical type, standing in for the type badge.
- *
- * A badge per column turned a twenty-column list into twenty repetitions of the same few words, and
- * the type competed with the name for attention when the name is what a user scans for. A glyph
- * carries the same distinction at a glance; the word itself stays available in the tooltip.
- */
+// Returns the glyph used for a logical type.
 const TYPE_GLYPH: Readonly<Record<LogicalType, string>> = {
   number: '#',
   string: 'A',
@@ -24,12 +18,7 @@ const TYPE_GLYPH: Readonly<Record<LogicalType, string>> = {
   unknown: '?',
 };
 
-/**
- * The full detail for one column, shown on hover rather than printed under every row.
- *
- * Physical name is included because the mapping from an arbitrary header to a generated identifier
- * is the identifier-safety guarantee made visible — it just does not need to be visible at all times.
- */
+// Tooltip content for one column, including its physical name.
 const columnDetail = (column: Column): string =>
   [
     `${column.name} · ${column.logicalType}`,
@@ -40,19 +29,9 @@ const columnDetail = (column: Column): string =>
     .filter((part) => part !== undefined)
     .join('\n');
 
-/**
- * Lists a dataset's columns.
- *
- * XSS constraint. `column.name` is the file's own header text and is therefore untrusted. It
- * renders as a text child, never as HTML — a header of `<img src=x onerror=alert(1)>` must appear
- * literally.
- *
- * Display name and physical name are both shown. Seeing that a header of `Q4 Sales!` maps to `c3`
- * is how the identifier-safety guarantee becomes visible rather than merely documented.
- */
+// Lists a dataset's columns and their physical names.
 export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.JSX.Element => {
-  // One profile at a time. Each is a query, so expanding every column at once would fire a burst of
-  // them for a result the user is not looking at.
+  // Load one profile at a time to avoid a burst of queries.
   const [profiledColumnId, setProfiledColumnId] = useState<string | null>(null);
 
   if (dataset === undefined) {
@@ -77,8 +56,7 @@ export const DatasetSchemaPanel = ({ dataset }: DatasetSchemaPanelProps): React.
       <ul className="schema__list">
         {dataset.columns.map((column) => (
           <li key={column.id} className="schema__column" title={columnDetail(column)}>
-            {/* The glyph is decoration over the type, which the adjacent label already states to
-                assistive technology, so it is hidden rather than announced as a stray character. */}
+            {/* The text label already conveys the type to assistive technology. */}
             <span className="schema__glyph" data-logical-type={column.logicalType} aria-hidden="true">
               {TYPE_GLYPH[column.logicalType]}
             </span>

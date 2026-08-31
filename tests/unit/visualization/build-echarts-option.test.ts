@@ -51,10 +51,7 @@ describe('ECharts option builder', () => {
     expect(formatter({ value: '<script>alert(1)</script>' })).toContain('&lt;script&gt;');
   });
 
-  /*
-   * The formatter used to serialise the whole ECharts params object, so hovering a mark showed the
-   * marker's own `<span style=...>` as literal text instead of a reading of the point.
-   */
+  // The tooltip keeps ECharts' marker markup while formatting each dataset value by column.
   test('labels each value by its column instead of dumping the params object', () => {
     const option = buildEChartsOption(
       visualization('vis_1', 'ds_sales'),
@@ -85,11 +82,7 @@ describe('ECharts option builder', () => {
     expect(rendered).not.toContain('&lt;span');
   });
 
-  /*
-   * A one-series legend maps the only colour to the only thing on screen, and because a measure
-   * column is named after its aggregate it renders as `sum` — a label describing the SQL, not the
-   * data. It costs vertical space and tells the reader nothing.
-   */
+  // A single-series legend adds no useful encoding and may expose an aggregate label such as `sum`.
   test('hides the legend when there is only one series', () => {
     const option = buildEChartsOption(
       visualization('vis_1', 'ds_sales'),
@@ -169,11 +162,7 @@ describe('ECharts option builder', () => {
     expect((option['legend'] as { show: boolean }).show).toBe(false);
   });
 
-  /*
-   * A bucketed time axis lives in `binnedDimensions`, not `dimensions`. Counting only the latter
-   * made the chart treat its own x column as a measure, drawing a second series of dates against
-   * the value axis and putting a two-entry legend over the axis labels.
-   */
+  // Count binned dimensions when determining how many measures remain for the chart.
   test('a binned dimension is not mistaken for a measure', () => {
     const base = visualization('vis_1', 'ds_sales');
     const option = buildEChartsOption(

@@ -7,12 +7,7 @@ import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-/**
- * Bound on annotation text.
- *
- * Annotation text is human- or agent-authored free text that renders on the canvas, so it is
- * bounded in the domain rather than only at the protocol schema — both entry paths must be capped.
- */
+// Maximum annotation length shared by UI and WebMCP actions.
 export const MAX_ANNOTATION_TEXT_LENGTH = 280;
 
 export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace, payload, deps) => {
@@ -44,7 +39,7 @@ export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace
   return ok({
     workspace: { ...workspace, annotations: { ...workspace.annotations, [annotation.id]: annotation } },
     changedEntityIds: [annotation.id],
-    // The annotation's own text is omitted: it is untrusted free text and history is rendered.
+    // Do not include annotation text in history; it is untrusted free text.
     summary: `Added an annotation to '${visualization.value.title}'.`,
   });
 };

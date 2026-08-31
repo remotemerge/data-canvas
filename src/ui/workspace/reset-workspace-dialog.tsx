@@ -9,19 +9,13 @@ import {
   DialogTrigger,
 } from '@/ui/components/ui/dialog.tsx';
 
-/**
- * Returns the tab to an empty workspace.
- *
- * A reload is the whole implementation: the analytical database is in memory and the store is
- * rebuilt from `createEmptyWorkspace`, so nothing outlives the page. There is no stored file to
- * delete.
- */
+// Reloads the tab to return to an empty in-memory workspace.
 const resetWorkspace = (): void => {
   window.location.reload();
 };
 
 export const ResetWorkspaceDialog = (): React.JSX.Element => {
-  // The reload is not instant with a large dataset loaded, and a second click would race the first.
+  // Disable repeated clicks while the reload is pending.
   const [resetting, setResetting] = useState(false);
   return (
     <Dialog>

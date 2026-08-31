@@ -9,13 +9,7 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/**
- * Resolves a column ID to its logical type.
- *
- * Takes both physical columns and previously defined derived columns, since a derived column may
- * build on another one. Returning `undefined` means the reference is unknown, which the caller
- * reports as `COLUMN_NOT_FOUND` rather than guessing a type.
- */
+// Resolves a physical or derived column ID to its logical type.
 export type ColumnTypeResolver = (columnId: EntityId) => LogicalType | undefined;
 
 export const createColumnTypeResolver = (
@@ -43,14 +37,7 @@ const literalType = (value: number | string | boolean | null): LogicalType => {
   return 'string';
 };
 
-/**
- * The type an arithmetic operator produces.
- *
- * Only numbers are accepted. Adding two strings is a concatenation in some engines and an error in
- * others, and letting it through here would make the derived column's meaning depend on DuckDB's
- * coercion rules rather than on the expression the user built. `unknown` is tolerated because a
- * `NULL` literal has no type until it meets an operand.
- */
+// Returns the result type for a numeric arithmetic operation.
 const arithmeticType = (operator: string, left: LogicalType, right: LogicalType): Result<LogicalType, DomainError> => {
   for (const [side, type] of [
     ['left', left],
@@ -70,13 +57,7 @@ const arithmeticType = (operator: string, left: LogicalType, right: LogicalType)
   return ok('number');
 };
 
-/**
- * Whether two types can be compared in a `CASE` arm.
- *
- * Comparison is looser than arithmetic on purpose: ordering dates and matching strings are both
- * meaningful. What it rejects is comparing across families, where the result would depend on an
- * implicit cast the user never asked for.
- */
+// Returns whether two logical types can be compared in a `CASE` expression.
 const comparable = (left: LogicalType, right: LogicalType): boolean => {
   if (left === 'unknown' || right === 'unknown') return true;
   if (isNumericType(left) && isNumericType(right)) return true;
@@ -88,16 +69,7 @@ const comparable = (left: LogicalType, right: LogicalType): boolean => {
 
 const castType = (target: 'number' | 'string' | 'date'): LogicalType => target;
 
-/**
- * Walks an expression tree and predicts its result type.
- *
- * The prediction is checked against DuckDB's own result type the first time the column is queried,
- * and the stored type corrected if they disagree. This exists to reject nonsense before it reaches
- * SQL, not to be the final authority on the answer.
- *
- * Depth and node count are enforced by `validateDerivedExpression`, so this walker assumes a tree
- * that has already passed those bounds.
- */
+// Infers the logical type produced by a validated derived-expression tree.
 export const inferExpressionType = (
   expression: DerivedExpression,
   resolve: ColumnTypeResolver,
@@ -163,8 +135,7 @@ export const inferExpressionType = (
 
       branches.push(otherwise.value);
 
-      // Branches must agree, otherwise the column's type depends on which row is read. `unknown`
-      // branches are ignored, so a `NULL` fallback does not force the whole expression to unknown.
+      // All non-unknown branches must agree on the result type.
       const known = [...new Set(branches.filter((type) => type !== 'unknown'))];
 
       if (known.length > 1) {
@@ -221,13 +192,12 @@ export const inferExpressionType = (
         );
       }
 
-      // A temporal bin returns the truncated instant; a numeric bin returns the bucket's ordinal.
+      // Temporal bins return timestamps; numeric bins return bucket numbers.
       return ok(temporal ? type : 'number');
     }
 
     case 'cast': {
-      // The operand's own type is discarded, but it is still resolved: a cast over an unknown
-      // column must fail on the bad reference rather than silently adopting the target type.
+      // Resolve the operand before applying the target type so unknown references still fail.
       const operand = inferExpressionType(expression.expr, resolve);
 
       return operand.ok ? ok(castType(expression.to)) : operand;

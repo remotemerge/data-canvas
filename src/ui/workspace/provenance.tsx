@@ -2,10 +2,7 @@ import { useMemo } from 'react';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
 export const Provenance = ({ entityId, createdBy }: { entityId: string; createdBy: 'human' | 'agent' | 'system' }) => {
-  // The selector returns the history array itself, not a filtered copy. Filtering inside the
-  // selector allocates a new array on every store read, so `useSyncExternalStore` never sees two
-  // equal snapshots and re-renders until React throws "Maximum update depth exceeded". This
-  // component renders inside every chart panel and metric card, so that loop took down the canvas.
+  // Keep selector output stable; filtering here would allocate on every store read and trigger a snapshot loop.
   const history = useWorkspace((state) => state.history);
   const entries = useMemo(
     () => history.filter((entry) => entry.changedEntityIds.includes(entityId)),

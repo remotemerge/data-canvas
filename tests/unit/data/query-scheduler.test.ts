@@ -21,8 +21,7 @@ describe('query scheduler', () => {
 
     first.resolve('old');
 
-    // The classic flicker: without supersession the older, slower result would land last and
-    // overwrite the newer one on screen.
+    // Without supersession, an older result could overwrite a newer one.
     expect(await slow).toEqual({ stale: true });
     expect(await fast).toEqual({ stale: false, value: 'new' });
   });
@@ -214,8 +213,7 @@ describe('query scheduler', () => {
       scheduler.schedule(work, { key: 'c' }),
     ]);
 
-    // The engine holds one connection; overlapping calls would only queue inside the worker where
-    // the scheduler could no longer skip work already known to be stale.
+    // One connection serializes work; the scheduler must discard stale work.
     expect(peak).toBe(1);
   });
 });

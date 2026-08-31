@@ -22,7 +22,7 @@ export const installTestHooks = (deps: ToolDependencies): void => {
   if (!import.meta.env.DEV) return;
   installNetworkRecorder();
   const tools = createToolDefinitions(deps);
-  // eslint-disable-next-line no-underscore-dangle -- This fixed global is the documented browser verification API.
+  // eslint-disable-next-line no-underscore-dangle -- required by the browser verification API.
   window.__dataCanvas = {
     normalizedState: () => structuredClone(workspaceStore.getState().workspace),
     revision: () => workspaceStore.getState().workspace.revision,

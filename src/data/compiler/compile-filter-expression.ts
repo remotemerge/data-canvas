@@ -13,16 +13,10 @@ export interface CompiledFilter {
   parameters: unknown[];
 }
 
-/**
- * Resolves a column ID to the SQL reference for it.
- *
- * Injected rather than derived here, because in a joined query the same physical name can exist on
- * more than one relation and the reference must carry the compiler's generated table alias. The
- * function returns `undefined` for an unknown column so the caller reports it uniformly.
- */
+// Resolves a column ID to the SQL reference used by the current query.
 export type ColumnReferenceResolver = (columnId: EntityId) => { sql: string; column: Column } | undefined;
 
-/** The reference resolver for a query over a single, unaliased relation. */
+// Resolves physical column names for a single unaliased relation.
 export const unqualifiedColumnReference =
   (columns: readonly Column[]): ColumnReferenceResolver =>
   (columnId) => {
@@ -43,13 +37,7 @@ const SQL_OPERATOR: Readonly<Partial<Record<FilterOperator, string>>> = {
 const missingColumn = (columnId: EntityId): DomainError =>
   domainError('COLUMN_NOT_FOUND', 'The filter references a column that does not exist in this dataset.', { columnId });
 
-/**
- * Compiles a filter tree to a parameterized `WHERE` fragment.
- *
- * `reference` accepts a plain column list for a single-relation query, or a resolver when the query
- * spans a join and each identifier must carry its table alias. Values are always bound parameters;
- * this function has no path that interpolates one into SQL.
- */
+// Compiles a filter tree to a parameterized `WHERE` fragment.
 export const compileFilterExpression = (
   expression: FilterExpression,
   reference: readonly Column[] | ColumnReferenceResolver,

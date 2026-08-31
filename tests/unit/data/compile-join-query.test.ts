@@ -23,7 +23,7 @@ const context = (...relationships: Relationship[]): QueryContext => ({
   relationships,
 });
 
-/** Revenue by customer region: a measure from one dataset grouped by a dimension from another. */
+// Revenue by customer region: a measure from one dataset grouped by a dimension from another.
 const revenueByRegion = {
   datasetId: 'ds_orders',
   dimensions: ['col_customer_region'],
@@ -69,8 +69,7 @@ describe('join compilation', () => {
   });
 
   test('LEFT is emitted relative to traversal direction, not the stored left/right fields', () => {
-    // Anchored on the relationship's right side. A left join must still preserve the rows already
-    // in the chain — the anchor — rather than flipping meaning with the declaration order.
+    // Preserve the existing chain side for a LEFT JOIN.
     const result = compileAnalysisQuery(
       {
         datasetId: 'ds_customers',
@@ -169,8 +168,7 @@ describe('join compilation', () => {
   });
 
   test('a bare projection returns the anchor columns only, not the joined ones', () => {
-    // Widening a `SELECT *` across a join would return whatever the join reached, which no caller
-    // asked for and which would silently change the table view's shape.
+    // SELECT * must remain limited to requested columns.
     const result = compileAnalysisQuery(
       {
         datasetId: 'ds_orders',
@@ -194,11 +192,11 @@ describe('join injection boundaries', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // Aliases are compiler-generated (`t0`, `t1`), never derived from a dataset or column name.
+    // Aliases are compiler-generated, never derived from dataset or column names.
     const aliases = [...result.value.sql.matchAll(/AS "(t\d+)"/gu)].map(([, alias]) => alias);
     expect(aliases).toEqual(['t0', 't1']);
 
-    // Nothing outside the quoted-identifier and placeholder vocabulary reaches the SQL.
+    // Values use placeholders and identifiers use the quoting helper.
     for (const identifier of [...result.value.sql.matchAll(/"([^"]+)"/gu)].map(([, name]) => name ?? '')) {
       expect(identifier).toMatch(/^[a-z][a-z0-9_]{0,62}$/);
     }

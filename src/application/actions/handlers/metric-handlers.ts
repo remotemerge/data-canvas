@@ -21,21 +21,10 @@ import type { Result } from '@/shared/result/result.ts';
 
 export const MAX_METRIC_NAME_LENGTH = 80;
 
-/**
- * Aggregates that require a numeric column.
- *
- * `count` needs no column at all, and `count_distinct`, `min`, and `max` are meaningful over text
- * and temporal columns too, so only the arithmetic aggregates are restricted.
- */
+// Aggregates that require numeric input.
 const NUMERIC_ONLY_AGGREGATES = new Set(['sum', 'avg', 'median', 'stddev']);
 
-/**
- * Checks a modifier's references against the metric's own dataset.
- *
- * `timeComparison` is the one that earns the scrutiny: it names a date column, and pointing it at a
- * numeric one would produce a `date_trunc` DuckDB rejects at run time rather than a corrective
- * message the caller can act on.
- */
+// Validates modifier references against the metric's dataset.
 const validateModifier = (
   workspace: Workspace,
   datasetId: EntityId,
@@ -80,12 +69,7 @@ const validateModifier = (
   return ok(undefined);
 };
 
-/**
- * Creates a metric.
- *
- * Metric *evaluation* needs the analytical engine, but its definition is metadata, so creation is
- * complete here. Evaluating a stored definition happens when a consumer requests its value.
- */
+// Stores a metric definition; the engine evaluates it when a value is requested.
 export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, payload, deps) => {
   const name = payload.name.trim();
 
@@ -173,12 +157,7 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
   });
 };
 
-/**
- * Updates a metric in place.
- *
- * Every supplied field is re-validated against the merged definition rather than in isolation, so
- * changing only the aggregate still checks it against the column the metric already had.
- */
+// Updates a metric after validating the merged definition.
 export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, payload) => {
   const existing = resolveMetric(workspace, payload.metricId);
 

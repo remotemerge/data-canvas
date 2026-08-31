@@ -51,15 +51,14 @@ describe('adaptive sampling policy', () => {
     const plan = planSampling({ query: groupedQuery(), kind: 'bar', estimatedRows: 500_000, budget: 100 });
 
     expect(plan.disclosure?.strategy).toEqual({ kind: 'topN', retained: 99, otherBucket: true });
-    // Every row is read, so the retained values are exact even though the categories are not all shown.
+    // Every row is read, so retained values remain exact.
     expect(plan.disclosure?.rate).toBe(1);
     expect(plan.query.limit).toBe(99);
     expect(plan.query.orderBy).toEqual([{ measureAlias: 'revenue', direction: 'desc' }]);
   });
 
   test('never claims to retain more groups than the compiler will return', () => {
-    // Caught in a browser run: the badge read "Top 4,999" while the compiler's own row cap meant
-    // only 500 arrived. A disclosure that overstates what was kept is worse than no disclosure.
+    // The disclosure must not exceed the compiler's row cap.
     const plan = planSampling({ query: groupedQuery(), kind: 'bar', estimatedRows: 500_000 });
     const strategy = plan.disclosure?.strategy;
 
@@ -102,10 +101,7 @@ describe('adaptive sampling policy', () => {
     expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'month' });
   });
 
-  /*
-   * A year and a half of daily points is far inside the 5,000-point performance budget and still
-   * unreadable in a 900px panel. The readable budget is what turns that into a weekly series.
-   */
+  // A daily year-and-a-half series fits the hard cap but exceeds a 900px readable target.
   test('widens a temporal bucket to what the plot can legibly show', () => {
     const plan = planSampling({
       query: temporalQuery(),
@@ -130,11 +126,7 @@ describe('adaptive sampling policy', () => {
     expect(plan.disclosure).toBeNull();
   });
 
-  /*
-   * Readability must never cost data. Widening is exempt because it keeps every row, but a narrow
-   * panel must not start folding categories into an "Other" bucket — that is a fidelity decision,
-   * and only the performance budget makes it.
-   */
+  // Widening preserves data; lossy category sampling must stay within the performance budget.
   test('a narrow plot never triggers lossy reduction of a categorical result', () => {
     const plan = planSampling({
       query: groupedQuery(),
@@ -176,8 +168,7 @@ describe('adaptive sampling policy', () => {
     const plan = planSampling({ query: scatter, kind: 'scatter', estimatedRows: 1_000_000, budget: 5_000 });
 
     expect(plan.disclosure?.strategy.kind).toBe('reservoir');
-    // Capped by the compiler's row limit rather than the nominal budget, so the plan asks only for
-    // rows that can actually come back.
+    // Use the compiler's row cap, not the nominal display budget.
     expect(plan.query.limit).toBe(Math.min(5_000, MAX_QUERY_LIMIT));
   });
 });

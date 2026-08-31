@@ -19,7 +19,7 @@ describe('canvas placement', () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toMatchObject({ visualizationId: 'vis_1', x: 0, width: 6 });
     expect(items[1]).toMatchObject({ visualizationId: 'vis_2', x: 6, width: 6 });
-    // Same row: a pair sits side by side rather than stacking.
+    // Pair charts on the same row.
     expect(items[0]?.y).toBe(items[1]?.y as number);
   });
 
@@ -37,14 +37,14 @@ describe('canvas placement', () => {
     expect(items[0]?.width).toBe(24);
   });
 
-  /* An odd grid cannot split evenly, so the pair rounds down and the spare column goes unused. */
+  // Odd grids leave one spare column.
   test('an odd column count still fits both charts of a pair', () => {
     const solo: WorkspaceLayoutItem[] = placeNewVisualization([], id('vis_1'), 11);
     const items = placeNewVisualization(solo, id('vis_2'), 11);
 
     expect(items[0]?.width).toBe(5);
     expect(items[1]).toMatchObject({ x: 5, width: 5 });
-    // The layout handler rejects an item overflowing the grid, so the pair must stay inside it.
+    // Keep paired charts within the grid.
     expect((items[1]?.x as number) + (items[1]?.width as number)).toBeLessThanOrEqual(11);
   });
 });
@@ -61,7 +61,7 @@ describe('suggested visualization titles', () => {
     ).toBe('Sales by Order Date');
   });
 
-  /* `sum` is the default reading of a quantity, so naming it would add words without meaning. */
+  // The default sum needs no title label.
   test('omits sum but names an aggregate that changes the number', () => {
     expect(
       suggestVisualizationTitle({ kind: 'bar', measureName: 'Sales', dimensionName: 'Region', aggregate: 'avg' }),
