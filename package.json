@@ -44,7 +44,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@mcp-b/webmcp-types": "^5.0.1",
+    "@mcp-b/webmcp-types": "^5.1.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.4.0",
     "@types/react": "^19.2.18",
