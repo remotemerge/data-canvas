@@ -46,7 +46,10 @@ export const FilterPanel = ({
                       }).then((result) => onError(result.ok ? null : result.error))
                     }
                   />
-                  {column?.name ?? 'Unknown column'} {filter.operator.replace('_', ' ')}
+                  {column?.name ?? 'Unknown column'} {filter.operator.replaceAll('_', ' ')}
+                  {filter.value === undefined
+                    ? ''
+                    : ` ${Array.isArray(filter.value) ? filter.value.join(', ') : String(filter.value)}`}
                   <Provenance entityId={filter.id} createdBy={filter.createdBy} />
                 </label>
                 <button

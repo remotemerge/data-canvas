@@ -10,6 +10,21 @@ import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { selectFilters } from '@/state/selectors/workspace-selectors.ts';
 
+const FILTER_OPERATOR_LABEL: Readonly<Record<FilterOperator, string>> = {
+  eq: 'equals',
+  neq: 'does not equal',
+  gt: 'is greater than',
+  gte: 'is greater than or equal to',
+  lt: 'is less than',
+  lte: 'is less than or equal to',
+  between: 'is between',
+  in: 'is one of',
+  not_in: 'is not one of',
+  contains: 'contains',
+  is_null: 'is empty',
+  is_not_null: 'is not empty',
+};
+
 const parseValue = (raw: string, operator: FilterOperator, logicalType: string): unknown => {
   if (NULLARY_FILTER_OPERATORS.includes(operator)) return undefined;
   const entries =
@@ -94,7 +109,7 @@ export const FilterEditor = ({
         <select name="operator">
           {operators.map((operator) => (
             <option key={operator} value={operator}>
-              {operator.replace('_', ' ')}
+              {FILTER_OPERATOR_LABEL[operator]}
             </option>
           ))}
         </select>
