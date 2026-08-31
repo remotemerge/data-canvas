@@ -519,12 +519,20 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 
+/* Badge the revision so it reads as workspace metadata rather than part of the title. */
 .workspace__revision {
-  padding: 0;
-  border: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
   color: var(--dc-color-text-muted);
   font-family: var(--dc-font-mono);
-  font-size: var(--dc-text-sm);
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
 }
 
 .agent-status,
@@ -653,28 +661,36 @@ textarea:focus-visible,
   overflow: hidden;
 }
 
-/* Let the chart region use space left by the data panel without scrolling. */
+/* Let the chart region use the space left by the data panel, scrolling once charts outgrow it. */
 .workspace__views {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 
-/* The data panel handle and title bar already separate the views. */
+/*
+ * The grid claims the height left by the builder so embedded charts stop collapsing onto their
+ * content minimum. Items span several row tracks (grid-row: span N), so tracks are sized as an
+ * equal fraction of the region and a single chart stretches to fill it.
+ */
 .workspace__views > .visualization-grid {
+  flex: 1;
+  min-height: 0;
   margin-bottom: 0;
+  /* The floor applies per track, so a chart spanning four of them stays legible as rows are added. */
+  grid-auto-rows: minmax(3.5rem, 1fr);
 }
 
-/* Let chart grid items shrink with their available region. */
-.workspace__views > .visualization-grid,
+/* Grid rows share the region, so each item tracks the row height instead of its content height. */
 .workspace__views .visualization-grid__item {
   min-height: 0;
 }
 
-/* Use the available height for charts embedded above the data panel. */
+/* A lower floor than the standalone chart, so one still fits beside an open data panel. */
 .workspace__views .chart-panel__chart {
-  min-height: 12rem;
+  min-height: 9rem;
 }
 
 /* Keep status banners compact instead of stretching across the canvas. */
@@ -705,39 +721,19 @@ textarea:focus-visible,
   height: auto;
 }
 
-/* Give the resize handle a full-width hit area. */
-.data-panel__handle {
-  position: relative;
-  flex: none;
-  height: var(--dc-space-3);
-  margin-inline: calc(var(--dc-space-4) * -1);
-  cursor: row-resize;
-  touch-action: none;
-}
-
-.data-panel__handle::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 0;
-  left: 0;
-  border-top: 1px solid var(--dc-color-border);
-}
-
-.data-panel__handle:hover::after,
-.data-panel__handle:focus-visible::after {
-  border-top-color: var(--dc-color-accent);
-}
-
+/* The bar carries the boundary between the canvas and the table. */
 .data-panel__bar {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: space-between;
   padding-block: var(--dc-space-1);
+  border-top: 1px solid var(--dc-color-border);
+  margin-inline: calc(var(--dc-space-4) * -1);
+  padding-inline: var(--dc-space-4);
 }
 
-/* The title bar already separates the row count from the handle. */
+/* The title bar already separates the row count from the table. */
 .data-panel__body .data-table__status {
   margin-bottom: 0;
 }
@@ -829,6 +825,10 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
+/*
+ * Cap the list at roughly four entries and scroll the rest so activity cannot push the inspector
+ * controls below the fold.
+ */
 .history__list {
   display: flex;
   flex-direction: column;
@@ -836,6 +836,10 @@ textarea:focus-visible,
   margin: 0;
   padding: 0;
   list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+  /* Keep the scrollbar clear of the entry text. */
+  padding-right: var(--dc-space-2);
 }
 
 /* Add dividers between history entries, not after the last one. */
@@ -1643,6 +1647,12 @@ textarea:focus-visible,
 .chart-panel {
   container-type: inline-size;
   padding: var(--dc-space-3);
+}
+
+/* The builder is a fixed block above the charts, so keep it compact to leave them height. */
+.visualization-builder {
+  padding: var(--dc-space-3);
+  gap: var(--dc-space-2) var(--dc-space-3);
 }
 
 .chart-panel__header {
