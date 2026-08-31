@@ -14,7 +14,12 @@ export const resolveAnnotationAnchor = (
 ): ResolvedAnnotation | null => {
   const anchor = annotation.anchor;
   if (anchor.kind === 'data') {
-    const index = visualization.query.dimensions.indexOf(anchor.dimension);
+    // Chart results can rename a dimension, so fall back to its result key or display name.
+    const dimensionIndex = visualization.query.dimensions.indexOf(anchor.dimension);
+    const index =
+      dimensionIndex >= 0
+        ? dimensionIndex
+        : result.columns.findIndex((column) => column.key === anchor.dimension || column.name === anchor.dimension);
     if (index < 0 || !result.rows.some((row) => row[index] === anchor.value)) return null;
     return { annotation, coordinates: [anchor.value] };
   }

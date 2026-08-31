@@ -156,10 +156,34 @@ export const EChart = ({
     },
     [actions, visualization.binding.x, visualization.datasetId],
   );
-  const ref = useECharts(option, visualization.kind, onClick, onBrush);
+  const ref = useECharts(option, onClick, onBrush);
   return (
     <>
-      <div ref={ref} className="chart-panel__chart" role="img" aria-label={visualization.title} />
+      <div
+        ref={ref}
+        className="chart-panel__chart"
+        role="img"
+        aria-label={`${visualization.title}. Select a chart mark to add an annotation.`}
+      />
+      {annotations.length === 0 ? null : (
+        <section className="annotation-list" aria-label={`Annotations for ${visualization.title}`}>
+          <h4>Annotations</h4>
+          <ul>
+            {annotations.map((annotation) => (
+              <li key={annotation.id}>
+                <span>{annotation.text}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove annotation: ${annotation.text}`}
+                  onClick={() => void actions.removeAnnotation({ annotationId: annotation.id })}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {annotationAnchor === null ? null : (
         <AnnotationEditor
           visualizationId={visualization.id}
