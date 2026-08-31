@@ -57,18 +57,17 @@ const formatTooltip = (raw: unknown, dimensions: string[]): string => {
   return [`${swatch}${heading}`, ...pairs].filter((line) => line !== '').join('<br/>');
 };
 
-// Opacity for marks outside a highlight selection.
-const DIMMED_OPACITY = 0.25;
-
-// Returns per-mark opacity for highlight mode.
+// Returns palette colors for selected marks and the muted color for unselected marks.
 const highlightStyle = (
   highlight: HighlightPredicate | undefined,
-): { itemStyle: { opacity: (params: { dataIndex: number }) => number } } | undefined => {
+  theme: ChartTheme,
+): { itemStyle: { color: (params: { dataIndex: number; seriesIndex: number }) => string } } | undefined => {
   if (highlight === undefined) return undefined;
 
   return {
     itemStyle: {
-      opacity: (params: { dataIndex: number }) => (highlight(params.dataIndex) ? 1 : DIMMED_OPACITY),
+      color: (params: { dataIndex: number; seriesIndex: number }) =>
+        highlight(params.dataIndex) ? theme.colors[params.seriesIndex % theme.colors.length]! : theme.muted,
     },
   };
 };
@@ -93,7 +92,7 @@ export const buildEChartsOption = (
   annotations: readonly Annotation[] = [],
   highlight?: HighlightPredicate,
 ): EChartsCoreOption => {
-  const emphasis = highlightStyle(highlight);
+  const emphasis = highlightStyle(highlight, theme);
   const dimensions = columnNames(result);
   const xName = dimensions[0];
   // Count binned dimensions with plain dimensions when locating measures.

@@ -5,13 +5,11 @@ import { recordRenderCompletion } from '@/shared/perf/performance-marks.ts';
 
 export const useECharts = (
   option: EChartsCoreOption,
-  kind: string,
   onClick?: (params: unknown) => void,
   onBrush?: (params: unknown) => void,
 ) => {
   const elementRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsType | null>(null);
-  const previousKind = useRef(kind);
   const clickHandler = useRef(onClick);
   const brushHandler = useRef(onBrush);
   clickHandler.current = onClick;
@@ -47,10 +45,10 @@ export const useECharts = (
   useEffect(() => {
     const chart = chartRef.current;
     if (chart === null) return;
-    chart.setOption(option, { notMerge: previousKind.current !== kind });
-    previousKind.current = kind;
+    // Replace the full option so removed per-mark styles do not survive selection changes.
+    chart.setOption(option, { notMerge: true });
     recordRenderCompletion('chart-render');
-  }, [kind, option]);
+  }, [option]);
 
   return elementRef;
 };
