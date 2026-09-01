@@ -99,7 +99,7 @@ test('preview_data with columnIds narrows columns and preserves rows and rowsTot
       revision: 1,
       summary: 'Returned 20 of 10194 rows.',
       columnIds: Array.from({ length: 21 }, (_, index) => `col_${index}`),
-      rows: Array.from({ length: 20 }, (_, r) => Array.from({ length: 21 }, (_, c) => `cell_${r}_${c}`)),
+      rows: Array.from({ length: 20 }, (_row, r) => Array.from({ length: 21 }, (_cell, c) => `cell_${r}_${c}`)),
       rowsTotal: 10194,
     }),
   );
