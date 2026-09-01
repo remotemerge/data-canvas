@@ -705,19 +705,32 @@ textarea:focus-visible,
 }
 
 /*
- * The grid claims the height left by the builder so embedded charts stop collapsing onto their
- * content minimum. Items span several row tracks (grid-row: span N), so tracks are sized as an
- * equal fraction of the region and a single chart stretches to fill it.
+ * Items span row tracks (grid-row: span N), so each track is a fixed unit rather than a fraction of
+ * the region. Fractional tracks resolved against this scroll container's collapsed height, which
+ * sized a span-4 card far taller than the region and clipped its axis and legend. The grid now grows
+ * to its content and .workspace__views scrolls once the cards outgrow the region.
  */
 .workspace__views > .visualization-grid {
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  min-height: 100%;
   margin-bottom: 0;
-  /* The minimum rows must be tall enough so multiple charts remain legible. */
-  grid-auto-rows: minmax(14rem, 1fr);
+  /* A span-4 item, the default height, resolves to the 20rem card floor. */
+  grid-auto-rows: var(--dc-layout-row-unit);
+  /* Rows keep their unit height instead of stretching to fill leftover region height. */
+  align-content: start;
 }
 
-/* Grid rows share the region, so each item tracks the row height instead of its content height. */
+/*
+ * A lone chart has no siblings to scroll past, so it stretches into the region instead. The height
+ * must be definite for the fractional track to resolve against the region rather than the content.
+ */
+.workspace__views > .visualization-grid:has(> .visualization-grid__item:only-child) {
+  height: 100%;
+  grid-auto-rows: minmax(var(--dc-layout-row-unit), 1fr);
+  align-content: stretch;
+}
+
+/* Rows carry the height, so the item tracks its span rather than its content. */
 .workspace__views .visualization-grid__item {
   min-height: 0;
 }
