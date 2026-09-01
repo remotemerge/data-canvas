@@ -26,4 +26,16 @@ describe('recorded agent transcripts', () => {
       toolOutputStayedBounded: true,
     });
   });
+
+  test('rejects a transcript that names an unknown tool', async () => {
+    const scenario: EvalScenario = {
+      name: 'unknown tool',
+      prompt: 'Use a tool that is not registered.',
+      fixture: 'sales',
+      transcript: [{ tool: 'missing_tool', arguments: {} }],
+      expected: { tools: ['missing_tool'] },
+    };
+
+    expect(runScenario(scenario)).rejects.toThrow("Unknown recorded tool 'missing_tool'.");
+  });
 });

@@ -82,6 +82,31 @@ const recordingWriteTools = (
 };
 
 describe('WebMCP tool surface exclusions', () => {
+  test('the fixture rejects an unknown tool name', () => {
+    expect(() => setup().tool('missing_tool')).toThrow("Missing fixture tool 'missing_tool'.");
+  });
+
+  test('the fixture column-profile dependency delegates to its engine', async () => {
+    const { deps } = setup();
+    const result = await deps.fetchColumnStatistics({
+      datasetId: 'ds_sales',
+      columnId: 'col_revenue',
+      topValueLimit: 3,
+    });
+
+    expect(result).toEqual(
+      ok({
+        columnId: 'col_revenue',
+        name: 'revenue',
+        logicalType: 'number',
+        rowCount: 0,
+        nullCount: 0,
+        distinctCount: 0,
+        distinctCountCapped: false,
+      }),
+    );
+  });
+
   // Agent tools do not export or import workspace files.
   test('registers no export or import tool', () => {
     const { deps } = setup();
