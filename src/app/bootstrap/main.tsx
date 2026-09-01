@@ -4,6 +4,7 @@ import { startEngine } from '@/app/bootstrap/start-engine.ts';
 import { dispatcher } from '@/application/actions/dispatcher.ts';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import { getColumnProfile } from '@/application/queries/column-statistics.ts';
+import { createUndoRedo } from '@/application/history/undo-redo.ts';
 import { getWorkspace, workspaceStore } from '@/state/workspace-store.ts';
 import { startToolLifecycle } from '@/webmcp/registry/tool-lifecycle.ts';
 import type { ToolLifecycleDependencies } from '@/webmcp/registry/tool-lifecycle.ts';
@@ -26,6 +27,7 @@ if (!container) {
 void startEngine();
 const toolDependencies: ToolLifecycleDependencies = {
   dispatcher,
+  history: createUndoRedo({ dispatcher, store: workspaceStore }),
   getWorkspace,
   fetchTableWindow: (request) => registeredDataEngine.fetchTableWindow(request),
   executeAnalysis: (query) => registeredDataEngine.executeAnalysis(query),
