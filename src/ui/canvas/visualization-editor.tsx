@@ -261,7 +261,6 @@ export const VisualizationEditor = ({
               </optgroup>
             ))}
           </select>
-          <small className="field-hint">{FIELD_HINT.dimension}</small>
         </label>
       )}
 
@@ -281,7 +280,6 @@ export const VisualizationEditor = ({
               </optgroup>
             ))}
           </select>
-          <small className="field-hint">{FIELD_HINT.measure}</small>
         </label>
       )}
 
@@ -296,7 +294,6 @@ export const VisualizationEditor = ({
               </option>
             ))}
           </select>
-          <small className="field-hint">{FIELD_HINT.aggregate}</small>
         </label>
       )}
 

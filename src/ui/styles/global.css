@@ -125,21 +125,40 @@ textarea:focus-visible,
   font-weight: 400;
 }
 
+/*
+ * Card shell. The heading band and the field row are separate blocks: when the title shared the
+ * wrapping flex row with the controls it competed with them for space, so the fields wrapped around
+ * a text column instead of aligning.
+ */
 .visualization-builder {
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+}
+
+.visualization-builder__header {
+  padding: var(--dc-space-3) var(--dc-space-4);
+  border-bottom: 1px solid var(--dc-color-border);
+}
+
+.visualization-builder__body {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
   gap: var(--dc-space-3);
   padding: var(--dc-space-4);
-  border: 1px solid var(--dc-color-border);
-  border-radius: var(--dc-radius);
-  background: var(--dc-color-surface-raised);
 }
 
 .visualization-builder h2,
 .visualization-builder p,
 .chart-panel h3 {
   margin: 0;
+}
+
+.visualization-builder__header p {
+  margin-top: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
 }
 
 .visualization-builder label {
@@ -429,18 +448,6 @@ textarea:focus-visible,
   gap: var(--dc-space-1);
   color: var(--dc-color-text-muted);
   font-size: var(--dc-text-sm);
-}
-
-/*
- * Point-of-use glossary for analytical terms. Kept quiet and narrow so it explains a field without
- * competing with the control it sits under, since the canvas is already dense once charts accumulate.
- */
-.field-hint {
-  max-width: 22ch;
-  color: var(--dc-color-text-muted);
-  font-size: var(--dc-text-sm);
-  line-height: 1.35;
-  text-wrap: pretty;
 }
 
 /* Rebinding form inside a chart card, laid out like the annotation editor above it. */
@@ -1746,7 +1753,11 @@ textarea:focus-visible,
 }
 
 /* The builder is a fixed block above the charts, so keep it compact to leave them height. */
-.visualization-builder {
+.visualization-builder__header {
+  padding: var(--dc-space-2) var(--dc-space-3);
+}
+
+.visualization-builder__body {
   padding: var(--dc-space-3);
   gap: var(--dc-space-2) var(--dc-space-3);
 }
@@ -1880,7 +1891,8 @@ textarea:focus-visible,
     padding: var(--dc-space-2);
   }
 
-  .visualization-builder {
+  /* Stack the fields into one column; the header band stays full width above them. */
+  .visualization-builder__body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     width: 100%;

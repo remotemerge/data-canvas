@@ -154,7 +154,6 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
                 </option>
               ))}
             </select>
-            <small className="field-hint">{FIELD_HINT.cardinality}</small>
           </label>
 
           <label title={FIELD_HINT.join}>
@@ -166,7 +165,6 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
                 </option>
               ))}
             </select>
-            <small className="field-hint">{FIELD_HINT.join}</small>
           </label>
 
           <button type="button" disabled={validation === null || !validation.ok} onClick={() => void create()}>

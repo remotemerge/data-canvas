@@ -2,8 +2,8 @@
  * Plain-language descriptions of the analytical terms the chart and relationship forms use.
  *
  * The vocabulary of dimensions, measures, aggregates, and join types is the main barrier for someone
- * who is comfortable with their data but not with analytics tooling. Explaining each term where it is
- * chosen avoids sending that reader elsewhere to interpret a field label.
+ * who is comfortable with their data but not with analytics tooling. These attach to labels as
+ * tooltips: the builder wraps equal-height fields, so a paragraph under one control staggers the row.
  */
 export const FIELD_HINT = {
   dimension: 'The column to group by, such as Region or Category. One mark appears per distinct value.',
