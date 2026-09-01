@@ -42,10 +42,6 @@ const findPath = (
   targetId: EntityId,
   relationships: readonly Relationship[],
 ): JoinStep[] | undefined => {
-  if (anchorId === targetId) {
-    return [];
-  }
-
   const visited = new Set<EntityId>([anchorId]);
   let frontier: { datasetId: EntityId; steps: JoinStep[] }[] = [{ datasetId: anchorId, steps: [] }];
 

@@ -58,6 +58,7 @@ const normalizeContext = (context: QueryDataset | QueryContext): QueryContext =>
 const buildFromClause = (
   plan: JoinPlan,
   datasets: readonly QueryDataset[],
+  anchor: QueryDataset,
 ): Result<{ sql: string; resolve: ColumnReferenceResolver }, DomainError> => {
   const aliases = new Map<EntityId, string>();
 
@@ -67,13 +68,6 @@ const buildFromClause = (
 
   const datasetFor = (datasetId: EntityId): QueryDataset | undefined =>
     datasets.find((candidate) => candidate.id === datasetId);
-
-  const anchorId = plan.datasetIds[0] as EntityId;
-  const anchor = datasetFor(anchorId);
-
-  if (anchor === undefined) {
-    return err(domainError('DATASET_NOT_FOUND', 'The query anchor dataset was not resolved.'));
-  }
 
   // Keep single-dataset queries unaliased; aliases are needed only when relations are joined.
   const unjoined = plan.steps.length === 0;
@@ -196,7 +190,7 @@ export const compileAnalysisQuery = (
     return plan;
   }
 
-  const from = buildFromClause(plan.value, datasets);
+  const from = buildFromClause(plan.value, datasets, anchor);
 
   if (!from.ok) {
     return from;
@@ -283,6 +277,7 @@ export const compileAnalysisQuery = (
   }
 
   const measureAliases = new Map<string, string>();
+  const aggregateByMeasure = new Map<(typeof query.measures)[number], string>();
   for (const [index, measure] of query.measures.entries()) {
     const derived = measure.columnId === undefined ? undefined : derivedColumns[measure.columnId];
     let reference: string | undefined;
@@ -317,6 +312,7 @@ export const compileAnalysisQuery = (
     if (!aggregate.ok) {
       return aggregate;
     }
+    aggregateByMeasure.set(measure, aggregate.value);
 
     // Time comparisons replace the query with a date spine below, so retain the base aggregate here.
     const modified =
@@ -383,11 +379,11 @@ export const compileAnalysisQuery = (
   if (select.length === 0) {
     // A bare projection selects only the anchor's columns.
     for (const column of anchor.columns) {
-      const resolved = resolve(column.id);
-      if (resolved === undefined) {
-        return err(missingColumn(column.id));
-      }
-      select.push(resolved.sql);
+      select.push(
+        plan.value.steps.length === 0
+          ? quoteIdentifier(column.physicalName)
+          : `${quoteIdentifier(joinAlias(0))}.${quoteIdentifier(column.physicalName)}`,
+      );
       resultColumns.push({ key: column.id, name: column.name, logicalType: column.logicalType });
     }
   }
@@ -407,21 +403,9 @@ export const compileAnalysisQuery = (
   const comparison = query.measures.find((measure) => measure.modifier?.kind === 'timeComparison');
 
   if (comparison !== undefined) {
-    const resolved = comparison.columnId === undefined ? undefined : resolve(comparison.columnId);
-
-    if (comparison.columnId !== undefined && resolved === undefined) {
-      return err(missingColumn(comparison.columnId));
-    }
-
-    const aggregate = compileAggregate(comparison.aggregate, resolved?.column, resolved?.sql);
-
-    if (!aggregate.ok) {
-      return aggregate;
-    }
-
     const spine = compileTimeSpine({
       modifier: comparison.modifier as Extract<NonNullable<typeof comparison.modifier>, { kind: 'timeComparison' }>,
-      aggregate: aggregate.value,
+      aggregate: aggregateByMeasure.get(comparison) as string,
       from: from.value.sql,
       where: where.join(' AND '),
       whereParameters,
