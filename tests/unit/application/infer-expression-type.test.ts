@@ -21,7 +21,9 @@ describe('expression type inference', () => {
     const result = infer({ kind: 'column', columnId: 'col_missing' });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
   });
 
   test('literals take the type of their value, and null stays unknown', () => {
@@ -62,7 +64,9 @@ describe('expression type inference', () => {
     const result = infer({ kind: 'datePart', part: 'month', columnId: 'col_revenue' });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    if (!result.ok) {
+      expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    }
   });
 
   test('numeric binning needs a numeric column and temporal binning a temporal one', () => {
@@ -116,7 +120,9 @@ describe('expression type inference', () => {
     const result = infer(conflicting);
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    if (!result.ok) {
+      expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    }
   });
 
   test('a case arm comparing across type families is rejected', () => {
@@ -127,7 +133,9 @@ describe('expression type inference', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    if (!result.ok) {
+      expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    }
   });
 
   test('an empty case has no branches to type and is rejected', () => {

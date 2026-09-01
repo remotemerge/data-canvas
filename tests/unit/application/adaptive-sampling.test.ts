@@ -97,7 +97,9 @@ describe('adaptive sampling policy', () => {
     const strategy = plan.disclosure?.strategy;
 
     expect(strategy?.kind).toBe('topN');
-    if (strategy?.kind !== 'topN') return;
+    if (strategy?.kind !== 'topN') {
+      return;
+    }
 
     expect(plan.query.limit).toBe(strategy.retained);
     expect(strategy.retained).toBeLessThanOrEqual(MAX_QUERY_LIMIT);
@@ -190,6 +192,57 @@ describe('adaptive sampling policy', () => {
     expect(widenTemporalUnit('day', 3_650, 200)).toBe('month');
     expect(widenTemporalUnit('day', 3_650, 600)).toBe('week');
     expect(widenTemporalUnit('year', 100, 10)).toBe('year');
+  });
+
+  // A unit outside the ordered scale has no wider neighbour to move to.
+  test('widening leaves an unrecognized unit as it is', () => {
+    expect(widenTemporalUnit('fortnight' as never, 1_000, 100) as unknown).toBe('fortnight');
+  });
+
+  test('widens only the temporal bin, leaving a companion value bin untouched', () => {
+    const query: AnalysisQuery = {
+      datasetId: 'ds_1' as EntityId,
+      dimensions: [],
+      binnedDimensions: [
+        { columnId: columnId('date'), strategy: { kind: 'temporal', unit: 'day' } },
+        { columnId: columnId('sales'), strategy: { kind: 'equalWidth', binCount: 2 } },
+      ],
+      measures: [{ columnId: columnId('revenue'), aggregate: 'sum', alias: 'revenue' }],
+      filters: [],
+    };
+    const plan = planSampling({ query, kind: 'line', estimatedRows: 6_000, budget: 100, readableBudget: 80 });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'quarter' });
+    expect(plan.query.binnedDimensions?.[1]).toEqual(query.binnedDimensions?.[1] as never);
+  });
+
+  // With no dimension to rank or bucket, only the scanned rows can be reduced.
+  test('samples scanned rows for an ungrouped aggregate', () => {
+    const query: AnalysisQuery = {
+      datasetId: 'ds_1' as EntityId,
+      dimensions: [],
+      measures: [{ aggregate: 'count' }],
+      filters: [],
+    };
+    const plan = planSampling({ query, kind: 'bar', estimatedRows: 6_000, budget: 100 });
+
+    expect(plan.disclosure?.strategy.kind).toBe('tablesample');
+    // Row sampling happens under the aggregate, so the query itself is unchanged.
+    expect(plan.query).toEqual(query);
+  });
+
+  // Ranking needs an alias the ORDER BY can name, so an unaliased measure keeps the query's own order.
+  test('top-N over an unaliased measure retains the leading groups without a sort', () => {
+    const query: AnalysisQuery = {
+      datasetId: 'ds_1' as EntityId,
+      dimensions: [columnId('region')],
+      measures: [{ columnId: columnId('revenue'), aggregate: 'sum' }],
+      filters: [],
+    };
+    const plan = planSampling({ query, kind: 'bar', estimatedRows: 6_000, budget: 1 });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'topN', retained: 1, otherBucket: true });
+    expect(plan.query.orderBy).toBeUndefined();
   });
 
   /*

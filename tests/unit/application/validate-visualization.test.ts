@@ -54,9 +54,11 @@ describe('per-kind binding rules', () => {
 
   test('series kinds accept multiple measures up to the bound', () => {
     const measures = Array.from({ length: MAX_BOUND_MEASURES }, () => REVENUE);
+    const overBound = check('bar', { x: REGION, y: [...measures, REVENUE] });
 
     expect(check('bar', { x: REGION, y: measures }).ok).toBe(true);
-    expect(check('bar', { x: REGION, y: [...measures, REVENUE] }).ok).toBe(false);
+    expect(overBound.ok).toBe(false);
+    expect(overBound.ok ? null : overBound.error.code).toBe('RESULT_LIMIT_EXCEEDED');
   });
 
   test('measures must be numeric', () => {
@@ -87,6 +89,109 @@ describe('per-kind binding rules', () => {
     expect(check('table', {}).ok).toBe(false);
     expect(check('table', { y: [REVENUE] }).ok).toBe(true);
   });
+
+  test('histogram requires an x column to bin', () => {
+    expect(check('histogram', {}).ok).toBe(false);
+  });
+
+  test('histogram rejects a categorical x, which has no continuous range to divide', () => {
+    expect(check('histogram', { x: REGION, binX: { kind: 'equalWidth', binCount: 20 } }).ok).toBe(false);
+  });
+
+  test('histogram without a bin strategy is refused as unsupported rather than defaulted', () => {
+    const result = check('histogram', { x: REVENUE });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+  });
+
+  test('an out-of-bounds histogram bin strategy surfaces the bin error', () => {
+    const result = check('histogram', { x: REVENUE, binX: { kind: 'equalWidth', binCount: 1 } });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('RESULT_LIMIT_EXCEEDED');
+  });
+
+  // Strategy family and column family must agree, or the compiled bucket expression is nonsense.
+  test('histogram pairs numeric strategies with numeric columns and temporal with temporal', () => {
+    expect(check('histogram', { x: REVENUE, binX: { kind: 'temporal', unit: 'month' } }).ok).toBe(false);
+    expect(check('histogram', { x: DATE, binX: { kind: 'equalWidth', binCount: 20 } }).ok).toBe(false);
+    expect(check('histogram', { x: DATE, binX: { kind: 'temporal', unit: 'month' } }).ok).toBe(true);
+  });
+
+  test('boxplot requires exactly one numeric measure', () => {
+    expect(check('boxplot', {}).ok).toBe(false);
+    expect(check('boxplot', { y: ['col_notes'] }).ok).toBe(false);
+  });
+
+  // The split column groups the boxes, so a numeric column there would produce one box per value.
+  test('boxplot rejects a numeric split column', () => {
+    expect(check('boxplot', { x: REVENUE, y: [REVENUE] }).ok).toBe(false);
+  });
+
+  test('heatmap requires both axes and one numeric measure', () => {
+    expect(check('heatmap', {}).ok).toBe(false);
+    expect(check('heatmap', { x: REGION }).ok).toBe(false);
+    expect(check('heatmap', { x: REGION, series: DATE, y: [] }).ok).toBe(false);
+    expect(check('heatmap', { x: REGION, series: DATE, y: ['col_notes'] }).ok).toBe(false);
+  });
+
+  test('a heatmap bin strategy must match its own column family', () => {
+    expect(
+      check('heatmap', {
+        x: REGION,
+        series: DATE,
+        y: [REVENUE],
+        binSeries: { kind: 'equalWidth', binCount: 20 },
+      }).ok,
+    ).toBe(false);
+    expect(
+      check('heatmap', { x: REGION, series: DATE, y: [REVENUE], binSeries: { kind: 'temporal', unit: 'month' } }).ok,
+    ).toBe(true);
+  });
+
+  // Both heatmap axes may be binned, so the x channel is checked against its own column family too.
+  test('a heatmap rejects a temporal bin over a category x column', () => {
+    const result = check('heatmap', {
+      x: REGION,
+      series: DATE,
+      y: [REVENUE],
+      binX: { kind: 'temporal', unit: 'month' },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+  });
+
+  // The kind arrives as unknown from a tool payload, so an unrecognized one is refused explicitly.
+  test('an unrecognized visualization kind is refused', () => {
+    const result = check('unknown' as VisualizationKind, {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+  });
+
+  test('a dataset with no columns cannot satisfy the table rule', () => {
+    const result = validateVisualization({ ...dataset, id: 'ds_empty', columns: [] }, 'table', {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+  });
 });
 
 describe('binding reference resolution', () => {
@@ -113,7 +218,9 @@ describe('corrective error messages', () => {
 
     expect(result.ok).toBe(false);
 
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
 
     expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
     expect(result.error.message).toContain('scatter');

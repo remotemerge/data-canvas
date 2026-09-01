@@ -72,7 +72,9 @@ describe('derived column validation', () => {
     const result = validate(wide);
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.details).toMatchObject({ maxNodes: MAX_EXPRESSION_NODES });
+    if (!result.ok) {
+      expect(result.error.details).toMatchObject({ maxNodes: MAX_EXPRESSION_NODES });
+    }
   });
 
   test('an operator outside the closed set is refused, since the tree arrives as unknown from a tool', () => {
@@ -84,7 +86,78 @@ describe('derived column validation', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  // Each closed set is checked structurally, since the tree arrives as unknown from a tool payload.
+  test('a datePart outside the supported parts is refused', () => {
+    const result = validate({
+      kind: 'datePart',
+      columnId: 'col_date',
+      part: 'unknown',
+    } as unknown as DerivedExpression);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  test('a cast to an unsupported target type is refused', () => {
+    const result = validate({
+      kind: 'cast',
+      expr: { kind: 'literal', value: 1 },
+      to: 'unknown',
+    } as unknown as DerivedExpression);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  test('a case arm using an unsupported comparison operator is refused', () => {
+    const result = validate({
+      kind: 'case',
+      when: [
+        {
+          left: { kind: 'literal', value: 1 },
+          operator: 'unknown',
+          right: { kind: 'literal', value: 1 },
+          result: { kind: 'literal', value: 1 },
+        },
+      ],
+      otherwise: { kind: 'literal', value: 0 },
+    } as unknown as DerivedExpression);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  test.each([
+    ['a datePart over a temporal column', { kind: 'datePart', columnId: 'col_date', part: 'day' }],
+    ['a cast of a literal', { kind: 'cast', expr: { kind: 'literal', value: '1' }, to: 'number' }],
+    [
+      'a case whose arms agree',
+      {
+        kind: 'case',
+        when: [
+          {
+            left: REVENUE,
+            operator: 'gt',
+            right: { kind: 'literal', value: 0 },
+            result: { kind: 'literal', value: 'positive' },
+          },
+        ],
+        otherwise: { kind: 'literal', value: 'zero' },
+      },
+    ],
+  ] as [string, DerivedExpression][])('%s is accepted', (_label, expression) => {
+    expect(validate(expression).ok).toBe(true);
   });
 
   test('a nested bin strategy is bounds-checked along with the rest of the tree', () => {
@@ -95,7 +168,9 @@ describe('derived column validation', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('RESULT_LIMIT_EXCEEDED');
+    if (!result.ok) {
+      expect(result.error.code).toBe('RESULT_LIMIT_EXCEEDED');
+    }
   });
 
   test('type errors surface from inference rather than reaching the compiler', () => {
@@ -107,7 +182,9 @@ describe('derived column validation', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    if (!result.ok) {
+      expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    }
   });
 
   test('a derived column may build on a previously defined one', () => {
@@ -129,7 +206,9 @@ describe('derived column validation', () => {
     const result = validate({ kind: 'column', columnId: 'col_self' }, { col_self: existing }, 'Self', 'col_self');
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
   });
 
   test('a mutual cycle between two derived columns is refused', () => {
@@ -140,14 +219,36 @@ describe('derived column validation', () => {
     const result = validate({ kind: 'column', columnId: 'col_a' }, { col_a: a, col_b: b }, 'B', 'col_b');
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  // The loop already exists in the workspace, so a new column reaching it inherits the cycle.
+  test('a reference to an already self-referencing derived column is refused', () => {
+    const loop = derivedColumn('derived_loop', { kind: 'column', columnId: 'derived_loop' });
+
+    const result = validate({ kind: 'column', columnId: loop.id }, { [loop.id]: loop }, 'references loop');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  test('a bin over a numeric column within the bucket bounds is accepted', () => {
+    expect(validate({ kind: 'bin', columnId: 'col_revenue', strategy: { kind: 'equalWidth', binCount: 4 } }).ok).toBe(
+      true,
+    );
   });
 
   test('a reference to a column that does not exist is refused', () => {
     const result = validate({ kind: 'column', columnId: 'col_missing' });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
   });
 
   test('derived columns on another dataset are out of scope', () => {
@@ -156,6 +257,8 @@ describe('derived column validation', () => {
     const result = validate({ kind: 'column', columnId: 'col_other' }, { col_other: other });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
   });
 });

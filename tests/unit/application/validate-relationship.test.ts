@@ -35,7 +35,9 @@ describe('validateRelationship', () => {
     const result = validateRelationship(workspaceWithJoinableDatasets(), ORDERS_TO_CUSTOMERS);
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.keys).toHaveLength(1);
     expect(result.value.keys[0]?.left.id).toBe('col_order_customer');
     expect(result.value.keys[0]?.right.id).toBe('col_customer_id');
@@ -49,7 +51,9 @@ describe('validateRelationship', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
   });
 
@@ -72,7 +76,9 @@ describe('validateRelationship', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
   });
 
@@ -90,12 +96,63 @@ describe('validateRelationship', () => {
     expect(missingColumn.ok === false && missingColumn.error.code).toBe('COLUMN_NOT_FOUND');
   });
 
+  test('an unknown left dataset is reported the same way as an unknown right one', () => {
+    const result = validateRelationship(workspaceWithJoinableDatasets(), {
+      ...ORDERS_TO_CUSTOMERS,
+      leftDatasetId: 'ds_nope',
+    });
+
+    expect(result.ok === false && result.error.code).toBe('DATASET_NOT_FOUND');
+  });
+
+  test('an unknown column on the right side is reported the same way as on the left', () => {
+    const result = validateRelationship(workspaceWithJoinableDatasets(), {
+      ...ORDERS_TO_CUSTOMERS,
+      on: [{ leftColumnId: 'col_order_customer', rightColumnId: 'col_nope' }],
+    });
+
+    expect(result.ok === false && result.error.code).toBe('COLUMN_NOT_FOUND');
+  });
+
+  test('a temporal key against a numeric key is refused', () => {
+    const result = validateRelationship(workspaceWithJoinableDatasets(), {
+      ...ORDERS_TO_CUSTOMERS,
+      on: [{ leftColumnId: 'col_order_placed', rightColumnId: 'col_customer_id' }],
+    });
+
+    expect(result.ok === false && result.error.code).toBe('INCOMPATIBLE_COLUMN');
+  });
+
+  test('rejects a duplicate relationship declared in the same direction', () => {
+    const workspace = withRelationships(relate('rel_1', 'ds_orders', 'ds_customers'));
+    const result = validateRelationship(workspace, ORDERS_TO_CUSTOMERS);
+
+    expect(result.ok === false && result.error.code).toBe('UNSUPPORTED_OPERATION');
+  });
+
+  test('a left dataset that is not ready is refused alongside the right one', () => {
+    const workspace = workspaceWithJoinableDatasets();
+    const orders = workspace.datasets['ds_orders'];
+    if (orders === undefined) {
+      throw new Error('fixture missing orders');
+    }
+
+    const result = validateRelationship(
+      { ...workspace, datasets: { ...workspace.datasets, ds_orders: { ...orders, importStatus: 'loading' } } },
+      ORDERS_TO_CUSTOMERS,
+    );
+
+    expect(result.ok === false && result.error.code).toBe('UNSUPPORTED_OPERATION');
+  });
+
   test('rejects a duplicate relationship over the same pair in either direction', () => {
     const workspace = withRelationships(relate('rel_1', 'ds_customers', 'ds_orders'));
     const result = validateRelationship(workspace, ORDERS_TO_CUSTOMERS);
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
     expect(result.error.message).toContain('already related');
   });
@@ -115,7 +172,9 @@ describe('validateRelationship', () => {
     });
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('RELATIONSHIP_CYCLE');
   });
 
@@ -137,13 +196,17 @@ describe('validateRelationship', () => {
     const workspace = workspaceWithJoinableDatasets();
     const loading = { ...workspace, datasets: { ...workspace.datasets } };
     const customers = loading.datasets['ds_customers'];
-    if (customers === undefined) throw new Error('fixture missing customers');
+    if (customers === undefined) {
+      throw new Error('fixture missing customers');
+    }
     loading.datasets['ds_customers'] = { ...customers, importStatus: 'loading' };
 
     const result = validateRelationship(loading, ORDERS_TO_CUSTOMERS);
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
   });
 });
