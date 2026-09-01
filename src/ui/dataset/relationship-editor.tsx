@@ -8,6 +8,7 @@ import type { JoinKind, RelationshipKind } from '@/domain/relationship/relations
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { FIELD_HINT } from '@/ui/canvas/field-hints.ts';
 
 // Mirrors relationship validation for the form's key picker.
 const joinTypeClass = (type: LogicalType): string => {
@@ -144,7 +145,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
             </select>
           </label>
 
-          <label>
+          <label title={FIELD_HINT.cardinality}>
             Cardinality
             <select value={kind} onChange={(event) => setKind(event.target.value as RelationshipKind)}>
               {RELATIONSHIP_KINDS.map((item) => (
@@ -153,9 +154,10 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
                 </option>
               ))}
             </select>
+            <small className="field-hint">{FIELD_HINT.cardinality}</small>
           </label>
 
-          <label>
+          <label title={FIELD_HINT.join}>
             Join
             <select value={join} onChange={(event) => setJoin(event.target.value as JoinKind)}>
               {JOIN_KINDS.map((item) => (
@@ -164,6 +166,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
                 </option>
               ))}
             </select>
+            <small className="field-hint">{FIELD_HINT.join}</small>
           </label>
 
           <button type="button" disabled={validation === null || !validation.ok} onClick={() => void create()}>

@@ -15,6 +15,7 @@ import {
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { FIELD_HINT } from '@/ui/canvas/field-hints.ts';
 
 const CHART_KINDS = VISUALIZATION_KINDS.filter((kind) => kind !== 'table');
 
@@ -263,7 +264,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           )}
         </>
       ) : kind === 'kpi' ? null : (
-        <label>
+        <label title={FIELD_HINT.dimension}>
           Dimension
           <select value={x} onChange={(event) => setX(event.target.value)}>
             <option value="">Choose</option>
@@ -278,11 +279,12 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
               </optgroup>
             ))}
           </select>
+          <small className="field-hint">{FIELD_HINT.dimension}</small>
         </label>
       )}
       {/* Histogram y is its bucket count, so it has no measure selector. */}
       {kind === 'histogram' ? null : (
-        <label>
+        <label title={FIELD_HINT.measure}>
           Measure
           <select value={y} onChange={(event) => setY(event.target.value)}>
             <option value="">Choose</option>
@@ -296,17 +298,19 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
               </optgroup>
             ))}
           </select>
+          <small className="field-hint">{FIELD_HINT.measure}</small>
         </label>
       )}
       {/* Box plots compute quantiles, so they have no aggregate selector. */}
       {kind === 'histogram' || kind === 'boxplot' ? null : (
-        <label>
+        <label title={FIELD_HINT.aggregate}>
           Aggregate
           <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
             {['sum', 'avg', 'min', 'max', 'median', 'stddev'].map((item) => (
               <option key={item}>{item}</option>
             ))}
           </select>
+          <small className="field-hint">{FIELD_HINT.aggregate}</small>
         </label>
       )}
       <button

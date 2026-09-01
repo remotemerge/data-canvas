@@ -431,6 +431,18 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
+/*
+ * Point-of-use glossary for analytical terms. Kept quiet and narrow so it explains a field without
+ * competing with the control it sits under, since the canvas is already dense once charts accumulate.
+ */
+.field-hint {
+  max-width: 22ch;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
 /* Rebinding form inside a chart card, laid out like the annotation editor above it. */
 .visualization-editor {
   display: grid;
