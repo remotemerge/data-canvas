@@ -162,6 +162,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         summary: `Returned ${rows.length} of ${result.value.totalRowCount} rows.`,
         columnIds: indexes.map((index) => result.value.columnIds[index]),
         rows,
+        rowsTotal: result.value.totalRowCount,
       });
     },
   },
