@@ -9,14 +9,7 @@ import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { ORDERS_COLUMNS } from '../application/action-fixtures.ts';
 
-/**
- * Deterministic budget invariants.
- *
- * Unlike the timing benchmarks these are device-independent facts about what the code emits, so they
- * belong in `bun test` as hard assertions rather than in a report someone reads. Any of them failing
- * means a path exists that can return an unbounded result, which is a correctness and memory problem
- * before it is a performance one.
- */
+// Asserts deterministic result-size bounds.
 
 const context: QueryContext = {
   datasets: [{ id: 'ds_orders' as EntityId, relationId: 'dataset_orders', columns: ORDERS_COLUMNS }],
@@ -29,7 +22,7 @@ const baseQuery: AnalysisQuery = {
   filters: [],
 };
 
-/** Extracts the emitted `LIMIT`, or `undefined` when the statement carries none. */
+// Extracts the emitted `LIMIT`, or `undefined` when the statement carries none.
 const emittedLimit = (sql: string): number | undefined => {
   const matched = /LIMIT (\d+)/u.exec(sql);
 
@@ -84,8 +77,7 @@ describe('plotted points stay within budget', () => {
     for (const kind of kinds) {
       const plan = planSampling({ query: baseQuery, kind, estimatedRows: 10_000_000, budget: MAX_CHART_POINTS });
 
-      // `tablesample` leaves the query's own limit in place, which is already bounded by the
-      // compiler; every reshaping strategy sets an explicit limit at or below the budget.
+      // The compiler's limit bounds every reshaping strategy.
       if (plan.query.limit !== undefined) expect(plan.query.limit).toBeLessThanOrEqual(MAX_CHART_POINTS);
     }
   });
@@ -144,8 +136,7 @@ describe('cache behaviour on repeated queries', () => {
   });
 
   test('an expensive entry outlives a stream of cheap ones', () => {
-    // Plain LRU would evict the costly aggregate that a chart is about to request again, which is
-    // exactly the entry worth keeping.
+    // Preserve costly aggregates that charts are likely to request again.
     const cache = createQueryCache<string>(3);
 
     cache.set(key(10), 'expensive', { size: 10, computeMs: 5_000 });

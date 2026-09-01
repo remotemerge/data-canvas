@@ -18,58 +18,35 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/**
- * Who initiated an action. Attribution is recorded on every committed action, so a human can always
- * see which changes an agent made to the workspace they share.
- */
+// Identifies who initiated a committed action for activity history.
 export type Actor = 'human' | 'agent' | 'system';
 
-/**
- * Action payload contracts.
- *
- * These are the *input* shapes callers supply, deliberately narrower than the domain entities they
- * produce. Identity, timestamps, and derived metadata are assigned by the handlers, never by the
- * caller, so an agent cannot choose an entity's ID or forge its origin.
- */
+// Input shapes accepted by the dispatcher. Handlers assign entity metadata.
 
 export interface BeginDatasetImportInput {
-  /** Display name shown in the UI. Rendered as plain text and never used to build SQL identifiers. */
+  // Display name only; render it as text and never use it as a SQL identifier.
   name: string;
   sourceKind: DatasetSourceKind;
   byteSize: number;
 }
 
 export interface ImportDatasetInput {
-  /**
-   * The chosen local file. Typed as `unknown` at this boundary because `File` is a DOM type and the
-   * application layer must not assume a browser; the data engine adapter narrows it.
-   */
+  // Local file supplied by the UI; the data-engine adapter narrows this DOM type.
   file: unknown;
-  /**
-   * The dataset committed by `dataset.beginImport`, whose status this action resolves.
-   *
-   * Supplied rather than generated because the placeholder already exists in the workspace: a fresh
-   * ID here would leave the `loading` row stranded forever.
-   */
+  // ID of the loading dataset created by `dataset.beginImport`.
   datasetId: EntityId;
-  /**
-   * Progress callback for the ingestion phases.
-   *
-   * Not part of the workspace and never persisted or replayed: progress is a property of one running
-   * import, not of the state it produces. Only the UI supplies it; an agent-initiated import simply
-   * omits it.
-   */
+  // Transient progress callback; not workspace state or history.
   onProgress?: (progress: ImportProgress) => void;
 }
 
 export interface FailDatasetImportInput {
   datasetId: EntityId;
-  /** Corrective text for the user. Must contain no file contents; see `DomainError`. */
+  // User-facing failure text; it must not contain file contents.
   reason: string;
 }
 
 export interface SetActiveDatasetInput {
-  /** `undefined` clears the active dataset rather than selecting one. */
+  // Pass `undefined` to clear the active dataset.
   datasetId?: EntityId;
 }
 
@@ -78,7 +55,7 @@ export interface ApplyFilterInput {
   columnId: EntityId;
   operator: FilterOperator;
   value?: unknown;
-  /** Omitted for nullary operators (`is_null`, `is_not_null`). */
+  // Omitted for nullary operators (`is_null`, `is_not_null`).
   enabled?: boolean;
 }
 
@@ -87,7 +64,7 @@ export interface RemoveFilterInput {
 }
 
 export interface ClearFiltersInput {
-  /** Omitted clears every filter in the workspace; supplied clears only that dataset's filters. */
+  // Omitted clears all filters; a dataset ID limits the clear to that dataset.
   datasetId?: EntityId;
 }
 
@@ -133,13 +110,7 @@ export interface SetSelectionInput {
   origin: 'table' | 'chart' | 'agent';
 }
 
-/**
- * Adds to an existing selection rather than replacing it.
- *
- * The union of the current predicate and the new one, which is what ctrl/cmd-click means: "these as
- * well as those". With no current selection it behaves as `selection.set`, so the first click of an
- * additive sequence needs no special case at the call site.
- */
+// Extends the current selection; with no selection, behaves like `selection.set`.
 export interface ExtendSelectionInput {
   datasetId: EntityId;
   mode: 'keys' | 'predicate';
@@ -149,7 +120,7 @@ export interface ExtendSelectionInput {
 }
 
 export interface ClearSelectionInput {
-  /** Omitted clears every selection; supplied clears only that dataset's selections. */
+  // Omitted clears all selections; a dataset ID limits the clear to that dataset.
   datasetId?: EntityId;
 }
 
@@ -157,11 +128,11 @@ export interface CreateMetricInput {
   datasetId: EntityId;
   name: string;
   aggregate: AggregateFunction;
-  /** Required for every aggregate except `count`, which counts rows rather than a column. */
+  // Required for every aggregate except `count`, which counts rows.
   columnId?: EntityId;
   filters?: EntityId[];
   format?: MetricFormat;
-  /** Window transformation over the aggregate. Absent leaves a plain aggregate. */
+  // Optional window transformation over the aggregate.
   modifier?: MetricModifier;
 }
 
@@ -181,7 +152,7 @@ export interface RemoveMetricInput {
 
 export interface CreateDerivedColumnInput {
   datasetId: EntityId;
-  /** Display label, rendered as plain text and never used as a SQL identifier. */
+  // Display label only; render it as text and never use it as a SQL identifier.
   name: string;
   expression: DerivedExpression;
 }
@@ -215,12 +186,7 @@ export interface RemoveRelationshipInput {
 
 export interface RemoveDatasetInput {
   datasetId: EntityId;
-  /**
-   * Removes the entities referencing this dataset along with it.
-   *
-   * Omitted, the action refuses and reports what still references the dataset. Cascading is opt-in
-   * because silently deleting a human's charts is worse than a refusal they can act on.
-   */
+  // Whether to remove entities that reference the dataset.
   cascade?: boolean;
 }
 
@@ -229,20 +195,7 @@ export interface UpdateLayoutInput {
   items?: WorkspaceLayoutItem[];
 }
 
-/**
- * Replaces the workspace with one restored from an archive.
- *
- * The workspace is supplied whole rather than assembled here: `importArchive` has already validated
- * it, regenerated every ID, and created the DuckDB relations. This action is the commit step, so the
- * replacement is revisioned and attributable like any other change.
- */
-export interface ImportWorkspaceInput {
-  workspace: Workspace;
-  /** Datasets whose rows were absent from the archive, surfaced to the user after the commit. */
-  missingDatasetNames: string[];
-}
-
-/** Trusted metadata delta created by the dispatcher for undo and redo. */
+// Internal metadata delta used by undo and redo.
 export interface RestoreWorkspaceInput {
   state: Partial<
     Pick<
@@ -262,21 +215,7 @@ export interface RestoreWorkspaceInput {
   changedEntityIds: EntityId[];
 }
 
-/**
- * Every state-changing operation the application supports.
- *
- * This union is the single mutation vocabulary. React commands and WebMCP tools both construct
- * members of it and hand them to the dispatcher; neither has a private path to the store.
- *
- * The dataset actions extend the set beyond the visualization/filter operations because import is
- * itself a state change that must be attributable and revisioned. Leaving it outside the dispatcher
- * would create the second mutation path this architecture exists to prevent.
- *
- * Import spans three actions rather than one because ingestion is slow enough to be visible.
- * `beginImport` commits a `loading` placeholder immediately, then `import` resolves it to `ready`
- * or `failImport` to `error`. Each transition is separately revisioned and attributable, so a
- * half-finished import is an observable workspace state rather than a gap.
- */
+// Shared mutation vocabulary passed to the application dispatcher by React and WebMCP.
 export type ApplicationAction =
   | { type: 'dataset.beginImport'; payload: BeginDatasetImportInput }
   | { type: 'dataset.import'; payload: ImportDatasetInput }
@@ -296,7 +235,6 @@ export type ApplicationAction =
   | { type: 'selection.extend'; payload: ExtendSelectionInput }
   | { type: 'selection.clear'; payload: ClearSelectionInput }
   | { type: 'visualization.setLinkMode'; payload: SetVisualizationLinkModeInput }
-  | { type: 'workspace.import'; payload: ImportWorkspaceInput }
   | { type: 'metric.create'; payload: CreateMetricInput }
   | { type: 'metric.update'; payload: UpdateMetricInput }
   | { type: 'metric.remove'; payload: RemoveMetricInput }
@@ -309,7 +247,7 @@ export type ApplicationAction =
 
 export type ApplicationActionType = ApplicationAction['type'];
 
-/** Every action type, used by exhaustiveness tests and by handler-coverage assertions. */
+// All action types, used by handler-coverage and exhaustiveness tests.
 export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'dataset.beginImport',
   'dataset.import',
@@ -329,7 +267,6 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
   'selection.extend',
   'selection.clear',
   'visualization.setLinkMode',
-  'workspace.import',
   'metric.create',
   'metric.update',
   'metric.remove',
@@ -343,16 +280,9 @@ export const APPLICATION_ACTION_TYPES: readonly ApplicationActionType[] = [
 
 export interface ActionContext {
   actor: Actor;
-  /** Marks dispatcher-driven history traversal. */
+  // Marks an action created by undo or redo.
   origin?: 'undo' | 'redo';
-  /**
-   * Optimistic concurrency assertion. When supplied and unequal to the current workspace revision,
-   * the action is rejected with `STALE_WORKSPACE_REVISION` before any validation or side effect.
-   *
-   * Human UI actions normally omit it because the human is looking at current state. Agent write
-   * tools should supply it, since an agent's decision may be based on a workspace a human has since
-   * changed.
-   */
+  // Optional optimistic-concurrency check against an observed workspace revision.
   expectedRevision?: number;
   signal?: AbortSignal;
 }
@@ -361,18 +291,11 @@ export interface ActionResult {
   actionId: string;
   revision: number;
   changedEntityIds: EntityId[];
-  /** Concise, agent-safe prose. Must contain no dataset cell values. */
+  // Concise, agent-safe summary with no dataset cell values.
   summary: string;
 }
 
-/**
- * The dispatcher contract.
- *
- * Deviates from the research's `Promise<ActionResult>` by returning a `Result`. Validation failure
- * is the expected case at the agent boundary, so it is modelled as a value rather than an
- * exception; the WebMCP adapter needs a typed failure to map onto a structured tool error, and
- * try/catch as control flow across the whole application would be worse.
- */
+// Executes an application action and returns typed failures.
 export interface ApplicationActions {
   execute(action: ApplicationAction, context: ActionContext): Promise<Result<ActionResult, DomainError>>;
 }

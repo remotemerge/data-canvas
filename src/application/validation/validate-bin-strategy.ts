@@ -23,13 +23,7 @@ const outOfRange = (field: string, value: number, min: number, max: number): Dom
 const notFinite = (field: string): DomainError =>
   domainError('UNSUPPORTED_OPERATION', `${field} must be a finite number.`, { field });
 
-/**
- * Checks a bin strategy's bounds before it can reach the compiler.
- *
- * Every limit here caps the number of result rows a histogram can produce, so this is the query's
- * size guard as much as a correctness check. The compiler assumes a validated strategy and does not
- * re-check these.
- */
+// Validates bin-strategy bounds before compilation.
 export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainError> => {
   switch (strategy.kind) {
     case 'equalWidth': {
@@ -45,8 +39,7 @@ export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainE
     case 'equalWidthOf': {
       if (!Number.isFinite(strategy.width)) return err(notFinite('width'));
 
-      // A non-positive width would make the bucket count infinite or negative. The upper bound on
-      // resulting buckets is enforced by the compiler, which knows the column's actual range.
+      // The compiler checks the range-dependent bucket count; this check only validates the width.
       return strategy.width <= 0
         ? err(domainError('UNSUPPORTED_OPERATION', 'Bin width must be greater than zero.', { field: 'width' }))
         : ok(undefined);
@@ -71,8 +64,7 @@ export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainE
 
       if (breaks.some((value) => !Number.isFinite(value))) return err(notFinite('breaks'));
 
-      // Ascending order is what makes the compiled `CASE` arms exhaustive and non-overlapping. An
-      // unsorted list would compile without error and silently misplace rows.
+      // Strict ordering makes the compiled CASE bounds unambiguous.
       for (let index = 1; index < breaks.length; index += 1) {
         if ((breaks[index] as number) <= (breaks[index - 1] as number)) {
           return err(

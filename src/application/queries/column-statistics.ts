@@ -12,16 +12,7 @@ export interface ColumnProfile extends ColumnStatistics {
   logicalType: string;
 }
 
-/**
- * Profiles one column against current workspace filters.
- *
- * The whole profile is aggregates plus a capped frequency list, so it answers questions like "which
- * columns suit a time series?" without previewing a single row. That is a better trade than wider
- * preview access: more analytical value, less raw data leaving the device.
- *
- * Filters are applied rather than ignored, so the profile describes the data the user is actually
- * looking at instead of the untouched import.
- */
+// Returns bounded column statistics for the current filtered view.
 export const getColumnProfile = async (
   engine: DataEnginePort,
   workspace: Workspace,

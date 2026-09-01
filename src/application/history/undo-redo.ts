@@ -11,7 +11,7 @@ interface UndoRedoDeps {
 }
 
 export const createUndoRedo = ({ dispatcher, store }: UndoRedoDeps) => {
-  const execute = async (origin: 'undo' | 'redo') => {
+  const execute = async (origin: 'undo' | 'redo', expectedRevision?: number) => {
     const state = store.getState();
     const stack = origin === 'undo' ? state.undoStack : state.redoStack;
     const entry = state.history.findLast((candidate) => candidate.actionId === stack.at(-1));
@@ -24,8 +24,15 @@ export const createUndoRedo = ({ dispatcher, store }: UndoRedoDeps) => {
       );
     }
 
-    return dispatcher.execute(entry.inverseAction, { actor: 'system', origin });
+    return dispatcher.execute(entry.inverseAction, {
+      actor: 'system',
+      origin,
+      ...(expectedRevision === undefined ? {} : { expectedRevision }),
+    });
   };
 
-  return { undo: () => execute('undo'), redo: () => execute('redo') };
+  return {
+    undo: (expectedRevision?: number) => execute('undo', expectedRevision),
+    redo: (expectedRevision?: number) => execute('redo', expectedRevision),
+  };
 };

@@ -1,5 +1,7 @@
+import type { ErrorObject } from 'ajv';
 import type { ModelContext } from '@mcp-b/webmcp-types';
 import { domainError } from '@/shared/errors/domain-error.ts';
+import { requiredDatasetCount } from '@/webmcp/registry/tool-types.ts';
 import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 import { setToolStatus } from '@/webmcp/registry/tool-status.ts';
 import { toolValidators } from '@/webmcp/schemas/compile-schemas.ts';
@@ -13,8 +15,49 @@ export const createToolDefinitions = (deps: ToolDependencies): DataCanvasTool[] 
   ...createWriteTools(deps),
 ];
 
+/*
+ * Ajv keeps the useful part of a rejection in `params` rather than in `message`: which property was
+ * unknown, and which values an enum accepts. An agent that cannot read tool descriptors has to
+ * rediscover a contract from these messages, so name the offending field instead of leaving it to
+ * be guessed one probe call at a time.
+ */
+const describeValidationError = (error: ErrorObject): string => {
+  const location = error.instancePath === '' ? '/' : error.instancePath;
+  const params = error.params as { additionalProperty?: string; allowedValues?: unknown[]; allowedValue?: unknown };
+  const message = error.message ?? 'is invalid';
+
+  if (error.keyword === 'additionalProperties' && typeof params.additionalProperty === 'string') {
+    return `'${location}' has unknown property '${params.additionalProperty}'.`;
+  }
+
+  if (error.keyword === 'enum' && Array.isArray(params.allowedValues)) {
+    return `'${location}' ${message}: ${params.allowedValues.map((value) => JSON.stringify(value)).join(', ')}.`;
+  }
+
+  if (error.keyword === 'const' && 'allowedValue' in params) {
+    return `'${location}' must be equal to ${JSON.stringify(params.allowedValue)}.`;
+  }
+
+  return `'${location}' ${message}.`;
+};
+
+export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise<string> => {
+  const validator = toolValidators[tool.name];
+  if (!validator(input)) {
+    const first = validator.errors?.[0];
+    const detail = first === undefined ? 'Arguments do not match this tool schema.' : describeValidationError(first);
+    return failure(domainError('INVALID_TOOL_ARGUMENTS', detail));
+  }
+
+  try {
+    return enforceOutputBudget(await tool.handler(input));
+  } catch {
+    return failure(domainError('UNSUPPORTED_OPERATION', 'The tool could not complete the requested operation.'));
+  }
+};
+
 export interface ToolRegistry {
-  setDatasetToolsEnabled(enabled: boolean): Promise<void>;
+  setReadyDatasetCount(count: number): Promise<void>;
   dispose(): void;
 }
 
@@ -38,22 +81,14 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
           executingCount += 1;
           setToolStatus({ executingCount });
           try {
-            const validator = toolValidators[tool.name];
-            if (!validator(input)) {
-              return failure(domainError('INVALID_TOOL_ARGUMENTS', 'Arguments do not match this tool schema.'));
-            }
-            return enforceOutputBudget(await tool.handler(input));
-          } catch {
-            return failure(
-              domainError('UNSUPPORTED_OPERATION', 'The tool could not complete the requested operation.'),
-            );
+            return await executeTool(tool, input);
           } finally {
             executingCount = Math.max(0, executingCount - 1);
             setToolStatus({ executingCount });
           }
         },
       },
-      // Cross-origin exposure is intentionally omitted. Data Canvas v1 tools stay same-origin.
+      // Keep v1 tools same-origin; omit cross-origin exposure.
       { signal: controller.signal },
     );
     setToolStatus({ registeredCount: controllers.size });
@@ -65,14 +100,19 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
     setToolStatus({ registeredCount: controllers.size });
   };
 
-  await Promise.all(tools.filter((candidate) => !candidate.needsDataset).map(register));
+  await Promise.all(tools.filter((candidate) => requiredDatasetCount(candidate) === 0).map(register));
   setToolStatus({ available: true });
 
   return {
-    setDatasetToolsEnabled: async (enabled) => {
-      const datasetTools = tools.filter((candidate) => candidate.needsDataset);
-      if (enabled) await Promise.all(datasetTools.map(register));
-      else for (const tool of datasetTools) unregister(tool);
+    // Registration follows the ready-dataset count, so a tool appears only once it can succeed.
+    setReadyDatasetCount: async (count) => {
+      const satisfied = tools.filter(
+        (candidate) => requiredDatasetCount(candidate) > 0 && requiredDatasetCount(candidate) <= count,
+      );
+      const unsatisfied = tools.filter((candidate) => requiredDatasetCount(candidate) > count);
+
+      for (const tool of unsatisfied) unregister(tool);
+      await Promise.all(satisfied.map(register));
     },
     dispose: () => {
       for (const controller of controllers.values()) controller.abort();

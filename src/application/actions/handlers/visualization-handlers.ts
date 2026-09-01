@@ -6,6 +6,7 @@ import type {
 } from '@/application/actions/action-types.ts';
 import { omitKeys } from '@/application/actions/handlers/handler-types.ts';
 import type { ActionHandler } from '@/application/actions/handlers/handler-types.ts';
+import { placeNewVisualization } from '@/application/layout/place-visualization.ts';
 import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { resolveDataset, resolveVisualization } from '@/application/validation/validate-entity-refs.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
@@ -24,22 +25,27 @@ const DEFAULT_PRESENTATION: VisualizationPresentation = {
   stacked: false,
 };
 
-/**
- * Derives an `AnalysisQuery` from a binding when the caller supplies none.
- *
- * Bound `y` channels are the measures and the `x`/`series` channels the dimensions. Deriving it
- * here rather than requiring callers to construct one keeps the human and agent paths equivalent:
- * a UI chart builder and a WebMCP tool both express intent as a binding.
- */
-const deriveQuery = (datasetId: string, binding: VisualBinding): AnalysisQuery => ({
-  datasetId,
-  dimensions: [
-    ...(binding.x === undefined ? [] : [binding.x]),
-    ...(binding.series === undefined ? [] : [binding.series]),
-  ],
-  measures: (binding.y ?? []).map((columnId) => ({ columnId, aggregate: 'sum' as const })),
-  filters: [],
-});
+// Builds the default `AnalysisQuery` from a visualization binding.
+const deriveQuery = (datasetId: string, binding: VisualBinding): AnalysisQuery => {
+  // Binned channels must be grouped by bucket, not by their raw values.
+  const binned = [
+    ...(binding.x === undefined || binding.binX === undefined ? [] : [{ columnId: binding.x, strategy: binding.binX }]),
+    ...(binding.series === undefined || binding.binSeries === undefined
+      ? []
+      : [{ columnId: binding.series, strategy: binding.binSeries }]),
+  ];
+
+  return {
+    datasetId,
+    dimensions: [
+      ...(binding.x === undefined || binding.binX !== undefined ? [] : [binding.x]),
+      ...(binding.series === undefined || binding.binSeries !== undefined ? [] : [binding.series]),
+    ],
+    ...(binned.length === 0 ? {} : { binnedDimensions: binned }),
+    measures: (binding.y ?? []).map((columnId) => ({ columnId, aggregate: 'sum' as const })),
+    filters: [],
+  };
+};
 
 const validateTitle = (title: string): boolean => {
   const trimmed = title.trim();
@@ -87,19 +93,17 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
     workspace: {
       ...workspace,
       visualizations: { ...workspace.visualizations, [visualization.id]: visualization },
+      layout: {
+        ...workspace.layout,
+        items: placeNewVisualization(workspace.layout.items, visualization.id, workspace.layout.columns),
+      },
     },
     changedEntityIds: [visualization.id],
     summary: `Created ${visualization.kind} visualization '${visualization.title}'.`,
   });
 };
 
-/**
- * Updates a visualization in place.
- *
- * Omitted fields keep their current value. Kind and binding are validated together against the
- * merged result rather than in isolation, because changing either alone can make a previously valid
- * pair incompatible.
- */
+// Updates a visualization after validating its merged kind and binding.
 export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> = (workspace, payload) => {
   const existing = resolveVisualization(workspace, payload.visualizationId);
 
@@ -135,7 +139,7 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
     title: payload.title === undefined ? existing.value.title : payload.title.trim(),
     kind,
     binding,
-    // A binding change invalidates a derived query, so it is re-derived unless one was supplied.
+    // A changed binding invalidates the derived query, so rebuild it unless supplied explicitly.
     query:
       payload.query ?? (payload.binding === undefined ? existing.value.query : deriveQuery(dataset.value.id, binding)),
     presentation: { ...existing.value.presentation, ...payload.presentation },
@@ -152,14 +156,7 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
   });
 };
 
-/**
- * Sets how one visualization responds to selection.
- *
- * Separate from `visualization.update` because it is a single-field toggle a user flips repeatedly
- * from the chart header. Routing it through the general update would re-validate the binding on
- * every click, and would make an undo entry that reads as "updated visualization" rather than
- * naming what changed.
- */
+// Changes how a visualization responds to selection without changing its binding.
 export const handleSetVisualizationLinkMode: ActionHandler<SetVisualizationLinkModeInput> = (workspace, payload) => {
   const existing = resolveVisualization(workspace, payload.visualizationId);
 
@@ -177,12 +174,7 @@ export const handleSetVisualizationLinkMode: ActionHandler<SetVisualizationLinkM
   });
 };
 
-/**
- * Removes a visualization together with the annotations anchored to it and its layout slot.
- *
- * Leaving either behind would strand an annotation on a chart that no longer exists and reserve
- * canvas space for nothing.
- */
+// Removes a visualization, its anchored annotations, and its layout item.
 export const handleRemoveVisualization: ActionHandler<RemoveVisualizationInput> = (workspace, payload) => {
   const visualization = resolveVisualization(workspace, payload.visualizationId);
 

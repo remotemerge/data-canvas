@@ -22,7 +22,20 @@ export const useTableWindow = (
 ): TableWindowState => {
   const [state, setWindowState] = useState<TableWindowState>({ window: null, loading: true, error: null });
 
+  // Derived columns leave dataset.revision unchanged, so include their IDs in the refetch key.
+  const projectionKey = dataset.columns.map((column) => column.id).join(',');
+
   useEffect(() => {
+    /*
+     * The import placeholder enters the workspace before the engine holds its relation, so querying
+     * it here would surface a transient DATASET_NOT_FOUND. Wait for the relation instead.
+     */
+    if (dataset.importStatus !== 'ready') {
+      setWindowState({ window: null, loading: dataset.importStatus === 'loading', error: null });
+
+      return;
+    }
+
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setWindowState((current) => ({ ...current, loading: true, error: null }));
@@ -47,7 +60,7 @@ export const useTableWindow = (
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [dataset.id, dataset.revision, offset, limit, filters, sort]);
+  }, [dataset.id, dataset.revision, dataset.importStatus, projectionKey, offset, limit, filters, sort]);
 
   return state;
 };

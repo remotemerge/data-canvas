@@ -9,62 +9,31 @@ import type { FilterExpression } from '@/domain/filter/filter.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/**
- * The planning pass between validation and compilation.
- *
- * It rewrites an `AnalysisQuery` into an equivalent one that compiles to cheaper SQL. Two rules make
- * this safe to have at all:
- *
- * 1. **It operates on the AST and never on SQL text.** The compiler stays the only code that
- *    produces a statement, so the injection guarantees are untouched by anything here.
- * 2. **Every rewrite preserves the result set.** A planner that changes answers is a defect, not an
- *    optimization, which is why `tests/unit/data/planner-equivalence.test.ts` compiles both the
- *    planned and unplanned form of every fixture and compares the rows.
- *
- * When a rewrite cannot be proven safe the planner leaves the query alone. Declining to optimize
- * costs a slower query; optimizing wrongly costs a wrong answer.
- */
+// Rewrites an analysis query into an equivalent form that can execute more cheaply.
 
 export interface PlannedQuery {
   query: AnalysisQuery;
-  /**
-   * Non-anchor datasets in the order they should enter the FROM/JOIN chain, smallest first.
-   *
-   * Separate from the query rather than written into it because join order is a physical-plan
-   * decision, not part of what the query asks for. The compiler consumes it as a hint; a query
-   * compiled without it produces the same rows in the same order, only via a different plan.
-   */
+  // Non-anchor datasets ordered for the FROM/JOIN chain.
   joinOrder?: EntityId[];
-  /** What the planner actually changed, for tests and for the performance report. */
+  // Planner changes recorded for tests and performance reporting.
   applied: PlannerOptimization[];
 }
 
 export type PlannerOptimization = 'filter-simplification' | 'filter-pushdown' | 'projection-pruning' | 'join-ordering';
 
 export interface PlannerContext extends QueryContext {
-  /** Estimated row counts per dataset, from the statistics cache. Absent entries are not guessed. */
+  // Estimated row counts from the statistics cache.
   cardinalities?: readonly DatasetCardinality[];
 }
 
-/**
- * Datasets that a join would null-extend, so a filter on them must not be pushed below it.
- *
- * Computed from the relationships that could participate rather than from a resolved path, because
- * the planner runs before path resolution. Being conservative here is deliberate: naming a dataset
- * null-extended when it turns out not to be only forgoes an optimization, whereas missing one would
- * change results across a `left` join.
- *
- * For a `left` relationship the preserved side is whichever dataset the chain reaches first, so both
- * sides are treated as potentially null-extended unless the relationship is `inner`.
- */
+// Finds datasets that may be null-extended by a participating join.
 const nullExtendedDatasets = (relationships: readonly Relationship[], anchorId: EntityId): Set<EntityId> => {
   const extended = new Set<EntityId>();
 
   for (const relationship of relationships) {
     if (relationship.join !== 'left') continue;
 
-    // The anchor is never null-extended: it is the relation the FROM clause starts from, and a left
-    // join preserves it by definition.
+    // The FROM anchor is preserved by definition.
     if (relationship.leftDatasetId !== anchorId) extended.add(relationship.leftDatasetId);
     if (relationship.rightDatasetId !== anchorId) extended.add(relationship.rightDatasetId);
   }
@@ -77,14 +46,7 @@ const columnOwner =
   (columnId: EntityId): EntityId | undefined =>
     datasets.find((dataset) => dataset.columns.some((column) => column.id === columnId))?.id;
 
-/**
- * Splits filters into those safe to evaluate before the join and those that must wait.
- *
- * The split is currently informational: the compiler emits one `WHERE` clause, and DuckDB's own
- * optimizer pushes a single-relation predicate below the join without help. What the planner adds is
- * the *guarantee* — it records which predicates were provably pushable, so the equivalence test can
- * assert that a `left`-join right-side filter was correctly declined.
- */
+// Classifies filters as safe or unsafe to push below a join.
 export interface FilterPartition {
   pushable: FilterExpression[];
   retained: FilterExpression[];
@@ -108,12 +70,7 @@ export const partitionFilters = (
   return { pushable, retained };
 };
 
-/**
- * Plans one query.
- *
- * Order matters: simplification runs first so pushdown analysis sees the merged predicates, and
- * pruning runs before ordering so the required-dataset set reflects the narrowed projection.
- */
+// Plans one query by simplifying, pruning, and ordering its work.
 export const planQuery = (query: AnalysisQuery, context: PlannerContext): PlannedQuery => {
   const applied: PlannerOptimization[] = [];
   let planned = query;
@@ -125,9 +82,7 @@ export const planQuery = (query: AnalysisQuery, context: PlannerContext): Planne
     applied.push('filter-simplification');
   }
 
-  // Recorded rather than reordered. The compiler emits a single conjunction, so moving a pushable
-  // predicate earlier in the list changes nothing it produces; the analysis exists so that a
-  // predicate which must *not* move is provably identified.
+  // Record the classification; the compiler emits one WHERE conjunction.
   const partition = partitionFilters(planned.filters, context, query.datasetId);
 
   if (partition.pushable.length > 0) applied.push('filter-pushdown');
@@ -149,7 +104,7 @@ export const planQuery = (query: AnalysisQuery, context: PlannerContext): Planne
     ).filter((datasetId) => datasetId !== query.datasetId);
     const ordered = orderJoinTargets(targets, context.cardinalities ?? []);
 
-    // Only reported when the order actually changed, so the report never claims work it skipped.
+    // Report only when the order changed.
     if (ordered.length > 1 && JSON.stringify(ordered) !== JSON.stringify(targets)) {
       joinOrder = ordered;
       applied.push('join-ordering');

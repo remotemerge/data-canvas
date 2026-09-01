@@ -5,72 +5,48 @@ import type { MetricModifier } from '@/domain/metric/metric-modifier.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 export interface MeasureSpec {
-  /** Omitted for `count`, which aggregates rows rather than a column. */
+  // Omitted for `count`, which aggregates rows.
   columnId?: EntityId;
   aggregate: AggregateFunction;
-  /** Output column label; display-only, never used as a SQL identifier. */
+  // Display label; never used as a SQL identifier.
   alias?: string;
-  /**
-   * Window transformation applied over the aggregate. Absent leaves a plain aggregate, so a query
-   * written before modifiers existed compiles unchanged.
-   */
+  // Optional window transformation over the aggregate.
   modifier?: MetricModifier;
 }
 
-/**
- * A dimension that is bucketed before grouping.
- *
- * `range` is supplied by the caller because `equalWidth` needs the column's extent and reading it
- * requires a query. Keeping the read outside the compiler leaves compilation synchronous and lets
- * the caller cache the range against the dataset revision.
- */
+// Dimension bucketed before grouping; the caller supplies its range.
 export interface BinnedDimensionSpec {
   columnId: EntityId;
   strategy: BinStrategy;
   range?: ColumnRange;
 }
 
-/** The five-number summary a box plot needs, computed with `quantile_cont` in DuckDB. */
+// Five-number summary used by a box plot.
 export interface DistributionSpec {
   columnId: EntityId;
-  /** Optional low-cardinality grouping, one box per value. */
+  // Optional low-cardinality grouping, one box per value.
   categoryColumnId?: EntityId;
 }
 
 export interface SortSpec {
-  /** Either a grouped dimension column or a measure alias produced by this same query. */
+  // Grouped dimension column or measure alias from this query.
   columnId?: EntityId;
   measureAlias?: string;
   direction: 'asc' | 'desc';
 }
 
-/**
- * AST-like analysis contract.
- *
- * This is the only shape the query compiler accepts. Agent input becomes an `AnalysisQuery` after
- * validation and never becomes SQL text directly.
- */
+// Analysis query accepted by the compiler after validation.
 export interface AnalysisQuery {
-  /** The anchor dataset. Joined datasets are reached through `relationshipIds`. */
+  // Anchor dataset for the query.
   datasetId: EntityId;
-  /**
-   * Relationships to traverse from the anchor.
-   *
-   * Omitted lets the compiler resolve the path from the referenced columns, which is what keeps an
-   * agent from having to name a join it only implied. Supplied, it constrains the path.
-   */
+  // Optional relationship path constraint.
   relationshipIds?: EntityId[];
-  /** Column IDs may belong to the anchor dataset or to any dataset reachable through a join. */
+  // Column IDs may belong to the anchor or a reachable dataset.
   dimensions: EntityId[];
-  /**
-   * Dimensions bucketed before grouping, emitted after the plain ones.
-   *
-   * Separate from `dimensions` because a bin carries a strategy, and widening `dimensions` to a
-   * union would force every existing caller to narrow before reading a column ID.
-   */
+  // Dimensions bucketed before grouping.
   binnedDimensions?: BinnedDimensionSpec[];
   measures: MeasureSpec[];
-  /** Replaces `measures` with a five-number summary. Only `boxplot` sets it. */
+  // Five-number summary requested by a box plot.
   distribution?: DistributionSpec;
   filters: FilterExpression[];
   orderBy?: SortSpec[];

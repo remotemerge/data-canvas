@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
+import { suggestVisualizationTitle } from '@/application/layout/visualization-title.ts';
 import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
 import { MAX_BIN_COUNT, MIN_BIN_COUNT } from '@/domain/analysis/bin-strategy.ts';
 import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
+import { isTemporalType } from '@/domain/logical-type.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import {
   VISUALIZATION_KINDS,
@@ -13,16 +15,17 @@ import {
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { FIELD_HINT } from '@/ui/canvas/field-hints.ts';
 
 const CHART_KINDS = VISUALIZATION_KINDS.filter((kind) => kind !== 'table');
 
-/** A column offered by the builder, tagged with the dataset it came from so provenance stays visible. */
+// Column offered by the builder with its source dataset.
 interface ScopedColumn {
   column: Column;
   dataset: Dataset;
 }
 
-/** Groups scoped columns by dataset, preserving the anchor-first order the caller supplied. */
+// Groups columns by dataset while preserving caller order.
 const groupByDataset = (columns: readonly ScopedColumn[]): { dataset: Dataset; columns: Column[] }[] => {
   const groups: { dataset: Dataset; columns: Column[] }[] = [];
 
@@ -39,7 +42,6 @@ const groupByDataset = (columns: readonly ScopedColumn[]): { dataset: Dataset; c
 export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError) => void }) => {
   const workspace = useWorkspace((state) => state.workspace);
   const datasets = workspace.datasets;
-  const layoutItems = workspace.layout.items;
   const actions = useActions();
   const datasetList = useMemo(
     () => Object.values(datasets).filter((item) => item.importStatus === 'ready'),
@@ -54,9 +56,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const [binCount, setBinCount] = useState(20);
   const dataset = datasets[datasetId];
 
-  // Columns from datasets joinable to the anchor become selectable, anchor first. The same
-  // reachability helper the handler validates against, so the form cannot offer an unreachable
-  // column that the dispatcher would then reject.
+  // Offer columns from datasets reachable from the anchor.
   const related = useMemo(
     () => (dataset === undefined ? [] : reachableDatasets(workspace, dataset.id)),
     [workspace, dataset],
@@ -72,8 +72,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
 
   const numericColumns = scopedColumns.filter((scoped) => scoped.column.logicalType === 'number');
 
-  // A histogram bins its x column, so it offers numeric and temporal columns rather than the
-  // dimensions the grouped kinds accept.
+  // Histograms bin x, so they offer numeric and temporal columns.
   const binnable = scopedColumns.filter(
     (scoped) =>
       scoped.column.logicalType === 'number' ||
@@ -91,6 +90,14 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
     return validateVisualization(dataset, kind, { x: scoped.column.id, y: [validationMeasure] }, related).ok;
   });
 
+  /*
+   * Bucket temporal dimensions before querying. Raw timestamps can produce one group per instant,
+   * leaving the chart with too many marks. The sampling policy can widen the bucket later.
+   */
+  const seriesDimension = dimensionColumns.find((scoped) => scoped.column.id === x)?.column;
+  const temporalDimension = seriesDimension !== undefined && isTemporalType(seriesDimension.logicalType);
+  const dimensionBin: BinStrategy = { kind: 'temporal', unit: 'day' };
+
   const binding: VisualBinding =
     kind === 'kpi'
       ? { y: y === '' ? [] : [y] }
@@ -101,14 +108,29 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
         : {
             ...(x === '' ? {} : { x }),
             ...(y === '' ? {} : { y: [y] }),
+            ...(temporalDimension ? { binX: dimensionBin } : {}),
           };
 
   const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding, related);
 
+  const columnName = (columnId: string): string | undefined =>
+    scopedColumns.find((scoped) => scoped.column.id === columnId)?.column.name;
+  const measureName = columnName(y);
+  const dimensionName = columnName(x);
+
+  // Keep an empty override tied to the current suggestion.
+  const suggestedTitle = suggestVisualizationTitle({
+    kind,
+    ...(measureName === undefined ? {} : { measureName }),
+    ...(dimensionName === undefined ? {} : { dimensionName }),
+    // Box plots compute quantiles themselves; they do not use an aggregate choice.
+    ...(kind === 'boxplot' ? {} : { aggregate }),
+  });
+  const effectiveTitle = title.trim() === '' ? suggestedTitle : title;
+
   const create = async () => {
     if (dataset === undefined || validation === null || !validation.ok) return;
-    // Each distribution kind needs its own query shape: a histogram counts rows per bucket, a box
-    // plot asks for a five-number summary, and the rest group as before.
+    // Distribution kinds use dedicated query shapes.
     const query =
       kind === 'histogram'
         ? {
@@ -128,14 +150,18 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
             }
           : {
               datasetId,
-              dimensions: x === '' ? [] : [x],
+              // Binned dimensions use the compiler's `binnedDimensions` shape.
+              dimensions: x === '' || temporalDimension ? [] : [x],
+              ...(x === '' || !temporalDimension
+                ? {}
+                : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
               measures: y === '' ? [] : [{ columnId: y, aggregate }],
               filters: [],
             };
 
     const result = await actions.createVisualization({
       datasetId,
-      title,
+      title: effectiveTitle,
       kind,
       binding,
       query,
@@ -144,77 +170,107 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
       onError(result.error);
       return;
     }
-    const visualizationId = result.value.changedEntityIds[0];
-    if (visualizationId !== undefined) {
-      const layout = await actions.updateLayout({
-        items: [
-          ...layoutItems,
-          {
-            visualizationId,
-            x: 0,
-            y: layoutItems.reduce((bottom, item) => Math.max(bottom, item.y + item.height), 0),
-            width: 6,
-            height: 4,
-          },
-        ],
-      });
-      if (!layout.ok) onError(layout.error);
-    }
     setTitle('');
   };
 
   return (
     <section className="visualization-builder" aria-labelledby="visualization-builder-title">
-      <div>
+      <header className="visualization-builder__header">
         <h2 id="visualization-builder-title">Add a view</h2>
-        <p>Bind a dataset column to a chart.</p>
-      </div>
-      <label>
-        Dataset
-        <select
-          value={datasetId}
-          onChange={(event) => {
-            setDatasetId(event.target.value);
-            setX('');
-            setY('');
-          }}
-        >
-          <option value="">Choose</option>
-          {datasetList.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Chart
-        <select
-          value={kind}
-          onChange={(event) => {
-            setKind(event.target.value as VisualizationKind);
-            setX('');
-            setY('');
-          }}
-        >
-          {CHART_KINDS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Title
-        <input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} />
-      </label>
-      {kind === 'histogram' ? (
-        <>
-          <label>
-            Column to bin
+        <p>Choose a dataset and the columns to chart. Dimension groups rows, measure is the number summarized.</p>
+      </header>
+      <div className="visualization-builder__body">
+        <label>
+          Dataset
+          <select
+            value={datasetId}
+            onChange={(event) => {
+              setDatasetId(event.target.value);
+              setX('');
+              setY('');
+            }}
+          >
+            <option value="">Choose</option>
+            {datasetList.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Chart
+          <select
+            value={kind}
+            onChange={(event) => {
+              setKind(event.target.value as VisualizationKind);
+              setX('');
+              setY('');
+            }}
+          >
+            {CHART_KINDS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Title
+          {/* Empty uses the generated suggestion as a placeholder; text overrides it. */}
+          <input
+            value={title}
+            maxLength={120}
+            placeholder={suggestedTitle}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </label>
+        {kind === 'histogram' ? (
+          <>
+            <label>
+              Column to bin
+              <select value={x} onChange={(event) => setX(event.target.value)}>
+                <option value="">Choose</option>
+                {groupByDataset(binnable).map((group) => (
+                  <optgroup key={group.dataset.id} label={group.dataset.name}>
+                    {group.columns.map((column) => (
+                      <option key={column.id} value={column.id}>
+                        {column.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+            {temporalBin ? (
+              <small>Date and timestamp values are grouped by month.</small>
+            ) : (
+              <label>
+                Buckets
+                <input
+                  type="number"
+                  min={MIN_BIN_COUNT}
+                  max={MAX_BIN_COUNT}
+                  value={binCount}
+                  onChange={(event) =>
+                    setBinCount(
+                      Math.min(
+                        Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
+                        MAX_BIN_COUNT,
+                      ),
+                    )
+                  }
+                />
+              </label>
+            )}
+          </>
+        ) : kind === 'kpi' ? null : (
+          <label title={FIELD_HINT.dimension}>
+            Dimension
             <select value={x} onChange={(event) => setX(event.target.value)}>
               <option value="">Choose</option>
-              {groupByDataset(binnable).map((group) => (
+              {groupByDataset(dimensionColumns).map((group) => (
+                // Group by dataset so provenance stays visible for joined columns.
                 <optgroup key={group.dataset.id} label={group.dataset.name}>
                   {group.columns.map((column) => (
                     <option key={column.id} value={column.id}>
@@ -225,86 +281,47 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
               ))}
             </select>
           </label>
-          {temporalBin ? (
-            <small>Temporal columns bin by month.</small>
-          ) : (
-            <label>
-              Buckets
-              <input
-                type="number"
-                min={MIN_BIN_COUNT}
-                max={MAX_BIN_COUNT}
-                value={binCount}
-                onChange={(event) =>
-                  setBinCount(
-                    Math.min(
-                      Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
-                      MAX_BIN_COUNT,
-                    ),
-                  )
-                }
-              />
-            </label>
-          )}
-        </>
-      ) : kind === 'kpi' ? null : (
-        <label>
-          Dimension
-          <select value={x} onChange={(event) => setX(event.target.value)}>
-            <option value="">Choose</option>
-            {groupByDataset(dimensionColumns).map((group) => (
-              // Grouped by source dataset so a column's provenance is legible when a chart spans a
-              // join and two datasets contribute similarly named columns.
-              <optgroup key={group.dataset.id} label={group.dataset.name}>
-                {group.columns.map((column) => (
-                  <option key={column.id} value={column.id}>
-                    {column.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-      )}
-      {/* A histogram's measure is the bucket count, so offering one would let it contradict the chart. */}
-      {kind === 'histogram' ? null : (
-        <label>
-          Measure
-          <select value={y} onChange={(event) => setY(event.target.value)}>
-            <option value="">Choose</option>
-            {groupByDataset(numericColumns).map((group) => (
-              <optgroup key={group.dataset.id} label={group.dataset.name}>
-                {group.columns.map((column) => (
-                  <option key={column.id} value={column.id}>
-                    {column.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-      )}
-      {/* A box plot computes its own quantiles, so an aggregate choice would have nothing to act on. */}
-      {kind === 'histogram' || kind === 'boxplot' ? null : (
-        <label>
-          Aggregate
-          <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
-            {['sum', 'avg', 'min', 'max', 'median', 'stddev'].map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-      )}
-      <button
-        type="button"
-        disabled={title.trim() === '' || validation === null || !validation.ok}
-        onClick={() => void create()}
-      >
-        Create view
-      </button>
-      {validation !== null && !validation.ok ? (
-        <p className="visualization-builder__hint">{validation.error.message}</p>
-      ) : null}
+        )}
+        {/* Histogram y is its bucket count, so it has no measure selector. */}
+        {kind === 'histogram' ? null : (
+          <label title={FIELD_HINT.measure}>
+            Measure
+            <select value={y} onChange={(event) => setY(event.target.value)}>
+              <option value="">Choose</option>
+              {groupByDataset(numericColumns).map((group) => (
+                <optgroup key={group.dataset.id} label={group.dataset.name}>
+                  {group.columns.map((column) => (
+                    <option key={column.id} value={column.id}>
+                      {column.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        )}
+        {/* Box plots compute quantiles, so they have no aggregate selector. */}
+        {kind === 'histogram' || kind === 'boxplot' ? null : (
+          <label title={FIELD_HINT.aggregate}>
+            Aggregate
+            <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
+              {['sum', 'avg', 'min', 'max', 'median', 'stddev'].map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button
+          type="button"
+          disabled={effectiveTitle.trim() === '' || validation === null || !validation.ok}
+          onClick={() => void create()}
+        >
+          Create view
+        </button>
+        {validation !== null && !validation.ok ? (
+          <p className="visualization-builder__hint">{validation.error.message}</p>
+        ) : null}
+      </div>
     </section>
   );
 };

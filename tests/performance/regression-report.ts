@@ -1,21 +1,6 @@
-/**
- * Compares a recorded benchmark run against the stored baseline.
- *
- * Relative rather than absolute. Absolute timings are device-dependent — a run on a laptop on
- * battery and the same run on a workstation differ by more than most regressions do — so a fixed
- * millisecond threshold would either fire constantly or never. Comparing each tier against its own
- * previously recorded value on the same device profile is the only threshold that means anything.
- *
- * Usage:
- *
- *   bun run tests/performance/regression-report.ts --record run.json   # replace the baseline
- *   bun run tests/performance/regression-report.ts run.json            # compare against it
- *
- * `run.json` is the output of `window.__dataCanvas.perf()`, saved from a browser session after
- * working through the benchmark tiers in `docs/performance.md`.
- */
+// Compares a recorded browser benchmark run with the stored baseline.
 
-/** One measurement from the in-app performance marks. */
+// One measurement from the in-app performance marks.
 export interface PerformanceRecord {
   name: string;
   durationMs?: number;
@@ -24,7 +9,7 @@ export interface PerformanceRecord {
 }
 
 export interface TierMeasurement {
-  /** Median duration across the tier's samples. Median rather than mean: one GC pause is not a trend. */
+  // Median duration across the tier's samples.
   medianMs: number;
   samples: number;
   maxRowsReturned: number;
@@ -32,9 +17,9 @@ export interface TierMeasurement {
 
 export interface Baseline {
   schemaVersion: number;
-  /** Build the baseline was recorded from. A comparison across builds is expected; across devices is not. */
+  // Build that produced the baseline.
   buildSha: string | null;
-  /** Free-text device profile, e.g. "M2 Pro / Chrome 141". Comparisons across profiles are meaningless. */
+  // Device profile used for the baseline comparison.
   device: string | null;
   recordedAt: string | null;
   tiers: Record<string, TierMeasurement>;
@@ -42,13 +27,7 @@ export interface Baseline {
 
 export const BASELINE_SCHEMA_VERSION = 1;
 
-/**
- * Relative regression threshold.
- *
- * 20% because run-to-run variance on a browser benchmark routinely reaches 10% even on an idle
- * machine; a tighter gate would report noise as regression and get ignored, which is worse than no
- * gate at all.
- */
+// Relative regression threshold.
 export const REGRESSION_THRESHOLD = 0.2;
 
 const median = (values: readonly number[]): number => {
@@ -62,7 +41,7 @@ const median = (values: readonly number[]): number => {
     : (sorted[middle] as number);
 };
 
-/** Groups raw records into one measurement per named tier. */
+// Groups raw records into one measurement per named tier.
 export const summarize = (records: readonly PerformanceRecord[]): Record<string, TierMeasurement> => {
   const durations = new Map<string, number[]>();
   const rows = new Map<string, number>();
@@ -99,17 +78,11 @@ export interface Regression {
   tier: string;
   baselineMs: number;
   currentMs: number;
-  /** Fractional change; 0.35 means 35% slower than baseline. */
+  // Fractional change; 0.35 means 35% slower than baseline.
   change: number;
 }
 
-/**
- * Reports tiers that regressed beyond the threshold.
- *
- * A tier absent from the baseline is not a regression — it is new, and reporting it would make
- * adding a benchmark look like breaking one. A tier absent from the current run is also skipped:
- * that means the run did not cover it, which is a gap in the run rather than a slowdown.
- */
+// Reports current tiers whose median exceeds the baseline by the threshold.
 export const findRegressions = (
   baseline: Readonly<Record<string, TierMeasurement>>,
   current: Readonly<Record<string, TierMeasurement>>,
@@ -149,7 +122,7 @@ export const formatReport = (regressions: readonly Regression[], comparedTiers: 
   );
 };
 
-// The CLI runs only when this file is the entry point, so importing it from a test does no I/O.
+// Importing this module must not read or write benchmark files.
 if (import.meta.main) {
   const BASELINE_PATH = 'tests/performance/baseline.json';
   const args = Bun.argv.slice(2);

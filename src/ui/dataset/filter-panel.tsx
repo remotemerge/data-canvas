@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
@@ -24,11 +25,17 @@ export const FilterPanel = ({
       <h2 className="workspace__panel-heading">Filters</h2>
       <FilterEditor dataset={dataset} onError={onError} />
       {filters.length === 0 ? (
-        <p className="workspace__empty">No filters.</p>
+        <p className="workspace__empty">No filters applied.</p>
       ) : (
         <ul className="filter-list">
           {filters.map((filter) => {
             const column = dataset.columns.find((candidate) => candidate.id === filter.columnId);
+            // Several filters can be listed at once, so each Remove needs its own accessible name.
+            const description = `${column?.name ?? 'Unknown column'} ${filter.operator.replaceAll('_', ' ')}${
+              filter.value === undefined
+                ? ''
+                : ` ${Array.isArray(filter.value) ? filter.value.join(', ') : String(filter.value)}`
+            }`;
             return (
               <li key={filter.id}>
                 <label>
@@ -45,11 +52,12 @@ export const FilterPanel = ({
                       }).then((result) => onError(result.ok ? null : result.error))
                     }
                   />
-                  {column?.name ?? 'Unknown column'} {filter.operator.replace('_', ' ')}
+                  {description}
                   <Provenance entityId={filter.id} createdBy={filter.createdBy} />
                 </label>
                 <button
                   type="button"
+                  aria-label={`Remove filter ${description}`}
                   onClick={() =>
                     void removeFilter({ filterId: filter.id }).then((result) =>
                       onError(result.ok ? null : result.error),
@@ -75,4 +83,3 @@ export const FilterPanel = ({
     </section>
   );
 };
-import { useMemo } from 'react';

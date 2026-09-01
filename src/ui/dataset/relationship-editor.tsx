@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { suggestRelationships } from '@/application/relationships/suggest-relationships.ts';
+import { suggestionDatasetNames, suggestRelationships } from '@/application/relationships/suggest-relationships.ts';
 import { validateRelationship } from '@/application/validation/validate-relationship.ts';
 import { isNumericType, isTemporalType, isTextType } from '@/domain/logical-type.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
@@ -8,8 +8,9 @@ import type { JoinKind, RelationshipKind } from '@/domain/relationship/relations
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { FIELD_HINT } from '@/ui/canvas/field-hints.ts';
 
-/** Mirrors the validator's rule, so the picker only offers pairs the action would accept. */
+// Mirrors relationship validation for the form's key picker.
 const joinTypeClass = (type: LogicalType): string => {
   if (isNumericType(type)) return 'number';
   if (isTemporalType(type)) return 'temporal';
@@ -18,17 +19,7 @@ const joinTypeClass = (type: LogicalType): string => {
   return type;
 };
 
-/**
- * Creates a relationship between two datasets.
- *
- * The key-column picker offers only type-compatible pairs, and the same `validateRelationship` the
- * action runs is called here to show the rejection reason before the user submits. Running the real
- * validator rather than a UI-local approximation is what keeps the form from ever offering something
- * the dispatcher would refuse.
- *
- * The fan-out warning is measured by the engine during the action, so it appears in the resulting
- * summary rather than in this form: it depends on data, which the form has not read.
- */
+// Creates a relationship using shared validation and engine key-quality checks.
 export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) => void }): React.JSX.Element => {
   const workspace = useWorkspace((state) => state.workspace);
   const actions = useActions();
@@ -52,8 +43,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
   const right = workspace.datasets[rightDatasetId];
   const selectedLeftColumn = left?.columns.find((column) => column.id === leftColumnId);
 
-  // Only columns whose type class matches the chosen left key, so an impossible pair is never
-  // offered. Before a left key is chosen every column is a candidate.
+  // Offer only type-compatible key pairs.
   const rightColumns = (right?.columns ?? []).filter(
     (column) =>
       selectedLeftColumn === undefined ||
@@ -77,8 +67,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
       return;
     }
 
-    // The summary carries the engine's fan-out measurement when there is one, so it is surfaced
-    // here rather than discarded.
+    // Show the fan-out warning returned by the action.
     setNotice(result.value.summary);
     setLeftColumnId('');
     setRightColumnId('');
@@ -156,7 +145,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
             </select>
           </label>
 
-          <label>
+          <label title={FIELD_HINT.cardinality}>
             Cardinality
             <select value={kind} onChange={(event) => setKind(event.target.value as RelationshipKind)}>
               {RELATIONSHIP_KINDS.map((item) => (
@@ -167,7 +156,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
             </select>
           </label>
 
-          <label>
+          <label title={FIELD_HINT.join}>
             Join
             <select value={join} onChange={(event) => setJoin(event.target.value as JoinKind)}>
               {JOIN_KINDS.map((item) => (
@@ -194,29 +183,34 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
 
           {suggestions.length === 0 ? null : (
             <div className="relationship-editor__suggestions">
-              <h3>Suggested</h3>
+              <h3>Suggested relationships</h3>
               <p className="relationship-editor__suggestions-note">
-                Proposals only. Review the keys before creating one.
+                Check the suggested keys before creating a relationship.
               </p>
               <ul>
-                {suggestions.map((suggestion) => (
-                  <li key={`${suggestion.leftColumnId}-${suggestion.rightColumnId}`}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLeftDatasetId(suggestion.leftDatasetId);
-                        setRightDatasetId(suggestion.rightDatasetId);
-                        setLeftColumnId(suggestion.leftColumnId);
-                        setRightColumnId(suggestion.rightColumnId);
-                        setKind(suggestion.kind);
-                      }}
-                    >
-                      {/* Column names come from imported headers: text children only. */}
-                      {suggestion.leftColumnName} → {suggestion.rightColumnName}
-                    </button>
-                    <span className="relationship-editor__reason">{suggestion.reason}</span>
-                  </li>
-                ))}
+                {suggestions.map((suggestion) => {
+                  const sides = suggestionDatasetNames(workspace, suggestion);
+
+                  return (
+                    <li key={`${suggestion.leftColumnId}-${suggestion.rightColumnId}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLeftDatasetId(suggestion.leftDatasetId);
+                          setRightDatasetId(suggestion.rightDatasetId);
+                          setLeftColumnId(suggestion.leftColumnId);
+                          setRightColumnId(suggestion.rightColumnId);
+                          setKind(suggestion.kind);
+                        }}
+                      >
+                        {/* Imported dataset and column names render as text. Both sides are named so
+                            identically named imports stay distinguishable. */}
+                        {sides.left}.{suggestion.leftColumnName} → {sides.right}.{suggestion.rightColumnName}
+                      </button>
+                      <span className="relationship-editor__reason">{suggestion.reason}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

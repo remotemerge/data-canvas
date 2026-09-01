@@ -1,12 +1,6 @@
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/**
- * How a continuous column is divided into discrete buckets.
- *
- * Binning is a domain concept rather than a chart setting. A histogram must aggregate in DuckDB, so
- * the strategy has to survive into the query compiler; if it lived in the renderer, ECharts would
- * receive raw values and bin them on the main thread, which the point budget forbids.
- */
+// Strategies for dividing continuous columns into buckets.
 export type BinStrategy =
   | { kind: 'equalWidth'; binCount: number }
   | { kind: 'equalWidthOf'; width: number }
@@ -26,41 +20,52 @@ export const BIN_STRATEGY_KINDS: readonly BinStrategy['kind'][] = [
   'temporal',
 ] as const;
 
-/*
- * Bucket-count bounds.
- *
- * These cap the rows a histogram can return, so they are a result-size limit rather than a taste
- * judgement. Quantiles stop lower because `ntile` with a large N over a small dataset produces
- * mostly empty buckets that read as noise.
- */
+// Bucket-count bounds that cap result sizes.
 export const MIN_BIN_COUNT = 2;
 export const MAX_BIN_COUNT = 100;
 export const MIN_QUANTILE_COUNT = 2;
 export const MAX_QUANTILE_COUNT = 20;
 export const MAX_EXPLICIT_BREAKS = 100;
 
-/**
- * The numeric range a strategy needs before it can be compiled.
- *
- * `equalWidth` and `equalWidthOf` cannot produce boundaries without knowing where the data starts
- * and ends, so the compiler takes the range as input rather than reading it itself. That keeps the
- * compiler synchronous and pure, and leaves the caller free to cache the range.
- */
+// Numeric range required by strategies that compute boundaries.
 export interface ColumnRange {
   min: number;
   max: number;
 }
 
-/** True when compiling the strategy requires a `ColumnRange`. */
+// Whether compilation requires a `ColumnRange`.
 export const needsColumnRange = (strategy: BinStrategy): boolean =>
   strategy.kind === 'equalWidth' || strategy.kind === 'equalWidthOf';
 
 /**
- * A binned column reference, used wherever a plain dimension would be.
+ * Upper bound on the groups a strategy can produce, independent of the data.
  *
- * Carrying the column ID alongside the strategy lets a query bind one column raw and another binned
- * without the two channels needing different shapes.
+ * A binned dimension collapses the column's distinct values into buckets, so its group count follows
+ * from the strategy rather than the column's cardinality. Temporal bucket counts depend on the range
+ * of the underlying dates, so they have no static bound and return `undefined`.
  */
+export const maxBinCardinality = (strategy: BinStrategy): number | undefined => {
+  switch (strategy.kind) {
+    case 'equalWidth':
+      return strategy.binCount;
+
+    // The compiler rejects a width that produces more than `MAX_BIN_COUNT` buckets over the column.
+    case 'equalWidthOf':
+      return MAX_BIN_COUNT;
+
+    case 'quantile':
+      return strategy.quantiles;
+
+    // Each break opens a bucket, plus the trailing `ELSE` bucket above the last break.
+    case 'explicit':
+      return strategy.breaks.length + 1;
+
+    case 'temporal':
+      return undefined;
+  }
+};
+
+// Column reference paired with its binning strategy.
 export interface BinnedDimension {
   columnId: EntityId;
   strategy: BinStrategy;

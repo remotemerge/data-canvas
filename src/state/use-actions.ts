@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import type {
   ActionResult,
   AddAnnotationInput,
@@ -8,7 +7,6 @@ import type {
   ClearSelectionInput,
   CreateDerivedColumnInput,
   ExtendSelectionInput,
-  ImportWorkspaceInput,
   CreateMetricInput,
   CreateRelationshipInput,
   CreateVisualizationInput,
@@ -56,7 +54,6 @@ export interface WorkspaceCommands {
   setSelection: Command<SetSelectionInput>;
   extendSelection: Command<ExtendSelectionInput>;
   clearSelection: Command<ClearSelectionInput>;
-  importWorkspace: Command<ImportWorkspaceInput>;
   createMetric: Command<CreateMetricInput>;
   updateMetric: Command<UpdateMetricInput>;
   removeMetric: Command<RemoveMetricInput>;
@@ -71,11 +68,7 @@ export interface WorkspaceCommands {
 
 const historyCommands = createUndoRedo({ dispatcher, store: workspaceStore });
 
-/*
- * Human commands are attributed `actor: 'human'` and omit `expectedRevision`: the person issuing
- * them is looking at current state, so there is no earlier observation to assert against. Agent
- * writes, whose decisions may predate a human's edit, supply it.
- */
+// Human commands omit expectedRevision; agent writes supply the revision they observed.
 const humanCommands: WorkspaceCommands = {
   beginDatasetImport: (input) =>
     dispatcher.execute({ type: 'dataset.beginImport', payload: input }, { actor: 'human' }),
@@ -102,7 +95,6 @@ const humanCommands: WorkspaceCommands = {
   setSelection: (input) => dispatcher.execute({ type: 'selection.set', payload: input }, { actor: 'human' }),
   extendSelection: (input) => dispatcher.execute({ type: 'selection.extend', payload: input }, { actor: 'human' }),
   clearSelection: (input) => dispatcher.execute({ type: 'selection.clear', payload: input }, { actor: 'human' }),
-  importWorkspace: (input) => dispatcher.execute({ type: 'workspace.import', payload: input }, { actor: 'human' }),
   createMetric: (input) => dispatcher.execute({ type: 'metric.create', payload: input }, { actor: 'human' }),
   updateMetric: (input) => dispatcher.execute({ type: 'metric.update', payload: input }, { actor: 'human' }),
   removeMetric: (input) => dispatcher.execute({ type: 'metric.remove', payload: input }, { actor: 'human' }),
@@ -117,14 +109,5 @@ const humanCommands: WorkspaceCommands = {
   redo: historyCommands.redo,
 };
 
-/**
- * The only mutation path available to React.
- *
- * Components call these commands and never `workspaceStore.setState`. Because the commands are the
- * same dispatcher calls the WebMCP adapter makes, a human click and an agent tool call reach
- * identical validation, revision, and history behaviour.
- *
- * The command object is a module-level constant, so the `useMemo` returns a stable reference and
- * commands are safe in dependency arrays.
- */
-export const useActions = (): WorkspaceCommands => useMemo(() => humanCommands, []);
+// React's shared mutation commands. The command table is a module constant, so it is already stable.
+export const useActions = (): WorkspaceCommands => humanCommands;

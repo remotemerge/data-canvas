@@ -16,24 +16,16 @@ export const AGGREGATE_FUNCTIONS: readonly AggregateFunction[] = [
 
 export interface MetricFormat {
   style: 'plain' | 'decimal' | 'percent' | 'currency';
-  /** ISO 4217 code; only meaningful when `style` is `currency`. */
+  // ISO 4217 code used for currency style.
   currency?: string;
   maximumFractionDigits?: number;
-  /** Renders an explicit `+` on positive values, which a comparison metric needs and a total does not. */
+  // Whether positive values display an explicit plus sign.
   showSign?: boolean;
-  /**
-   * Which direction counts as an improvement, used to colour a delta.
-   *
-   * Recorded rather than inferred: a rising `sum` is good for revenue and bad for refunds, and the
-   * definitions are otherwise identical.
-   */
+  // Direction used to classify metric deltas.
   direction?: MetricDirection;
 }
 
-/**
- * Records permitted analytical intent rather than SQL. `filters` references stored `Filter`
- * entities by ID and never inlines predicates.
- */
+// Stored metric definition describing analytical intent.
 export interface Metric {
   id: EntityId;
   datasetId: EntityId;
@@ -42,10 +34,7 @@ export interface Metric {
   columnId?: EntityId;
   filters: EntityId[];
   format?: MetricFormat;
-  /**
-   * Transformation applied over the aggregate. Absent means a plain aggregate, so existing metrics
-   * keep their meaning without a rewrite.
-   */
+  // Optional transformation applied over the aggregate.
   modifier?: MetricModifier;
   createdBy: 'human' | 'agent' | 'system';
 }

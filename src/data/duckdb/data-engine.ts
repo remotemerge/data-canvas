@@ -27,7 +27,6 @@ import {
   createRelationName,
   quoteIdentifier,
   stagingRelationName,
-  virtualExportPath,
   virtualImportPath,
 } from '@/data/duckdb/identifier-safety.ts';
 import { CATEGORY_DISTINCT_THRESHOLD, normalizeLogicalType, refineTextType } from '@/data/duckdb/type-normalization.ts';
@@ -44,7 +43,6 @@ import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { ColumnRange } from '@/domain/analysis/bin-strategy.ts';
 import type { DerivedColumn } from '@/domain/dataset/derived-column.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
-import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Filter } from '@/domain/filter/filter.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
@@ -53,36 +51,24 @@ import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
-import type { PersistenceDatabase } from '@/data/persistence/persistence-database.ts';
 
 /**
- * The DuckDB-Wasm implementation of `DataEnginePort`.
+ * DuckDB-Wasm implementation of `DataEnginePort`.
  *
- * Containment invariant. The connection object never leaves this module — no React component, no
- * WebMCP handler, and no domain file may hold one. Everything crossing the boundary is a domain
- * type. `tests/unit/architecture/engine-boundary.test.ts` enforces that `@duckdb/duckdb-wasm` is
- * imported nowhere outside `src/data/duckdb/`.
- *
- * One connection plus a scheduler, not a pool: DuckDB-Wasm executes queries sequentially per
- * connection, so a pool would add lifecycle complexity without buying concurrency.
+ * The connection stays in this module. Callers receive domain types, and one scheduled connection
+ * handles engine work.
  */
 
-/** What the engine remembers about an imported dataset. Rows are never held here — only in DuckDB. */
+// Metadata tracked for an imported dataset. Raw rows remain in DuckDB.
 interface RelationEntry {
   relationName: string;
   columns: Column[];
   revision: number;
-  /**
-   * Rows at import time, kept so the planner can order joins without a query per plan.
-   *
-   * Absent means unknown rather than empty — a restored session may have no recorded count, and the
-   * planner must decline to order rather than treat the relation as having no rows. Exact when
-   * present, since a relation is replaced wholesale rather than mutated.
-   */
+  // Row count recorded during import. Missing means unknown, not zero.
   rowCount?: number;
 }
 
-/** One row of DuckDB's `DESCRIBE` output. Only the two fields the engine uses are declared. */
+// One row of DuckDB's `DESCRIBE` output. Only the two fields the engine uses are declared.
 interface DescribedColumn {
   column_name: unknown;
   column_type: unknown;
@@ -92,43 +78,19 @@ interface DescribedColumn {
 export interface DataEngine extends DataEnginePort {
   initialize(): Promise<Result<void, DomainError>>;
   dispose(): Promise<void>;
-  persistenceDatabase(): PersistenceDatabase | null;
-  restoreDatasets(datasets: Record<EntityId, Dataset>): void;
-  /**
-   * Publishes the workspace's relationships to the engine.
-   *
-   * The engine compiles queries and therefore needs the join graph, but it must not read the store:
-   * that would make the data layer depend on application state. The bootstrap pushes the current
-   * relationships instead, the same way it pushes restored datasets.
-   */
+  // Publishes relationship definitions used by the query compiler.
   setRelationships(relationships: Record<EntityId, Relationship>): void;
-  /**
-   * Publishes the workspace's derived columns to the engine.
-   *
-   * Pushed rather than read, for the same reason relationships are: the compiler needs the
-   * definitions to inline them, and the data layer must not depend on the workspace store.
-   */
+  // Publishes derived-column definitions used by the query compiler.
   setDerivedColumns(derivedColumns: Record<EntityId, DerivedColumn>): void;
 }
 
-/**
- * Wraps engine work so a DuckDB exception becomes a typed failure.
- *
- * The thrown message is deliberately discarded: DuckDB quotes offending input in parse and
- * constraint errors, and dataset content must not reach an error that surfaces in the UI or
- * crosses to an agent.
- */
+// Runs engine work and maps DuckDB exceptions to a value-free typed error.
 const engineFailure = (code: 'QUERY_FAILED' | 'IMPORT_FAILED'): DomainError =>
   code === 'IMPORT_FAILED'
     ? ingestionFailure()
     : domainError('QUERY_FAILED', 'The query could not be completed against the imported data.');
 
-/**
- * Reads a relation's schema.
- *
- * `DESCRIBE` rather than `information_schema`: it reports the resolved type of every column in
- * relation order in one round trip, which is exactly the ordering the positional rename depends on.
- */
+// Reads a relation schema in physical column order.
 const describeRelation = async (
   connection: AsyncDuckDBConnection,
   relationName: string,
@@ -138,13 +100,7 @@ const describeRelation = async (
   return described.toArray() as unknown as DescribedColumn[];
 };
 
-/**
- * Counts distinct values in a text column, stopping just past the category threshold.
- *
- * The subquery's `LIMIT` is what keeps this cheap: DuckDB stops after finding one more distinct
- * value than could possibly still qualify, so a column with a million distinct values costs the
- * same as one with fifty. Without it this would be a full scan per text column on every import.
- */
+// Counts distinct text values, capped at the category threshold plus one.
 const countDistinctBounded = async (
   connection: AsyncDuckDBConnection,
   relationName: string,
@@ -158,12 +114,9 @@ const countDistinctBounded = async (
 };
 
 /**
- * Rewrites the staging relation into the canonical one with generated column names.
+ * Rewrites the staging relation with generated physical column names.
  *
- * This is the step that makes header text structurally harmless. A CTAS column-alias list assigns
- * every column a positional name, so no header — duplicated, unicode-only, or containing
- * `"; DROP TABLE x` — is ever quoted into SQL or used as an identifier. Renaming in place with
- * `ALTER TABLE ... RENAME COLUMN` would have required quoting the original name to name it.
+ * Headers remain display text and never become SQL identifiers.
  */
 const materializeRelation = async (
   connection: AsyncDuckDBConnection,
@@ -184,13 +137,7 @@ const dropRelation = async (connection: AsyncDuckDBConnection, relationName: str
   await connection.query(`DROP TABLE IF EXISTS ${quoteIdentifier(relationName)}`).catch(() => undefined);
 };
 
-/**
- * Builds domain columns from a described relation.
- *
- * `name` keeps the file's original header as display text; `physicalName` is the generated
- * positional identifier the relation actually uses. Separating them is what lets a duplicate or
- * unquotable header be shown verbatim to the user while SQL references something safe.
- */
+// Builds domain columns, keeping display headers separate from generated physical names.
 const buildColumns = async (
   connection: AsyncDuckDBConnection,
   relationName: string,
@@ -204,8 +151,7 @@ const buildColumns = async (
     const physicalName = createColumnName(ordinal);
     const baseType = normalizeLogicalType(databaseType);
 
-    // Sequential by necessity, not oversight: these share one DuckDB connection, which executes
-    // queries one at a time regardless. Only text columns can be categorical, so only they pay.
+    // Profile text columns sequentially because this connection executes one query at a time.
     const logicalType =
       baseType === 'string'
         ? // eslint-disable-next-line no-await-in-loop -- see above
@@ -218,8 +164,7 @@ const buildColumns = async (
       physicalName,
       databaseType,
       logicalType,
-      // DuckDB reports nullability as 'YES'/'NO'; anything unexpected is treated as nullable,
-      // which is the safe direction — it never claims a column cannot contain nulls.
+      // Treat unexpected nullability metadata as nullable, the safe direction.
       nullable: String(entry.null ?? 'YES').toUpperCase() !== 'NO',
     });
   }
@@ -233,23 +178,10 @@ const queryDataset = (datasetId: EntityId, relation: RelationEntry): QueryDatase
   columns: relation.columns,
 });
 
-/**
- * Compares the joined row count against the anchor's own, to catch a join that multiplied rows.
- *
- * A `many_to_one` relationship misdeclared as `one_to_one` fans out and silently inflates a `sum`.
- * The creation-time key sample is the first defence; this is the second, measured on the query that
- * actually ran, so a fan-out introduced by data imported after the relationship was created is still
- * caught. Only a ratio is reported — never a row value.
- */
+// Ratio above which joined rows are reported as fan-out.
 const FAN_OUT_QUERY_TOLERANCE = 1.05;
 
-/*
- * Bounds on a column profile.
- *
- * The distinct cap keeps the count from becoming a full scan on a high-cardinality column; the
- * value caps bound what a profile can disclose, since frequent values are dataset content and reach
- * an agent through `get_column_statistics`.
- */
+// Bounds for column profiling and value disclosure.
 const DISTINCT_COUNT_CAP = 10_000;
 const MAX_TOP_VALUES = 20;
 const MAX_STATISTIC_STRING_LENGTH = 200;
@@ -261,14 +193,10 @@ export const describeQueryFanOut = (anchorRows: number, joinedRows: number): str
 };
 
 /**
- * Prepares and runs a compiled statement.
+ * Prepares and executes a compiled statement.
  *
- * The abort check happens twice — before preparing and before executing — because DuckDB-Wasm's
- * connection API takes no `AbortSignal`, so a query already inside the worker cannot be interrupted
- * mid-execution. Checking at both boundaries is what makes cancellation real rather than cosmetic:
- * a superseded query that has not yet reached the engine never runs at all, which is the common case
- * when a user drags a filter. The statement is closed either way, so an aborted query leaves no
- * prepared statement behind.
+ * Check cancellation around each await because DuckDB-Wasm has no `AbortSignal` support. Always
+ * close the prepared statement.
  */
 const executeCompiled = async (
   connection: AsyncDuckDBConnection,
@@ -288,15 +216,9 @@ const executeCompiled = async (
 };
 
 /**
- * Reads a file into memory, reporting real byte progress.
+ * Reads a file into a contiguous buffer and reports byte progress.
  *
- * `stream()` rather than `arrayBuffer()` so a 400 MB import shows a bar that moves instead of an
- * indeterminate spinner that looks indistinguishable from a hang. The chunks are concatenated once
- * at the end, which costs one extra copy of the file; that is acceptable because DuckDB needs a
- * contiguous buffer to register anyway.
- *
- * Falls back to `arrayBuffer()` where `stream()` is unavailable, so the read never depends on the
- * progress feature being supported.
+ * Streaming provides progress; the fallback supports environments without `stream()`.
  */
 const readFileBytes = async (file: File, onProgress?: (progress: ImportProgress) => void): Promise<Uint8Array> => {
   const totalBytes = file.size;
@@ -318,7 +240,7 @@ const readFileBytes = async (file: File, onProgress?: (progress: ImportProgress)
   onProgress?.({ phase: 'reading', bytesRead, totalBytes });
 
   for (;;) {
-    // eslint-disable-next-line no-await-in-loop -- a stream is read one chunk at a time by definition.
+    // eslint-disable-next-line no-await-in-loop -- stream reads are sequential.
     const { done, value } = await reader.read();
 
     if (done) break;
@@ -356,25 +278,20 @@ export const createDataEngine = (): DataEngine => {
 
   const scheduler: QueryScheduler = createQueryScheduler();
 
-  /** Relation metadata by dataset ID. Rebuilt per session; the workspace store holds the durable copy. */
+  // Session relation metadata by dataset ID. Raw rows remain in DuckDB.
   const relations = new Map<EntityId, RelationEntry>();
 
-  /** The join graph, pushed in by the application. The engine never reads the workspace store. */
+  // Relationship definitions supplied by the application.
   const relationshipGraph = new Map<EntityId, Relationship>();
 
-  /** Derived column definitions, pushed in by the application alongside the join graph. */
+  // Derived-column definitions supplied by the application.
   let derivedColumnDefinitions: Record<EntityId, DerivedColumn> = {};
   const countCache = createQueryCache<number>();
 
-  /** Row counts and column extents, keyed by dataset revision. Backs the planner and sampling. */
+  // Cached row counts and column extents keyed by dataset revision.
   const statisticsCache = createStatisticsCache();
 
-  /**
-   * Row-count estimates for the planner's join ordering.
-   *
-   * Read from what import already measured rather than queried: a `COUNT` per dataset per plan would
-   * cost more than the ordering saves, which is the whole reason the statistics cache exists.
-   */
+  // Row-count estimates used by join ordering.
   const datasetCardinalities = (): DatasetCardinality[] =>
     [...relations.entries()].map(([datasetId, relation]) => ({
       datasetId,
@@ -387,16 +304,10 @@ export const createDataEngine = (): DataEngine => {
       : ok(handle.connection);
 
   /**
-   * Ingests the validated file into a staging relation.
+   * Ingests a validated file into a staging relation.
    *
-   * The file is registered as a buffer under a path derived from the *generated* relation name, not
-   * from its own filename: the virtual filesystem path is another place a hostile filename could
-   * otherwise land.
-   *
-   * Both formats reach DuckDB through the built-in CSV reader. JSON is converted to CSV in
-   * JavaScript first, because DuckDB's JSON reader lives in an extension that `LOAD` fetches over
-   * the network — see `json-to-csv.ts`. Keeping one ingestion path also means the delimiter,
-   * header, and sniffer settings are configured in exactly one place.
+   * JSON is converted to CSV so import uses DuckDB's built-in reader. The virtual path derives from
+   * the generated relation ID, not the filename.
    */
   const ingestStaging = async (
     connection: AsyncDuckDBConnection,
@@ -420,8 +331,7 @@ export const createDataEngine = (): DataEngine => {
         create: true,
         header: true,
         detect: true,
-        // The converter always emits comma-delimited output, so a source delimiter applies only to
-        // files read verbatim.
+        // Converted JSON is comma-delimited; source delimiters apply only to verbatim files.
         ...(isJson || validated.delimiter === undefined ? {} : { delimiter: validated.delimiter }),
       });
 
@@ -429,8 +339,7 @@ export const createDataEngine = (): DataEngine => {
 
       return staged.map((entry) => String(entry.column_name ?? ''));
     } finally {
-      // The buffer is a full copy of the file. Dropping it immediately after ingestion keeps a
-      // second copy of every imported dataset from living in worker memory for the session.
+      // Release the registered buffer so worker memory does not retain a second file copy.
       await handle?.database.dropFile(virtualPath).catch(() => undefined);
     }
   };
@@ -466,8 +375,7 @@ export const createDataEngine = (): DataEngine => {
       await materializeRelation(connection, stagingName, relationName, displayNames.length);
       await dropRelation(connection, stagingName);
 
-      // Column profiling runs a bounded distinct count per text column, which on a wide file is the
-      // longest phase after ingestion. Naming it stops the progress readout from appearing stuck.
+      // Profile text columns after ingestion; this is the longest phase for wide files.
       onProgress?.({ phase: 'profiling' });
 
       const described = await describeRelation(connection, relationName);
@@ -483,7 +391,7 @@ export const createDataEngine = (): DataEngine => {
 
       return ok({ relationId: relationName, rowCount, columns });
     } catch {
-      // Both relations are dropped so a failed import leaves nothing half-created behind.
+      // Leave no staging or canonical relation after a failed import.
       await dropRelation(connection, stagingName);
       await dropRelation(connection, relationName);
 
@@ -491,111 +399,7 @@ export const createDataEngine = (): DataEngine => {
     }
   };
 
-  /**
-   * Writes a dataset's relation to Parquet and returns the bytes.
-   *
-   * `COPY … TO` needs a path, so the output goes to the worker's virtual filesystem under a name
-   * derived from the generated relation name — the same rule ingestion follows, and for the same
-   * reason: the path is a SQL string literal, which quoting an identifier would not protect.
-   */
-  const exportDatasetParquet = async (datasetId: EntityId): Promise<Result<Uint8Array, DomainError>> => {
-    const connectionResult = requireConnection();
-
-    if (!connectionResult.ok) return connectionResult;
-
-    const relation = relations.get(datasetId);
-
-    if (relation === undefined) {
-      return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
-    }
-
-    const virtualPath = virtualExportPath(relation.relationName);
-
-    try {
-      await connectionResult.value.query(
-        `COPY (SELECT * FROM ${quoteIdentifier(relation.relationName)}) TO '${virtualPath}' (FORMAT PARQUET)`,
-      );
-
-      const bytes = await handle?.database.copyFileToBuffer(virtualPath);
-
-      if (bytes === undefined) return err(engineFailure('QUERY_FAILED'));
-
-      return ok(bytes);
-    } catch {
-      return err(engineFailure('QUERY_FAILED'));
-    } finally {
-      await handle?.database.dropFile(virtualPath).catch(() => undefined);
-    }
-  };
-
-  /**
-   * Creates a relation from Parquet bytes produced by a previous export.
-   *
-   * Unlike CSV import there is no staging or positional rename step: the Parquet file already
-   * carries the physical column names this application generated when the dataset was first
-   * imported, so reading it back reproduces the same schema. The columns are still described from
-   * the created relation rather than trusted from the archive's metadata.
-   */
-  const importDatasetParquet = async (
-    datasetId: EntityId,
-    bytes: Uint8Array,
-  ): Promise<Result<ImportedRelation, DomainError>> => {
-    const connectionResult = requireConnection();
-
-    if (!connectionResult.ok) return connectionResult;
-
-    const connection = connectionResult.value;
-    const relationName = createRelationName(datasetId);
-    const virtualPath = virtualExportPath(relationName);
-
-    try {
-      await handle?.database.registerFileBuffer(virtualPath, bytes);
-      await connection.query(
-        `CREATE OR REPLACE TABLE ${quoteIdentifier(relationName)} AS SELECT * FROM read_parquet('${virtualPath}')`,
-      );
-
-      const described = await describeRelation(connection, relationName);
-      const columnCount = validateColumnCount(described.length);
-
-      if (!columnCount.ok) {
-        await dropRelation(connection, relationName);
-
-        return columnCount;
-      }
-
-      const columns = await buildColumns(
-        connection,
-        relationName,
-        described,
-        described.map((entry) => String(entry.column_name ?? '')),
-      );
-      const counted = await connection.query(`SELECT count(*) FROM ${quoteIdentifier(relationName)}`);
-      const rowCount = readScalarCount(counted as unknown as ArrowRowSource);
-
-      const revision = (relations.get(datasetId)?.revision ?? 0) + 1;
-      relations.set(datasetId, { relationName, columns, revision, rowCount });
-      countCache.clear();
-      statisticsCache.setDatasetStatistics(datasetId, revision, { rowCount });
-
-      return ok({ relationId: relationName, rowCount, columns });
-    } catch {
-      await dropRelation(connection, relationName);
-
-      return err(engineFailure('IMPORT_FAILED'));
-    } finally {
-      await handle?.database.dropFile(virtualPath).catch(() => undefined);
-    }
-  };
-
-  /**
-   * Reads a bounded window of rows.
-   *
-   * `limit` is clamped inside the engine rather than trusted from the caller, so no path — human or
-   * agent — can request an unbounded read. Offset and limit are inlined as integers rather than
-   * bound as parameters because DuckDB does not accept placeholders in `LIMIT`/`OFFSET`; they are
-   * coerced through `Math.trunc` and clamped, so no caller-controlled text reaches the SQL.
-   */
-  /** Every relation this session knows about, so the compiler can resolve a joined column. */
+  // Supplies the SQL compiler with session relations, relationships, and derived columns.
   const queryContext = (): {
     datasets: QueryDataset[];
     relationships: Relationship[];
@@ -606,12 +410,7 @@ export const createDataEngine = (): DataEngine => {
     derivedColumns: derivedColumnDefinitions,
   });
 
-  /**
-   * Counts the rows a joined query reads, to compare against the anchor's own row count.
-   *
-   * Runs only for aggregate queries that cross a join, since an ungrouped query returns its rows to
-   * the caller anyway and a single-relation query cannot fan out.
-   */
+  // Measures joined row count for aggregate queries that cross a join.
   const measureJoinFanOut = async (
     connection: AsyncDuckDBConnection,
     query: AnalysisQuery,
@@ -634,18 +433,15 @@ export const createDataEngine = (): DataEngine => {
 
       return describeQueryFanOut(anchorRows, joinedRows);
     } catch {
-      // The warning is advisory. Failing to measure it must not fail the query it describes.
+      // Fan-out measurement is advisory; its failure must not fail the query.
       return undefined;
     }
   };
 
   /**
-   * Runs an analysis query, optionally under the scheduler.
+   * Runs an analysis query, optionally with keyed supersession.
    *
-   * A `key` opts the query into supersession: a newer request under the same key aborts the
-   * in-flight one and its result is discarded. Without a key the query runs directly, which is what
-   * the engine's own internal reads (fan-out measurement, column profiling) need — they are already
-   * nested inside a scheduled call, and scheduling them again would deadlock behind their own parent.
+   * Internal reads stay unkeyed because they can run inside a scheduled query.
    */
   const executeAnalysis = async (
     query: AnalysisQuery,
@@ -697,20 +493,13 @@ export const createDataEngine = (): DataEngine => {
 
     if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
 
-    // A superseded analysis returns an empty result rather than an error: being overtaken is normal
-    // interaction, and the caller keeps whatever it already shows.
+    // Superseded analysis is normal interaction; callers keep the previous result.
     if (scheduled.stale) return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
 
     return ok(scheduled.value);
   };
 
-  /**
-   * Measures how many sampled rows share each key value.
-   *
-   * The sample is taken with a bounded subquery rather than a full scan, so creating a relationship
-   * on a large dataset stays interactive. Composite keys are counted as a tuple, which is the same
-   * grouping the join itself performs.
-   */
+  // Measures duplicate join keys in a bounded sample.
   const measureKeyQuality = async (request: KeyQualityRequest): Promise<Result<KeyQualityResult, DomainError>> => {
     const connectionResult = requireConnection();
     if (!connectionResult.ok) return connectionResult;
@@ -751,8 +540,7 @@ export const createDataEngine = (): DataEngine => {
   const dropDataset = async (datasetId: EntityId): Promise<Result<void, DomainError>> => {
     const relation = relations.get(datasetId);
 
-    // Idempotent by design: a dataset that failed to import has no relation, and removing it must
-    // still succeed rather than stranding its metadata in the workspace.
+    // Removing a dataset without a relation is still successful.
     if (relation === undefined) {
       countCache.clear();
 
@@ -787,17 +575,32 @@ export const createDataEngine = (): DataEngine => {
     const limit = Math.min(Math.max(Math.trunc(request.limit) || 0, 0), MAX_TABLE_WINDOW_ROWS);
     const offset = Math.max(Math.trunc(request.offset) || 0, 0);
     const filters = enabledExpressions(request.filters);
+    // Derived columns are virtual, so add their metadata before compiling the full projection.
+    const derivedColumns = Object.values(derivedColumnDefinitions).filter(
+      (column) => column.datasetId === request.datasetId,
+    );
+    const projectedColumns = [
+      ...relation.columns,
+      ...derivedColumns.map((column) => ({
+        id: column.id,
+        name: column.name,
+        physicalName: '',
+        databaseType: '',
+        logicalType: column.logicalType,
+        nullable: true,
+      })),
+    ];
     const compiled = compileAnalysisQuery(
       {
         datasetId: request.datasetId,
-        dimensions: [],
+        dimensions: projectedColumns.map((column) => column.id),
         measures: [],
         filters,
         orderBy: request.sort ?? [],
         limit,
         offset,
       },
-      queryDataset(request.datasetId, relation),
+      queryContext(),
     );
     if (!compiled.ok) return compiled;
     const countKey = {
@@ -830,13 +633,13 @@ export const createDataEngine = (): DataEngine => {
           return {
             rows: readArrowRows(
               table,
-              relation.columns.map((column) => column.logicalType),
+              projectedColumns.map((column) => column.logicalType),
             ).rows,
             totalRowCount,
           };
         },
         {
-          // Keyed per dataset so a window read for one dataset never supersedes another's.
+          // Scope table-window supersession by dataset.
           key: `table-window:${request.datasetId}`,
           ...(request.signal === undefined ? {} : { signal: request.signal }),
         },
@@ -845,10 +648,9 @@ export const createDataEngine = (): DataEngine => {
 
     if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
 
-    const columnIds = relation.columns.map((column) => column.id);
+    const columnIds = projectedColumns.map((column) => column.id);
 
-    // A superseded read returns no rows rather than an error: being overtaken by a newer request
-    // is normal interaction, and the caller simply keeps what it already shows.
+    // Superseded reads are normal interaction; callers keep the current window.
     if (scheduled.stale) {
       return ok({ rows: [], columnIds, columns: compiled.value.resultColumns, totalRowCount: 0, offset, stale: true });
     }
@@ -863,17 +665,11 @@ export const createDataEngine = (): DataEngine => {
     });
   };
 
-  /**
-   * Reads a column's numeric extent for equal-width binning.
-   *
-   * Two aggregates over the filtered relation, so the result is one row whatever the dataset's
-   * size. Callers cache it against the dataset revision rather than calling per render.
-   */
+  // Reads a column's numeric extent for equal-width binning.
   const getColumnRange = async (request: ColumnRangeRequest): Promise<Result<ColumnRange, DomainError>> => {
     const relation = relations.get(request.datasetId);
 
-    // The cached extent applies only to the unfiltered column. A filter narrows the range, and
-    // reusing the wider one would place histogram bucket boundaries outside the data on screen.
+    // A filtered range cannot reuse the unfiltered cached extent.
     if (relation !== undefined && request.filters.length === 0) {
       const cached = statisticsCache.columnStatistics(request.columnId, relation.revision);
 
@@ -897,11 +693,10 @@ export const createDataEngine = (): DataEngine => {
     const min = Number(row?.[0] ?? 0);
     const max = Number(row?.[1] ?? 0);
 
-    // An empty or all-null column has no extent. Reporting a degenerate zero-width range lets the
-    // bin compiler fall back to its single-bucket path instead of dividing by zero.
+    // Use a zero-width range for empty or all-null columns.
     const range = { min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 0 };
 
-    // Only the unfiltered extent is cached, matching what the lookup above will accept.
+    // Cache only unfiltered extents.
     if (relation !== undefined && request.filters.length === 0) {
       const existing = statisticsCache.columnStatistics(request.columnId, relation.revision);
 
@@ -916,13 +711,7 @@ export const createDataEngine = (): DataEngine => {
     return ok(range);
   };
 
-  /**
-   * Profiles one column in a bounded number of queries.
-   *
-   * Numeric and text columns take different paths because the useful statistics differ and running
-   * both would double the cost for no gain. The distinct count is capped, so a high-cardinality
-   * column costs the same as a low-cardinality one.
-   */
+  // Profiles a physical or derived column with bounded aggregate queries.
   const getColumnStatistics = async (
     request: ColumnStatisticsRequest,
   ): Promise<Result<ColumnStatistics, DomainError>> => {
@@ -932,7 +721,19 @@ export const createDataEngine = (): DataEngine => {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
 
-    const column = relation.columns.find((candidate) => candidate.id === request.columnId);
+    const derived = derivedColumnDefinitions[request.columnId];
+    const column =
+      relation.columns.find((candidate) => candidate.id === request.columnId) ??
+      (derived?.datasetId === request.datasetId
+        ? {
+            id: derived.id,
+            name: derived.name,
+            physicalName: '',
+            databaseType: '',
+            logicalType: derived.logicalType,
+            nullable: true,
+          }
+        : undefined);
 
     if (column === undefined) {
       return err(domainError('COLUMN_NOT_FOUND', 'The statistics request references a column that does not exist.'));
@@ -940,17 +741,23 @@ export const createDataEngine = (): DataEngine => {
 
     const filters = enabledExpressions(request.filters);
     const numeric = column.logicalType === 'number';
+    const temporal = column.logicalType === 'date' || column.logicalType === 'timestamp';
+    const extrema = numeric || temporal;
     const measures: AnalysisQuery['measures'] = [
       { aggregate: 'count', alias: 'rows' },
       { columnId: column.id, aggregate: 'count', alias: 'nonNull' },
       { columnId: column.id, aggregate: 'count_distinct', alias: 'distinct' },
-      ...(numeric
+      ...(extrema
         ? ([
-            { columnId: column.id, aggregate: 'min', alias: 'lo' },
-            { columnId: column.id, aggregate: 'max', alias: 'hi' },
-            { columnId: column.id, aggregate: 'avg', alias: 'mean' },
-            { columnId: column.id, aggregate: 'median', alias: 'median' },
-            { columnId: column.id, aggregate: 'stddev', alias: 'stddev' },
+            { columnId: column.id, aggregate: 'min' as const, alias: 'lo' },
+            { columnId: column.id, aggregate: 'max' as const, alias: 'hi' },
+            ...(numeric
+              ? [
+                  { columnId: column.id, aggregate: 'avg' as const, alias: 'mean' },
+                  { columnId: column.id, aggregate: 'median' as const, alias: 'median' },
+                  { columnId: column.id, aggregate: 'stddev' as const, alias: 'stddev' },
+                ]
+              : []),
           ] satisfies AnalysisQuery['measures'])
         : []),
     ];
@@ -969,10 +776,14 @@ export const createDataEngine = (): DataEngine => {
     const rowCount = Number(row?.[0] ?? 0);
     const nonNull = Number(row?.[1] ?? 0);
     const distinctCount = Number(row?.[2] ?? 0);
+    // Convert temporal extrema to ISO strings for the data-engine port.
+    const temporalBound = (value: unknown): string => {
+      const date = new Date(typeof value === 'number' ? value : Number(value));
+      if (Number.isNaN(date.getTime())) return String(value ?? '');
+      return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
+    };
 
-    // Recorded for the planner and the sampling policy, which need the distinct count and extent but
-    // not the frequent values. Both are exact for this revision, so a later query reuses them rather
-    // than re-profiling the column.
+    // Cache exact statistics for this dataset revision.
     statisticsCache.setColumnStatistics(column.id, relation.revision, {
       distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
       distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
@@ -984,13 +795,17 @@ export const createDataEngine = (): DataEngine => {
       nullCount: Math.max(rowCount - nonNull, 0),
       distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
       distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
-      ...(numeric
+      ...(extrema
         ? {
-            min: Number(row?.[3] ?? 0),
-            max: Number(row?.[4] ?? 0),
-            mean: Number(row?.[5] ?? 0),
-            median: Number(row?.[6] ?? 0),
-            stddev: Number(row?.[7] ?? 0),
+            min: numeric ? Number(row?.[3] ?? 0) : temporalBound(row?.[3]),
+            max: numeric ? Number(row?.[4] ?? 0) : temporalBound(row?.[4]),
+            ...(numeric
+              ? {
+                  mean: Number(row?.[5] ?? 0),
+                  median: Number(row?.[6] ?? 0),
+                  stddev: Number(row?.[7] ?? 0),
+                }
+              : {}),
           }
         : {}),
     };
@@ -1037,8 +852,7 @@ export const createDataEngine = (): DataEngine => {
   const initialize = (): Promise<Result<void, DomainError>> => {
     if (handle !== null) return Promise.resolve(ok(undefined));
 
-    // Concurrent callers share one instantiation. Two `openDuckDB` calls would each spawn a worker
-    // and a Wasm heap, and the second would silently orphan the first.
+    // Share initialization so the tab owns one worker and Wasm heap.
     initializing ??= openDuckDB()
       .then((opened): Result<void, DomainError> => {
         handle = opened;
@@ -1076,8 +890,6 @@ export const createDataEngine = (): DataEngine => {
   return {
     initialize,
     importFile,
-    exportDatasetParquet,
-    importDatasetParquet,
     fetchTableWindow,
     executeAnalysis,
     getDistinctValues,
@@ -1086,21 +898,6 @@ export const createDataEngine = (): DataEngine => {
     measureKeyQuality,
     dropDataset,
     dispose,
-    persistenceDatabase: () => handle?.connection ?? null,
-    restoreDatasets: (datasets) => {
-      relations.clear();
-      statisticsCache.clear();
-      for (const dataset of Object.values(datasets)) {
-        if (dataset.importStatus === 'ready') {
-          relations.set(dataset.id, {
-            relationName: dataset.relationId,
-            columns: dataset.columns,
-            revision: 1,
-            ...(dataset.rowCount === null ? {} : { rowCount: dataset.rowCount }),
-          });
-        }
-      }
-    },
     setRelationships: (relationships) => {
       relationshipGraph.clear();
       for (const relationship of Object.values(relationships)) relationshipGraph.set(relationship.id, relationship);
@@ -1111,11 +908,5 @@ export const createDataEngine = (): DataEngine => {
   };
 };
 
-/**
- * The application's engine instance.
- *
- * A module singleton because a browser tab holds exactly one DuckDB worker. It starts uninitialized
- * and stays so until bootstrap calls `initialize`, which is why the port's methods all fail with
- * `ENGINE_UNAVAILABLE` rather than throwing when called too early.
- */
+// Shared application engine instance for this browser tab.
 export const dataEngine = createDataEngine();

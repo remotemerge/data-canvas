@@ -75,8 +75,6 @@ describe('dispatcher handler coverage', () => {
         return { type, payload: {} };
       case 'visualization.setLinkMode':
         return { type, payload: { visualizationId: 'viz_missing', linkMode: 'filter' } };
-      case 'workspace.import':
-        return { type, payload: { workspace: createEmptyWorkspace('Imported'), missingDatasetNames: [] } };
       case 'metric.create':
         return { type, payload: { datasetId: DATASET_ID, name: 'Total', aggregate: 'sum', columnId: 'col_revenue' } };
       case 'metric.update':
@@ -135,7 +133,7 @@ describe('dispatcher handler coverage', () => {
 
   test('every action type in the union is listed in APPLICATION_ACTION_TYPES', () => {
     expect(new Set(APPLICATION_ACTION_TYPES).size).toBe(APPLICATION_ACTION_TYPES.length);
-    expect(APPLICATION_ACTION_TYPES).toHaveLength(28);
+    expect(APPLICATION_ACTION_TYPES).toHaveLength(27);
   });
 });
 
@@ -335,6 +333,38 @@ describe('data engine port', () => {
     expect(imported?.relationId.startsWith('dataset_')).toBe(true);
   });
 
+  /*
+   * Importing the same file twice is a normal way to compare extracts, but two datasets sharing one
+   * visible name make relationship cards and field pickers ambiguous even though the ids stay distinct.
+   */
+  test('a repeated file name is disambiguated while provenance keeps the original', async () => {
+    const harness = createHarness(createEmptyWorkspace('Test workspace'), stubDataEngine());
+
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'superstore.csv');
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'superstore.csv');
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'superstore.csv');
+
+    const datasets = Object.values(harness.workspace().datasets);
+    const names = datasets.map((dataset) => dataset.name);
+
+    expect(names).toEqual(['superstore.csv', 'superstore.csv (2)', 'superstore.csv (3)']);
+    // The display name is disambiguated; the recorded source file name is not.
+    expect(datasets.every((dataset) => dataset.source.fileName === 'superstore.csv')).toBe(true);
+    expect(new Set(names).size).toBe(3);
+  });
+
+  test('a distinct file name is left alone', async () => {
+    const harness = createHarness(createEmptyWorkspace('Test workspace'), stubDataEngine());
+
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'orders.csv');
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'customers.csv');
+
+    expect(Object.values(harness.workspace().datasets).map((dataset) => dataset.name)).toEqual([
+      'orders.csv',
+      'customers.csv',
+    ]);
+  });
+
   test('the import lifecycle moves loading to ready across two attributable commits', async () => {
     const harness = createHarness(workspaceWithDataset(), stubDataEngine());
 
@@ -484,5 +514,66 @@ describe('action results', () => {
 
     expect(result.value.summary).not.toContain(`${secret}`);
     expect(harness.history()[0]?.summary).not.toContain(`${secret}`);
+  });
+});
+
+describe('derived visualization queries', () => {
+  /*
+   * A bound bin strategy has to reach the query as a binned dimension. Left among the plain
+   * dimensions it would group by every distinct instant, which is both the wrong grouping and a
+   * shape the sampling policy cannot widen when the span outgrows the plot.
+   */
+  test('a bound bin strategy becomes a binned dimension rather than a plain one', async () => {
+    const harness = createHarness();
+
+    const result = await harness.dispatcher.execute(
+      {
+        type: 'visualization.create',
+        payload: {
+          datasetId: DATASET_ID,
+          title: 'Revenue by day',
+          kind: 'line',
+          binding: { x: 'col_date', y: ['col_revenue'], binX: { kind: 'temporal', unit: 'day' } },
+        },
+      },
+      { actor: 'human' },
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) return;
+
+    const created = Object.values(harness.workspace().visualizations)[0];
+
+    expect(created?.query.dimensions).toEqual([]);
+    expect(created?.query.binnedDimensions).toEqual([
+      { columnId: 'col_date', strategy: { kind: 'temporal', unit: 'day' } },
+    ]);
+  });
+
+  test('an unbinned dimension still derives as a plain dimension', async () => {
+    const harness = createHarness();
+
+    const result = await harness.dispatcher.execute(
+      {
+        type: 'visualization.create',
+        payload: {
+          datasetId: DATASET_ID,
+          title: 'Revenue by region',
+          kind: 'bar',
+          binding: { x: 'col_region', y: ['col_revenue'] },
+        },
+      },
+      { actor: 'human' },
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) return;
+
+    const created = Object.values(harness.workspace().visualizations)[0];
+
+    expect(created?.query.dimensions).toEqual(['col_region']);
+    expect(created?.query.binnedDimensions).toBeUndefined();
   });
 });

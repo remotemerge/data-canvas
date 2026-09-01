@@ -18,6 +18,7 @@ export interface ToolInput {
   dimensions?: unknown;
   measures?: unknown;
   limit?: unknown;
+  offset?: unknown;
   visualizationId?: unknown;
   title?: unknown;
   kind?: unknown;

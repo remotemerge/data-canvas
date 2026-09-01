@@ -7,6 +7,7 @@ import type { MetricDirection, MetricModifier, TimeComparisonOutput } from '@/do
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectDatasets } from '@/state/selectors/workspace-selectors.ts';
 
 type ModifierKind = MetricModifier['kind'];
 
@@ -23,12 +24,7 @@ const DIRECTION_LABEL: Readonly<Record<MetricDirection, string>> = {
   neutral: 'Neither',
 };
 
-/**
- * Edits a metric's modifier and its delta presentation.
- *
- * The direction control exists because no amount of inspection tells the app whether a rise is good
- * news. It is the one piece of the metric only a person can supply.
- */
+// Edits a metric's modifier and delta presentation.
 export const MetricEditor = ({
   metric,
   onError,
@@ -36,9 +32,9 @@ export const MetricEditor = ({
   metric: Metric;
   onError(error: DomainError | null): void;
 }): React.JSX.Element => {
-  const workspace = useWorkspace((state) => state.workspace);
+  const datasets = useWorkspace(selectDatasets);
   const { updateMetric } = useActions();
-  const dataset = workspace.datasets[metric.datasetId];
+  const dataset = datasets[metric.datasetId];
   const [kind, setKind] = useState<ModifierKind>(metric.modifier?.kind ?? 'none');
   const [orderBy, setOrderBy] = useState(metric.modifier?.kind === 'runningTotal' ? metric.modifier.orderBy : '');
   const [dateColumnId, setDateColumnId] = useState(
@@ -71,8 +67,7 @@ export const MetricEditor = ({
   const save = (): void => {
     if (modifier === null) return;
 
-    // A percent change is a ratio and a difference is a level, so the format follows the modifier
-    // rather than being set separately and drifting out of step with it.
+    // Percent change is a ratio; difference is a level, so format follows the modifier.
     const percent = modifier.kind === 'timeComparison' && modifier.as === 'percentChange';
     const comparison = modifier.kind === 'timeComparison' && modifier.as !== 'absolute';
 
@@ -160,7 +155,7 @@ export const MetricEditor = ({
               ))}
             </select>
           </label>
-          <small>Periods with no rows are filled in, so a gap in the data does not shift the comparison.</small>
+          <small>Empty periods count as zero, so gaps do not shift the comparison.</small>
         </>
       ) : null}
 

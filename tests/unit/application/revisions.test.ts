@@ -91,8 +91,7 @@ describe('revision increments', () => {
   test('exactly once per successful action', async () => {
     const harness = createHarness();
 
-    // Issued together rather than awaited in sequence; the dispatcher's queue orders them, which is
-    // itself part of what this asserts.
+    // Dispatch together so the queue, not call order, determines execution.
     await Promise.all(
       [4, 6, 8].map((columns) =>
         harness.dispatcher.execute({ type: 'layout.update', payload: { columns } }, { actor: 'human' }),
@@ -126,8 +125,7 @@ describe('revision increments', () => {
     await harness.dispatcher.execute({ type: 'layout.update', payload: { columns: 6 } }, { actor: 'human' });
     unsubscribe();
 
-    // A single notification proves one setState. Two would let a subscriber read the new layout at
-    // the old revision, which is exactly what expectedRevision must be able to rely on.
+    // One notification proves workspace and revision commit together.
     expect(observed).toEqual([{ columns: 6, revision: 1 }]);
   });
 });
@@ -157,8 +155,7 @@ describe('serialized execution', () => {
   });
 
   test('concurrent revision-asserting writes do not both pass the same check', async () => {
-    // Without serialization both would read revision 0, both would pass, and the second commit
-    // would silently overwrite the first.
+    // Serialization prevents both actions from observing revision 0.
     const harness = createHarness();
 
     const results = await Promise.all([
@@ -184,8 +181,7 @@ describe('serialized execution', () => {
   });
 
   test('a slow action does not let a later one commit ahead of it', async () => {
-    // The engine makes the first action genuinely asynchronous, so ordering depends on the queue
-    // rather than on both actions happening to be synchronous.
+    // The asynchronous engine makes queue ordering observable.
     const { promise: gate, resolve: release } = Promise.withResolvers<void>();
 
     const engine = stubDataEngine(async (_file, datasetId) => {
@@ -194,8 +190,7 @@ describe('serialized execution', () => {
       return ok({ relationId: `dataset_${datasetId.slice(-4)}`, rowCount: 1, columns: [] });
     });
 
-    // A dataset already in `loading` is what `dataset.import` resolves, so the slow action has
-    // something to act on without a preceding commit skewing the revision numbers under test.
+    // Seed a loading dataset for the slow import action.
     const base = workspaceWithDataset();
     const pending = { ...salesDataset('ds_pending'), importStatus: 'loading' as const };
     const harness = createHarness({ ...base, datasets: { ...base.datasets, [pending.id]: pending } }, engine);
@@ -229,7 +224,7 @@ describe('serialized execution', () => {
   });
 });
 
-/** Strips the two fields that must legitimately differ: generated identity and attribution. */
+// Strips the two fields that must legitimately differ: generated identity and attribution.
 const normalize = (workspace: Workspace) => ({
   revision: workspace.revision,
   filters: Object.values(workspace.filters).map(({ id: _id, origin: _origin, createdBy: _createdBy, ...rest }) => rest),

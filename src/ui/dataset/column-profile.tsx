@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import { getColumnProfile } from '@/application/queries/column-statistics.ts';
 import type { ColumnProfile as Profile } from '@/application/queries/column-statistics.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectFilters } from '@/state/selectors/workspace-selectors.ts';
 
-/** Formats a statistic for display, keeping long decimals from overflowing the panel. */
+// Formats a statistic for display without long decimals.
 const formatNumber = (value: number | undefined): string =>
   value === undefined || !Number.isFinite(value) ? '—' : String(Math.round(value * 1000) / 1000);
 
-/**
- * Shows a column's statistical profile.
- *
- * The values come from aggregates in DuckDB rather than from any row read into JavaScript, so the
- * cost is the same whether the dataset has a thousand rows or ten million. Frequent values are
- * dataset content and are rendered as plain text.
- */
+// Shows bounded aggregate statistics for a column.
 export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: Column }): React.JSX.Element => {
+  /*
+   * Profiling is an engine round trip, so it re-runs only for inputs that change the statistics.
+   * The workspace stays in a ref because getColumnProfile reads it only to resolve the column.
+   */
+  const filterRecord = useWorkspace(selectFilters);
   const workspace = useWorkspace((state) => state.workspace);
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -27,7 +29,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
     setProfile(null);
     setFailed(false);
 
-    void getColumnProfile(registeredDataEngine, workspace, dataset.id, column.id).then((result) => {
+    void getColumnProfile(registeredDataEngine, workspaceRef.current, dataset.id, column.id).then((result) => {
       if (cancelled) return;
 
       if (result.ok) setProfile(result.value);
@@ -37,7 +39,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
     return () => {
       cancelled = true;
     };
-  }, [workspace, dataset.id, column.id]);
+  }, [filterRecord, dataset.id, dataset.revision, column.id]);
 
   if (failed) return <p className="column-profile__status">Statistics are unavailable for this column.</p>;
   if (profile === null) return <p className="column-profile__status">Profiling {column.name}…</p>;
@@ -48,7 +50,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
       <dd>{profile.logicalType}</dd>
       <dt>Rows</dt>
       <dd>{profile.rowCount}</dd>
-      <dt>Null</dt>
+      <dt>Null values</dt>
       <dd>{profile.nullCount}</dd>
       <dt>Distinct</dt>
       <dd>
@@ -59,15 +61,19 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
       {profile.min === undefined ? null : (
         <>
           <dt>Min</dt>
-          <dd>{formatNumber(profile.min)}</dd>
+          <dd>{typeof profile.min === 'number' ? formatNumber(profile.min) : profile.min}</dd>
           <dt>Max</dt>
-          <dd>{formatNumber(profile.max)}</dd>
-          <dt>Mean</dt>
-          <dd>{formatNumber(profile.mean)}</dd>
-          <dt>Median</dt>
-          <dd>{formatNumber(profile.median)}</dd>
-          <dt>Std dev</dt>
-          <dd>{formatNumber(profile.stddev)}</dd>
+          <dd>{typeof profile.max === 'number' ? formatNumber(profile.max) : profile.max}</dd>
+          {profile.mean === undefined ? null : (
+            <>
+              <dt>Mean</dt>
+              <dd>{formatNumber(profile.mean)}</dd>
+              <dt>Median</dt>
+              <dd>{formatNumber(profile.median)}</dd>
+              <dt>Standard deviation</dt>
+              <dd>{formatNumber(profile.stddev)}</dd>
+            </>
+          )}
         </>
       )}
 
@@ -78,7 +84,7 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
             <ul className="column-profile__values">
               {profile.topValues.map((entry, index) => (
                 <li key={`${String(entry.value)}-${index}`}>
-                  {/* Rendered as text content, never as markup: these are imported cell values. */}
+                  {/* Imported values render as text, never markup. */}
                   <span>{String(entry.value ?? '—')}</span> <small>{entry.count}</small>
                 </li>
               ))}

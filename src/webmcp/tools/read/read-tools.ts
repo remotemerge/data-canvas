@@ -2,7 +2,8 @@ import type { Filter } from '@/domain/filter/filter.ts';
 import type { AnalysisQuery, MeasureSpec } from '@/domain/analysis/analysis-query.ts';
 import { relatedDatasetId } from '@/domain/relationship/relationship.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
-import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
+import { PRESERVE_COLUMNS_KEY } from '@/webmcp/results/enforce-output-budget.ts';
+import { TOOL_CONTRACT_VERSION, toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { createGetColumnStatisticsTool } from '@/webmcp/tools/read/get-column-statistics.ts';
 import { createListRelationshipsTool } from '@/webmcp/tools/read/list-relationships.ts';
 import { asInput, boundedCell, failure, invalidEntity, success } from '@/webmcp/tools/tool-helpers.ts';
@@ -10,13 +11,22 @@ import { asInput, boundedCell, failure, invalidEntity, success } from '@/webmcp/
 const filtersFor = (deps: ToolDependencies, datasetId: string): Filter[] =>
   Object.values(deps.getWorkspace().filters).filter((filter) => filter.datasetId === datasetId && filter.enabled);
 
+// Agent aggregates use the same enabled filters as the table and metric reads.
+const analysisFiltersFor = (deps: ToolDependencies, datasetId: string): AnalysisQuery['filters'] =>
+  filtersFor(deps, datasetId).map((filter) => ({
+    kind: 'comparison',
+    columnId: filter.columnId,
+    operator: filter.operator,
+    ...(filter.value === undefined ? {} : { value: filter.value }),
+  }));
+
 export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   createListRelationshipsTool(deps),
   createGetColumnStatisticsTool(deps),
   {
     name: 'get_workspace',
     description:
-      'Summarize the current workspace, its revision, datasets, charts, filters, metrics, and selections without returning row values.',
+      'Summarize the current workspace, its revision, datasets, charts, filters, metrics, and selections without returning row values. Also reports toolContractVersion, which changes when tool argument shapes change.',
     schema: toolSchemas.get_workspace,
     annotations: { readOnlyHint: true },
     needsDataset: false,
@@ -25,6 +35,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const relationships = Object.values(workspace.relationships);
       return success({
         revision: workspace.revision,
+        toolContractVersion: TOOL_CONTRACT_VERSION,
         summary: `Workspace ${workspace.name} has ${Object.keys(workspace.datasets).length} datasets, ${relationships.length} relationships, and ${Object.keys(workspace.visualizations).length} visualizations.`,
         workspaceId: workspace.id,
         datasets: Object.values(workspace.datasets).map(({ id, name, importStatus, rowCount }) => ({
@@ -46,13 +57,25 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
           title,
           kind,
         })),
-        filters: Object.values(workspace.filters).map(({ id, datasetId, columnId, operator, enabled }) => ({
-          id,
-          datasetId,
-          columnId,
-          operator,
-          enabled,
-        })),
+        metrics: Object.values(workspace.metrics),
+        selections: Object.values(workspace.selections),
+        filters: Object.values(workspace.filters).map(
+          ({ id, datasetId, columnId, operator, value, enabled, origin }) => ({
+            id,
+            datasetId,
+            columnId,
+            operator,
+            ...(value === undefined
+              ? {}
+              : {
+                  value: Array.isArray(value)
+                    ? value.map((item) => boundedCell(item as Parameters<typeof boundedCell>[0]))
+                    : boundedCell(value as Parameters<typeof boundedCell>[0]),
+                }),
+            enabled,
+            origin,
+          }),
+        ),
       });
     },
   },
@@ -69,8 +92,10 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const dataset = workspace.datasets[input.datasetId as string];
       if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${String(input.datasetId)}' does not exist.`);
 
-      // Directly related datasets only. Following the graph transitively would return a schema whose
-      // size grows with the workspace, which the output budget would then truncate arbitrarily.
+      const offset = Math.trunc((input.offset as number | undefined) ?? 0);
+      const limit = Math.trunc((input.limit as number | undefined) ?? 5);
+      const columns = dataset.columns.slice(offset, offset + limit);
+      // Page primary columns; only directly related schemas are included when requested.
       const related =
         input.includeRelated === true
           ? Object.values(workspace.relationships)
@@ -94,13 +119,17 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         datasetId: dataset.id,
         name: dataset.name,
         rowCount: dataset.rowCount,
-        columns: dataset.columns.map(({ id, name, logicalType, databaseType, nullable }) => ({
+        columns: columns.map(({ id, name, logicalType, databaseType, nullable }) => ({
           id,
           name,
           logicalType,
           databaseType,
           nullable,
         })),
+        columnsReturned: columns.length,
+        columnsTotal: dataset.columns.length,
+        offset,
+        nextOffset: offset + columns.length < dataset.columns.length ? offset + columns.length : null,
         ...(related.length === 0 ? {} : { related }),
       });
     },
@@ -135,6 +164,13 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         summary: `Returned ${rows.length} of ${result.value.totalRowCount} rows.`,
         columnIds: indexes.map((index) => result.value.columnIds[index]),
         rows,
+        rowsTotal: result.value.totalRowCount,
+        /*
+         * An explicitly requested projection is preserved when the response exceeds the budget: the
+         * agent named these columns, so returning fewer rows keeps the answer usable, whereas dropping
+         * a column forces a second call to recover a field it already asked for.
+         */
+        ...(requested === undefined ? {} : { [PRESERVE_COLUMNS_KEY]: true }),
       });
     },
   },
@@ -151,13 +187,24 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const workspace = deps.getWorkspace();
       const dataset = workspace.datasets[datasetId];
       if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
-      const dimensions = (input.dimensions as string[] | undefined) ?? [];
+      const dimensionInputs =
+        (input.dimensions as
+          | (string | { columnId: string; timeGrain: 'day' | 'week' | 'month' | 'quarter' | 'year' })[]
+          | undefined) ?? [];
+      const dimensions = dimensionInputs.flatMap((dimension) => (typeof dimension === 'string' ? [dimension] : []));
+      const binnedDimensions = dimensionInputs.flatMap((dimension) =>
+        typeof dimension === 'string'
+          ? []
+          : [{ columnId: dimension.columnId, strategy: { kind: 'temporal' as const, unit: dimension.timeGrain } }],
+      );
       const measures = input.measures as MeasureSpec[];
-      const columnIds = [...dimensions, ...measures.flatMap((measure) => (measure.columnId ? [measure.columnId] : []))];
+      const columnIds = [
+        ...dimensions,
+        ...binnedDimensions.map((dimension) => dimension.columnId),
+        ...measures.flatMap((measure) => (measure.columnId ? [measure.columnId] : [])),
+      ];
 
-      // A column may belong to any dataset in the workspace: whether it is actually reachable from
-      // the anchor is the compiler's decision, and it reports `NO_JOIN_PATH` with the unreachable
-      // dataset named. Rejecting non-anchor columns here would mask that better error.
+      // Let the compiler report unreachable columns with NO_JOIN_PATH.
       const known = new Set(
         Object.values(workspace.datasets).flatMap((candidate) => candidate.columns.map((column) => column.id)),
       );
@@ -169,8 +216,9 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         datasetId,
         ...(relationshipIds === undefined ? {} : { relationshipIds }),
         dimensions,
+        ...(binnedDimensions.length === 0 ? {} : { binnedDimensions }),
         measures,
-        filters: [],
+        filters: analysisFiltersFor(deps, dataset.id),
         limit: Math.min((input.limit as number | undefined) ?? 50, 200),
       };
       const result = await deps.executeAnalysis(query);

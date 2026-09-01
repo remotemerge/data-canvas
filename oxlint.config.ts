@@ -10,13 +10,13 @@ export default defineConfig({
     perf: 'warn',
   },
   rules: {
-    // Best Practices
+    // Best practices
     'no-var': 'error',
     eqeqeq: 'error',
     'no-eval': 'error',
     'no-implicit-coercion': 'error',
 
-    // TypeScript
+    // TypeScript rules
     'no-unused-vars': 'error',
     'no-explicit-any': 'warn',
     'consistent-type-imports': 'error',
@@ -26,7 +26,7 @@ export default defineConfig({
     // Restriction rules
     'no-console': 'warn',
 
-    // Disable the rules
+    // Disabled rules
     'prefer-destructuring': 'off',
     'sort-keys': 'off',
     'switch-case-braces': 'off',

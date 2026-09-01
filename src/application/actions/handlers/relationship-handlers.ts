@@ -12,7 +12,7 @@ import {
   validateRelationship,
 } from '@/application/validation/validate-relationship.ts';
 import type { KeyQualityMeasurement } from '@/application/validation/validate-relationship.ts';
-import { relatedDatasetId } from '@/domain/relationship/relationship.ts';
+import { JOIN_KIND_PHRASE, relatedDatasetId } from '@/domain/relationship/relationship.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
@@ -20,14 +20,7 @@ import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 
-/**
- * Creates a governed relationship between two datasets.
- *
- * Structural validation runs first and rejects; the key-quality sample runs second and only warns.
- * The split matters: a type mismatch is a definite error, whereas key duplication measured over a
- * bounded sample is evidence. Refusing on evidence would block legitimate joins over data the sample
- * happened to miss, so the measurement is surfaced in the summary and the relationship is committed.
- */
+// Creates a relationship after structural validation and a bounded key-quality check.
 export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = async (workspace, payload, deps) => {
   const validated = validateRelationship(workspace, payload);
 
@@ -41,8 +34,7 @@ export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = 
     sampleRows: KEY_QUALITY_SAMPLE_ROWS,
   });
 
-  // A key-quality read that fails costs the warning, not the action. The engine may legitimately be
-  // unavailable, and a relationship the user can still inspect beats a refusal they cannot act on.
+  // A failed key-quality read omits the warning but does not block the relationship.
   const measurement: KeyQualityMeasurement | undefined =
     measured.ok && measured.value.distinctKeys > 0
       ? {
@@ -70,17 +62,11 @@ export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = 
       relationships: { ...workspace.relationships, [relationship.id]: relationship },
     },
     changedEntityIds: [relationship.id],
-    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} key column${keys.length === 1 ? '' : 's'} using a ${relationship.join} join.${warning === undefined ? '' : ` ${warning}`}`,
+    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} key column${keys.length === 1 ? '' : 's'} using ${JOIN_KIND_PHRASE[relationship.join]}.${warning === undefined ? '' : ` ${warning}`}`,
   });
 };
 
-/**
- * Removes a relationship.
- *
- * Visualizations whose queries crossed it are left in place. They fail at query time with
- * `NO_JOIN_PATH`, which names the unreachable dataset and is more useful than deleting a chart the
- * user may want to repair by recreating the relationship.
- */
+// Removes a relationship and leaves affected visualizations for the user to repair.
 export const handleRemoveRelationship: ActionHandler<RemoveRelationshipInput> = (workspace, payload) => {
   const relationship = workspace.relationships[payload.relationshipId];
 
@@ -102,7 +88,7 @@ export const handleRemoveRelationship: ActionHandler<RemoveRelationshipInput> = 
   });
 };
 
-/** Everything in the workspace that would be orphaned by removing a dataset. */
+// Workspace entities removed by a dataset cascade.
 interface DatasetDependents {
   visualizationIds: EntityId[];
   filterIds: EntityId[];
@@ -112,12 +98,7 @@ interface DatasetDependents {
   annotationIds: EntityId[];
 }
 
-/**
- * Collects every entity that references a dataset, directly or through a visualization.
- *
- * Annotations are included transitively: they anchor to a visualization, so a chart removed by the
- * cascade would strand them exactly as `visualization.remove` avoids doing.
- */
+// Collects direct and transitive dependents of a dataset.
 const collectDependents = (workspace: Workspace, datasetId: EntityId): DatasetDependents => {
   const visualizationIds = Object.values(workspace.visualizations)
     .filter((visualization) => visualization.datasetId === datasetId || visualization.query.datasetId === datasetId)
@@ -146,13 +127,7 @@ const collectDependents = (workspace: Workspace, datasetId: EntityId): DatasetDe
 const dependentCount = (dependents: DatasetDependents): number =>
   Object.values(dependents).reduce((total, ids) => total + ids.length, 0);
 
-/**
- * Removes a dataset, its DuckDB relation, and — with `cascade` — everything referencing it.
- *
- * Without `cascade` a referenced dataset is refused, with the counts stated. Silent orphaning is the
- * failure mode this exists to prevent: a chart pointing at a dataset that no longer exists renders
- * an error the user cannot explain, and a filter on a missing column is invisible.
- */
+// Removes a dataset and its relation, optionally cascading to dependents.
 export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
@@ -178,15 +153,13 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
     );
   }
 
-  // The relation is dropped before the commit so a failure leaves the dataset in the workspace
-  // rather than leaving workspace metadata describing a relation that is already gone.
+  // Drop the relation before committing metadata so a failure leaves a queryable dataset in place.
   const dropped = await deps.dataEngine.dropDataset(dataset.value.id);
 
   if (!dropped.ok) return dropped;
 
   const { activeDatasetId, ...rest } = workspace;
-  // A removed active dataset hands over to any surviving one rather than clearing: leaving the
-  // workspace with no active dataset would blank the canvas even though data remains.
+  // Keep the canvas populated by selecting a surviving dataset when the active one is removed.
   const nextActive =
     activeDatasetId === dataset.value.id
       ? Object.keys(workspace.datasets).find((id) => id !== dataset.value.id)

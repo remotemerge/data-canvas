@@ -1,184 +1,106 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LuPencil, LuTrash2 } from 'react-icons/lu';
+import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { executeVisualizationQuery, type ChartResult } from '@/application/queries/visualization-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { WorkspaceTable } from '@/table/tanstack/workspace-table.tsx';
-import { buildEChartsOption, type ChartTheme } from '@/visualization/echarts/build-echarts-option.ts';
-import { useECharts } from '@/visualization/echarts/use-echarts.ts';
 import { formatValue } from '@/visualization/formatting.ts';
-import { measureSync } from '@/shared/perf/performance-marks.ts';
-import {
-  categorySelectionFromClick,
-  isAdditiveClick,
-  isSameSelection,
-  rangeSelection,
-  rowMatchesPredicate,
-} from '@/visualization/interaction/chart-events.ts';
-import { propagateSelection } from '@/application/selection/propagate-selection.ts';
 import { LinkModeControl } from '@/ui/canvas/link-mode-control.tsx';
-import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
-import { AnnotationEditor } from '@/ui/canvas/annotation-editor.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
 import { QueryProgress, QuerySkeleton } from '@/ui/components/query-progress.tsx';
 import { SamplingBadge } from '@/ui/components/sampling-badge.tsx';
+import { VisualizationEditor } from '@/ui/canvas/visualization-editor.tsx';
+import { Button } from '@/ui/components/ui/button.tsx';
 
-const readTheme = (): ChartTheme => {
-  const styles = getComputedStyle(document.documentElement);
-  return {
-    text: styles.getPropertyValue('--dc-color-text').trim(),
-    muted: styles.getPropertyValue('--dc-color-text-muted').trim(),
-    border: styles.getPropertyValue('--dc-color-border').trim(),
-    colors: ['--dc-color-accent', '--dc-color-chart-2', '--dc-color-chart-3', '--dc-color-chart-4'].map((token) =>
-      styles.getPropertyValue(token).trim(),
-    ),
-  };
-};
+// ECharts is a large dependency that only chart kinds need, so it loads on first chart render.
+const EChart = lazy(() => import('@/visualization/echart-view.tsx'));
 
-const EChart = ({
-  visualization,
-  result,
-  onError,
-}: {
-  visualization: Visualization;
-  result: ChartResult;
-  onError: (error: DomainError) => void;
-}) => {
-  const actions = useActions();
-  const [annotationAnchor, setAnnotationAnchor] = useState<AnnotationAnchor | null>(null);
-  // Selectors must return a stable reference. `Object.values(...).filter(...)` inside the selector
-  // allocates a new array on every store read, so `useSyncExternalStore` sees a changed snapshot
-  // each render and loops until React throws "Maximum update depth exceeded". The record itself is
-  // stable between mutations, so the derivation belongs in `useMemo` rather than in the selector.
-  const annotationRecord = useWorkspace((state) => state.workspace.annotations);
-  const annotations = useMemo(
-    () => Object.values(annotationRecord).filter((item) => item.visualizationId === visualization.id),
-    [annotationRecord, visualization.id],
-  );
-  const selectionRecord = useWorkspace((state) => state.workspace.selections);
-  // `find` returns an element reference rather than a new object, so this one is already stable —
-  // but it is derived from the record for the same reason, keeping the rule uniform.
-  const selection = useMemo(
-    () => Object.values(selectionRecord).find((item) => item.datasetId === visualization.datasetId),
-    [selectionRecord, visualization.datasetId],
-  );
-  const workspace = useWorkspace((state) => state.workspace);
-  const propagated = propagateSelection(workspace, visualization);
-  // Only `highlight` dims here. `filter` already removed the excluded rows from `result`, so dimming
-  // as well would fade every remaining mark.
-  const highlightPredicate = useMemo(() => {
-    if (propagated.effect !== 'highlight' || propagated.predicate === undefined) return undefined;
+class ChartErrorBoundary extends Component<
+  { children: ReactNode; onError: (error: unknown, errorInfo: ErrorInfo) => void },
+  { failed: boolean }
+> {
+  override state = { failed: false };
 
-    // `key` carries the column ID for dimension columns, which is what a selection predicate
-    // references; measure columns key on their alias and simply never match.
-    const columnIndexById = new Map(result.columns.map((column, index) => [column.key, index]));
-    const predicate = propagated.predicate;
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
 
-    return (rowIndex: number): boolean => {
-      const row = result.rows[rowIndex];
+  override componentDidCatch(error: unknown, errorInfo: ErrorInfo): void {
+    this.props.onError(error, errorInfo);
+  }
 
-      return row === undefined ? true : rowMatchesPredicate(predicate, row, columnIndexById);
-    };
-  }, [propagated.effect, propagated.predicate, result]);
-  const option = useMemo(
-    () =>
-      measureSync('chart-conversion', () =>
-        buildEChartsOption(visualization, result, readTheme(), annotations, highlightPredicate),
-      ),
-    [annotations, highlightPredicate, result, visualization],
-  );
-  const onClick = useCallback(
-    (event: unknown) => {
-      const clicked = event as { value?: unknown[]; name?: unknown };
-      if (Array.isArray(clicked.value) && clicked.value.length >= 2) {
-        setAnnotationAnchor({ kind: 'point', x: clicked.value[0], y: clicked.value[1] });
-      }
-      const predicate = categorySelectionFromClick(visualization, event as never);
-      if (predicate === null) return;
-      // Ctrl/cmd-click adds to the selection; a plain click replaces it, and clicking the current
-      // selection again clears it.
-      if (isAdditiveClick(clicked as { event?: { ctrlKey?: boolean; metaKey?: boolean } })) {
-        void actions.extendSelection({
-          datasetId: visualization.datasetId,
-          mode: 'predicate',
-          predicate,
-          origin: 'chart',
-        });
-        return;
-      }
-      if (isSameSelection(selection?.predicate, predicate))
-        void actions.clearSelection({ datasetId: visualization.datasetId });
-      else
-        void actions.setSelection({
-          datasetId: visualization.datasetId,
-          mode: 'predicate',
-          predicate,
-          origin: 'chart',
-        });
-    },
-    [actions, selection?.predicate, visualization],
-  );
-  const onBrush = useCallback(
-    (event: unknown) => {
-      const areas = (event as { areas?: { coordRange?: unknown[] }[] }).areas;
-      if (areas?.length === 0) {
-        void actions.clearSelection({ datasetId: visualization.datasetId });
-        return;
-      }
-      const range = areas?.[0]?.coordRange;
-      const columnId = visualization.binding.x;
-      if (columnId === undefined || range === undefined || range.length < 2) return;
-      const start = Number(range[0]);
-      const end = Number(range[1]);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-      void actions.setSelection({
-        datasetId: visualization.datasetId,
-        mode: 'predicate',
-        predicate: rangeSelection(columnId, start, end),
-        origin: 'chart',
-      });
-    },
-    [actions, visualization.binding.x, visualization.datasetId],
-  );
-  const ref = useECharts(option, visualization.kind, onClick, onBrush);
-  return (
-    <>
-      <div ref={ref} className="chart-panel__chart" role="img" aria-label={visualization.title} />
-      {annotationAnchor === null ? null : (
-        <AnnotationEditor
-          visualizationId={visualization.id}
-          anchor={annotationAnchor}
-          onClose={() => setAnnotationAnchor(null)}
-          onError={onError}
-        />
-      )}
-    </>
-  );
+  override render(): ReactNode {
+    if (this.state.failed) {
+      return (
+        <div className="chart-panel__error" role="alert">
+          This chart could not be rendered. Remove it or change its configuration.
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Width bucket used to choose temporal granularity.
+const PLOT_WIDTH_QUANTUM = 200;
+
+// Quantized chart width used by the sampling policy.
+const usePlotWidth = (ref: React.RefObject<HTMLDivElement | null>): number | undefined => {
+  const [width, setWidth] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const element = ref.current;
+
+    if (element === null) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const measured = entries[0]?.contentRect.width ?? 0;
+
+      if (measured <= 0) return;
+
+      const quantised = Math.max(Math.round(measured / PLOT_WIDTH_QUANTUM) * PLOT_WIDTH_QUANTUM, PLOT_WIDTH_QUANTUM);
+
+      setWidth((current) => (current === quantised ? current : quantised));
+    });
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return width;
 };
 
 export const ChartPanel = ({
   visualization,
   onError,
+  resizeControls,
 }: {
   visualization: Visualization;
   onError: (error: DomainError) => void;
+  // Layout controls rendered in the chart header.
+  resizeControls?: React.ReactNode;
 }) => {
   const workspace = useWorkspace((state) => state.workspace);
   const actions = useActions();
   const [result, setResult] = useState<ChartResult | null>(null);
   const [error, setError] = useState<DomainError | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const plotWidth = usePlotWidth(bodyRef);
 
   useEffect(() => {
     const controller = new AbortController();
-    // The previous result is deliberately left in place. Clearing it here would blank the canvas for
-    // the duration of every query, which on a multi-second one reads as the chart having broken.
+    // Keep the previous result visible while the next query runs.
     setLoading(true);
-    void executeVisualizationQuery(visualization, workspace, undefined, controller.signal).then((next) => {
+    void executeVisualizationQuery(visualization, workspace, undefined, controller.signal, plotWidth).then((next) => {
       if (controller.signal.aborted) return;
-      // A superseded result carries no rows. Adopting it would replace a good chart with an empty
-      // one, so it is dropped and the newer query's result arrives instead.
+      // Ignore superseded results so they cannot blank the chart.
       if (next.ok && next.value.stale === true) return;
       if (next.ok) {
         setResult(next.value);
@@ -189,7 +111,8 @@ export const ChartPanel = ({
     return () => {
       controller.abort();
     };
-  }, [visualization, workspace.filters, workspace.selections, workspace.revision]);
+    // Quantize width changes so resizing triggers only a few re-queries.
+  }, [visualization, workspace.filters, workspace.selections, workspace.revision, plotWidth]);
 
   const remove = async () => {
     const outcome = await actions.removeVisualization({ visualizationId: visualization.id });
@@ -200,16 +123,37 @@ export const ChartPanel = ({
     <article className="chart-panel">
       <header className="chart-panel__header">
         <h3>
-          {visualization.title}
+          <span className="chart-panel__title">{visualization.title}</span>
           <Provenance entityId={visualization.id} createdBy={visualization.createdBy} />
         </h3>
         <div className="chart-panel__controls">
           <LinkModeControl visualizationId={visualization.id} linkMode={visualization.linkMode} onError={onError} />
-          <button type="button" onClick={() => void remove()}>
-            Remove
-          </button>
+          {/* Table views render dataset rows directly, so they have no binding to rebind. */}
+          {visualization.kind === 'table' ? null : (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Edit ${visualization.title}`}
+              aria-expanded={editing}
+              onClick={() => setEditing(!editing)}
+            >
+              <LuPencil size={15} aria-hidden="true" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove ${visualization.title}`}
+            onClick={() => void remove()}
+          >
+            <LuTrash2 size={15} aria-hidden="true" />
+          </Button>
+          {resizeControls}
         </div>
       </header>
+      {editing ? (
+        <VisualizationEditor visualization={visualization} onError={onError} onDone={() => setEditing(false)} />
+      ) : null}
       {loading && result !== null ? <QueryProgress /> : null}
       {error === null ? null : (
         <div className="chart-panel__error" role="alert">
@@ -217,17 +161,32 @@ export const ChartPanel = ({
         </div>
       )}
       {result?.disclosure === undefined ? null : <SamplingBadge disclosure={result.disclosure} />}
-      {result !== null && result.rows.length === 0 ? (
-        <p className="chart-panel__empty">No data matches current filters.</p>
-      ) : null}
-      {loading && result === null && error === null ? <QuerySkeleton label={visualization.title} /> : null}
-      {result === null || result.rows.length === 0 ? null : visualization.kind === 'kpi' ? (
-        <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>
-      ) : visualization.kind === 'table' ? (
-        <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />
-      ) : (
-        <EChart visualization={visualization} result={result} onError={onError} />
-      )}
+      {/* The body provides chart height and supplies the measured plot width. */}
+      <div ref={bodyRef} className="chart-panel__body">
+        {result !== null && result.rows.length === 0 ? (
+          <p className="chart-panel__empty">No data matches current filters.</p>
+        ) : null}
+        {loading && result === null && error === null ? <QuerySkeleton label={visualization.title} /> : null}
+        {result === null || result.rows.length === 0 ? null : visualization.kind === 'kpi' ? (
+          <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>
+        ) : visualization.kind === 'table' ? (
+          <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />
+        ) : (
+          <ChartErrorBoundary
+            key={`${visualization.id}:${workspace.revision}`}
+            onError={() => {
+              onError({
+                code: 'UNSUPPORTED_OPERATION',
+                message: 'A chart failed to render. Its workspace card remains available for recovery.',
+              });
+            }}
+          >
+            <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
+              <EChart visualization={visualization} result={result} onError={onError} />
+            </Suspense>
+          </ChartErrorBoundary>
+        )}
+      </div>
     </article>
   );
 };

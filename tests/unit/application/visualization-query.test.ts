@@ -3,7 +3,7 @@ import { MAX_CHART_POINTS } from '@/application/queries/sampling-policy.ts';
 import { resolveVisualizationQuery } from '@/application/queries/visualization-query.ts';
 import { salesDataset, visualization, workspaceWithDataset } from './action-fixtures.ts';
 
-/** A workspace with one enabled filter and one predicate selection, both on the sales dataset. */
+// A workspace with one enabled filter and one predicate selection, both on the sales dataset.
 const workspaceWithFilterAndSelection = () => {
   const dataset = salesDataset();
   const workspace = workspaceWithDataset();

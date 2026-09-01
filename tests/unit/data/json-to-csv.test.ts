@@ -37,8 +37,7 @@ describe('jsonToCsvBytes', () => {
   });
 
   test('renders null and missing values as unquoted empty fields, which read back as NULL', () => {
-    // Unquoted matters: DuckDB reads a bare empty field as NULL but `""` as an empty string, so
-    // quoting here would turn every missing value into a present one.
+    // Bare empty fields become NULL; quoted empty fields do not.
     expect(toCsv('[{"a":null,"b":1},{"b":2}]')).toBe('"a","b"\n,"1"\n,"2"\n');
   });
 
@@ -61,7 +60,7 @@ describe('jsonToCsvBytes', () => {
   });
 
   test('encodes a nested object or array rather than dropping it', () => {
-    // The domain has no column type for these, so they land as visible text instead of vanishing.
+    // Nested values become visible JSON text.
     expect(toCsv('[{"meta":{"k":1}}]')).toBe('"meta"\n"{""k"":1}"\n');
     expect(toCsv('[{"tags":["a","b"]}]')).toBe('"tags"\n"[""a"",""b""]"\n');
   });
@@ -70,7 +69,7 @@ describe('jsonToCsvBytes', () => {
     const hostile = '"; DROP TABLE x; --';
     const csv = toCsv(JSON.stringify([{ note: hostile }]));
 
-    // Quoted and doubled, so it is one field rather than extra columns or a statement.
+    // Quote and escape values as one CSV field.
     expect(csv).toBe('"note"\n"""; DROP TABLE x; --"\n');
   });
 
@@ -95,8 +94,7 @@ describe('jsonToCsvBytes', () => {
   });
 
   test('rejects a file wider than the column cap before expanding it', () => {
-    // Bounded here as well as after ingestion, so a pathological file is refused rather than first
-    // being expanded into an enormous in-memory CSV.
+    // Bound output before expanding an in-memory CSV.
     const wide = Object.fromEntries(Array.from({ length: MAX_COLUMN_COUNT + 1 }, (_u, i) => [`c${i}`, i]));
 
     expect(() => jsonToCsvBytes(JSON.stringify([wide]))).toThrow(JsonShapeError);

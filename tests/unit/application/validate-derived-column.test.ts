@@ -17,7 +17,7 @@ const validate = (
   id?: string,
 ) => validateDerivedColumn(dataset, { name, expression, ...(id === undefined ? {} : { id }) }, derived);
 
-/** A left-leaning chain of the requested depth, used to probe the depth cap. */
+// A left-leaning chain of the requested depth, used to probe the depth cap.
 const nest = (depth: number): DerivedExpression =>
   depth <= 1 ? REVENUE : { kind: 'arithmetic', op: 'add', left: nest(depth - 1), right: UNITS };
 

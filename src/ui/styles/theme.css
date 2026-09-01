@@ -1,0 +1,145 @@
+/* Share theme tokens with the ECharts adapter through CSS custom properties. */
+
+:root {
+  color-scheme: light;
+
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-active: #1e40af;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  --accent: #eff6ff;
+  --accent-foreground: #1e40af;
+  --destructive: #dc2626;
+  --destructive-strong: #b91c1c;
+  --destructive-soft: #fef2f2;
+  --destructive-border: #fecaca;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --input: #cbd5e1;
+  --ring: #3b82f6;
+  --workspace: #f4f6f8;
+  --panel: #ffffff;
+  --panel-muted: #f8fafc;
+  --selection: #eff6ff;
+  --selection-foreground: #1e40af;
+  --selection-border: #bfdbfe;
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --info: #0284c7;
+  --info-soft: #f0f9ff;
+  --agent: #7e22ce;
+  --agent-soft: #faf5ff;
+  --agent-border: #e9d5ff;
+  --chart-grid: #e2e8f0;
+  --chart-axis: #cbd5e1;
+  --chart-label: #64748b;
+  --chart-tooltip: #0f172a;
+  --table-header: #f8fafc;
+  --table-hover: #f8fafc;
+  --table-selected: #eff6ff;
+
+  /* Remove compatibility aliases after visualization adapters use semantic tokens. */
+  --dc-color-surface: var(--background);
+  --dc-color-surface-raised: var(--panel);
+  --dc-color-border: var(--border);
+  --dc-color-text: var(--foreground);
+  --dc-color-text-muted: var(--muted-foreground);
+  --dc-color-accent: var(--primary);
+  --dc-color-chart-2: #7c3aed;
+  --dc-color-chart-3: #0891b2;
+  --dc-color-chart-4: #16a34a;
+  --dc-color-chart-5: #ea580c;
+  --dc-color-chart-6: #db2777;
+  --dc-color-chart-7: #9333ea;
+  --dc-color-chart-8: #0d9488;
+  --dc-color-chart-9: #ca8a04;
+  --dc-color-chart-10: #dc2626;
+
+  /* Delta colors reinforce the explicit sign; metric direction remains a user choice. */
+  --dc-color-positive: #15803d;
+  --dc-color-negative: #b91c1c;
+
+  --dc-space-1: 0.25rem;
+  --dc-space-2: 0.5rem;
+  --dc-space-3: 0.75rem;
+  --dc-space-4: 1rem;
+  --dc-space-6: 1.5rem;
+  --dc-space-8: 2rem;
+
+  /*
+   * Canvas row track. Layout heights are row spans, so a card is (span * unit) + gaps: the default
+   * span of 4 lands on the 20rem card floor given the 1rem grid gap.
+   */
+  --dc-layout-row-unit: 4.25rem;
+
+  --dc-radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+
+  --dc-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", roboto, "Helvetica Neue", arial, sans-serif;
+  --dc-font-mono: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
+
+  --dc-text-sm: 0.8125rem;
+  --dc-text-base: 0.8125rem;
+  --dc-text-lg: 1rem;
+
+  --dc-header-height: 3rem;
+  --dc-panel-width: 16rem;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0b0f16;
+  --foreground: #f1f5f9;
+  --card: #141a23;
+  --card-foreground: #f1f5f9;
+  --popover: #141a23;
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-active: #2563eb;
+  --secondary: #19212c;
+  --secondary-foreground: #f1f5f9;
+  --muted: #19212c;
+  --muted-foreground: #94a3b8;
+  --accent: #172554;
+  --accent-foreground: #dbeafe;
+  --border: #273244;
+  --border-strong: #354258;
+  --input: #354258;
+  --workspace: #0e131b;
+  --panel: #141a23;
+  --panel-muted: #19212c;
+  --selection: #172554;
+  --selection-foreground: #dbeafe;
+  --selection-border: #1e3a8a;
+  --destructive-strong: #f87171;
+  --destructive-soft: #2a1618;
+  --destructive-border: #7f3b3b;
+  --agent: #d8b4fe;
+  --agent-soft: #2e1065;
+  --agent-border: #6b21a8;
+  --chart-grid: #273244;
+  --chart-axis: #354258;
+  --chart-label: #94a3b8;
+  --chart-tooltip: #f1f5f9;
+  --table-header: #19212c;
+  --table-hover: #202a37;
+  --table-selected: #172554;
+  --dc-color-positive: #4ade80;
+  --dc-color-negative: #f87171;
+}

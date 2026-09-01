@@ -1,49 +1,21 @@
 /**
- * The single conversion point from Arrow values to plain JavaScript.
+ * Converts DuckDB-Wasm and Arrow values to plain JavaScript values.
  *
- * Every row that leaves the engine passes through here. Centralizing it matters because the table
- * and the charts would otherwise each grow their own handling of `BigInt`, Arrow dates, and
- * timestamps, and would disagree — a value rendered one way in a cell and another on an axis is the
- * class of bug this module exists to prevent.
- *
- * Arrow types are structurally inspected rather than imported. The domain has no Arrow dependency,
- * and the values arriving here are already plain-ish: DuckDB-Wasm hands back `bigint` for integer
- * columns, `Date` for date columns, and numbers or strings elsewhere.
+ * Every row leaving the engine uses this module, so tables and charts share bigint and temporal
+ * conversion rules.
  */
 
-/**
- * The value vocabulary the rest of the application sees.
- *
- * Temporal values become ISO strings rather than `Date` objects: they cross into the store, into
- * chart options, and into agent-facing payloads, and a `Date` serializes inconsistently across
- * those boundaries while an ISO string does not.
- */
+// Values returned to the application. Temporal values use ISO strings for stable serialization.
 export type CellValue = string | number | boolean | null;
 
-/**
- * Beyond this magnitude a `bigint` cannot round-trip through `number`.
- *
- * DuckDB's `BIGINT` range exceeds JavaScript's safe integer range, so a large ID or a summed
- * counter can silently lose its low digits. Rather than corrupt the value, oversized integers
- * become their exact decimal string — readable in a cell, and never wrong.
- */
+// Safe integer limit; larger bigint values remain decimal strings to preserve precision.
 const MAX_EXACT_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_EXACT_INTEGER = BigInt(Number.MIN_SAFE_INTEGER);
 
 const convertBigInt = (value: bigint): CellValue =>
   value > MAX_EXACT_INTEGER || value < MIN_EXACT_INTEGER ? value.toString() : Number(value);
 
-/**
- * Coerces whichever temporal representation DuckDB returned into a `Date`.
- *
- * Arrow does not hand back a uniform shape here. DuckDB-Wasm surfaces `DATE` and `TIMESTAMP`
- * columns as **epoch milliseconds** — a plain `number` for dates and a `bigint` for the wider
- * timestamp range — while some paths yield an actual `Date`. Without this normalization a date
- * column renders as `1732492800000` rather than `2024-11-25`.
- *
- * Returns `null` for anything not interpretable as an instant, so a malformed value becomes an
- * empty cell rather than `Invalid Date`.
- */
+// Normalizes DuckDB temporal values to a `Date`, or `null` when the value is invalid.
 const toDate = (value: unknown): Date | null => {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
 
@@ -56,21 +28,23 @@ const toDate = (value: unknown): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-/**
- * Formats a date-only value.
- *
- * The UTC portion of the ISO string is taken directly. Local-time getters would shift the day
- * backwards for anyone west of UTC, turning `2024-11-25` into `2024-11-24` for half the world.
- */
+// Formats a date-only value in UTC to avoid local-time shifts.
 const toDateString = (value: Date): string => value.toISOString().slice(0, 10);
 
-/**
- * Converts one Arrow cell to a plain JavaScript value.
- *
- * Unrecognized shapes become strings rather than being passed through. An object reaching React or
- * ECharts unconverted would render as `[object Object]` or break a scale; a string is always
- * displayable and always safe, because every consumer renders it as plain text.
- */
+// Decodes a 128-bit little-endian two's complement integer (HugeInt / Decimal128).
+const decodeHugeInt = (view: ArrayBufferView): bigint => {
+  const u32 = new Uint32Array(view.buffer, view.byteOffset, 4);
+  const low = BigInt(u32[0]!) | (BigInt(u32[1]!) << 32n);
+  const highUnsigned = BigInt(u32[2]!) | (BigInt(u32[3]!) << 32n);
+  const isNegative = (u32[3]! & 0x80000000) !== 0;
+  if (isNegative) {
+    const highSigned = highUnsigned - (1n << 64n);
+    return (highSigned << 64n) | low;
+  }
+  return (highUnsigned << 64n) | low;
+};
+
+// Converts one Arrow cell to a JSON-safe scalar.
 export const convertArrowValue = (value: unknown): CellValue => {
   if (value === null || value === undefined) return null;
 
@@ -78,27 +52,33 @@ export const convertArrowValue = (value: unknown): CellValue => {
 
   if (valueType === 'boolean' || valueType === 'string') return value as boolean | string;
 
-  // `NaN` and the infinities have no JSON representation and no meaningful axis position.
+  // NaN and infinities have no JSON representation or useful axis position.
   if (valueType === 'number') return Number.isFinite(value) ? (value as number) : null;
 
   if (valueType === 'bigint') return convertBigInt(value as bigint);
 
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
 
-  // Arrow's binary and list vectors surface as typed arrays; they have no scalar meaning.
-  if (ArrayBuffer.isView(value)) return null;
+  if (ArrayBuffer.isView(value)) {
+    if (value.byteLength === 16) {
+      return convertBigInt(decodeHugeInt(value));
+    }
+    if (value.byteLength === 8) {
+      const i64 = new BigInt64Array(value.buffer, value.byteOffset, 1)[0]!;
+      return convertBigInt(i64);
+    }
+    // 32-bit integer types that DuckDB may emit for aggregate results fitting within INT32.
+    if (value.byteLength === 4) {
+      const i32 = new Int32Array(value.buffer, value.byteOffset, 1)[0]!;
+      return Number(i32);
+    }
+    return null;
+  }
 
   return String(value);
 };
 
-/**
- * Converts a cell using its column's logical type.
- *
- * The type-blind path cannot recognize a temporal value at all when DuckDB returns it as epoch
- * milliseconds — a `DATE` would render as `1732492800000` and a `TIMESTAMP` as a bare number. The
- * logical type is what disambiguates a temporal column from a genuinely numeric one, and what
- * decides whether the result keeps a time component.
- */
+// Converts a cell using its logical type, including temporal epoch values.
 export const convertArrowCell = (value: unknown, logicalType: string): CellValue => {
   if (logicalType === 'date' || logicalType === 'timestamp') {
     if (value === null || value === undefined) return null;
@@ -113,13 +93,7 @@ export const convertArrowCell = (value: unknown, logicalType: string): CellValue
   return convertArrowValue(value);
 };
 
-/**
- * Reads one Arrow table into bounded rows of plain values.
- *
- * Structurally typed against Arrow's `Table` rather than importing it, keeping the Arrow dependency
- * inside the engine. `physicalNames` fixes column order: relying on the Arrow schema's order would
- * couple result shape to whatever DuckDB chose to emit.
- */
+// Reads an Arrow table into bounded plain rows in the requested column order.
 export interface ArrowRowSource {
   numRows: number;
   getChildAt(index: number): { get(index: number): unknown } | null;
@@ -150,13 +124,7 @@ export const readArrowRows = (
   return { rows, rowCount: table.numRows };
 };
 
-/**
- * Reads a single scalar from a one-row, one-column result.
- *
- * `COUNT(*)` returns a `BIGINT`, which arrives as a `bigint`; this is the one place that shape is
- * expected rather than incidental. A row count beyond the safe integer range would already have
- * exhausted browser memory long before, so the numeric coercion is safe here.
- */
+// Reads a scalar from a one-row, one-column result.
 export const readScalarCount = (table: ArrowRowSource): number => {
   if (table.numRows === 0) return 0;
 

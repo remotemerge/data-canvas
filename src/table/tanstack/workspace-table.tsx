@@ -1,7 +1,7 @@
 import { useTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createTableColumns, workspaceTableFeatures } from '@/table/tanstack/table-columns.ts';
+import { columnAlignment, createTableColumns, workspaceTableFeatures } from '@/table/tanstack/table-columns.ts';
 import { useTableWindow } from '@/table/tanstack/use-table-window.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { SortSpec } from '@/domain/analysis/analysis-query.ts';
@@ -14,23 +14,10 @@ const WINDOW_SIZE = 500;
 const ROW_HEIGHT = 34;
 const EMPTY_SORT: SortSpec[] = [];
 
-/**
- * Rows rendered beyond the viewport.
- *
- * Measured against the 1M-row fixture rather than picked: below roughly 20 rows a fast scroll
- * outruns the render and shows blank bands, while above it the extra DOM costs more per frame than
- * the smoothness is worth. Each overscanned row is a full row of cells, so this multiplies by the
- * column count.
- */
+// Number of extra rows rendered beyond the viewport.
 const OVERSCAN_ROWS = 20;
 
-/**
- * How close to a window edge scrolling gets before the next window is fetched.
- *
- * Without it the fetch only starts once the boundary is crossed, so the rows immediately after it
- * are always blank for one round trip. Fetching a fifth of a window early hides that latency behind
- * the scroll that is already in progress.
- */
+// Fetches the next window before scrolling reaches its edge.
 const PREFETCH_MARGIN = Math.floor(WINDOW_SIZE / 5);
 
 export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Element => {
@@ -70,6 +57,8 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
     manualPagination: true,
     rowCount: state.window?.totalRowCount ?? dataset.rowCount ?? 0,
   });
+  // Resolve the row model once per render rather than once per visible row.
+  const rows = table.getRowModel().rows;
   const total = state.window?.totalRowCount ?? dataset.rowCount ?? 0;
   const virtualizer = useVirtualizer({
     count: total,
@@ -80,8 +69,7 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
   const virtualRows = virtualizer.getVirtualItems();
   const firstVisible = virtualRows[0]?.index ?? 0;
   const lastVisible = virtualRows[virtualRows.length - 1]?.index ?? firstVisible;
-  // The window is chosen from whichever edge is closer to leaving the current one, so scrolling in
-  // either direction triggers the fetch before the blank rows would appear.
+  // Fetch when either edge of the current window is close.
   const anchor = lastVisible + PREFETCH_MARGIN >= offset + WINDOW_SIZE ? lastVisible + PREFETCH_MARGIN : firstVisible;
   const wantedOffset = Math.max(Math.floor(anchor / WINDOW_SIZE) * WINDOW_SIZE, 0);
   useEffect(() => setOffset(wantedOffset), [wantedOffset]);
@@ -111,29 +99,38 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
             <thead>
               {table.getHeaderGroups().map((group) => (
                 <tr key={group.id}>
-                  {group.headers.map((header, index) => (
-                    <th key={header.id}>
-                      <SortControls
-                        column={dataset.columns[index] as NonNullable<(typeof dataset.columns)[number]>}
-                        sort={sort}
-                        onChange={(next) => void setTableSort({ datasetId: dataset.id, sort: next })}
-                      />
-                    </th>
-                  ))}
+                  {group.headers.map((header, index) => {
+                    // Columns are generated from dataset.columns, so indexes align.
+                    const column = dataset.columns[index];
+
+                    return column === undefined ? null : (
+                      <th key={header.id} data-align={columnAlignment(column)}>
+                        <SortControls
+                          column={column}
+                          sort={sort}
+                          onChange={(next) => void setTableSort({ datasetId: dataset.id, sort: next })}
+                        />
+                      </th>
+                    );
+                  })}
                 </tr>
               ))}
             </thead>
             <tbody style={{ height: virtualizer.getTotalSize() }}>
               {virtualRows.map((virtualRow) => {
-                const row = table.getRowModel().rows[virtualRow.index - offset];
+                const row = rows[virtualRow.index - offset];
                 if (row === undefined) return null;
                 return (
                   <tr key={virtualRow.key} style={{ transform: `translateY(${virtualRow.start}px)` }}>
-                    {row.getAllCells().map((cell) => (
-                      <td key={cell.id}>
-                        <table.FlexRender cell={cell} />
-                      </td>
-                    ))}
+                    {row.getAllCells().map((cell, index) => {
+                      const column = dataset.columns[index];
+
+                      return (
+                        <td key={cell.id} {...(column === undefined ? {} : { 'data-align': columnAlignment(column) })}>
+                          <table.FlexRender cell={cell} />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}

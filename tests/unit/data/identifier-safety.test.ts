@@ -18,8 +18,7 @@ describe('createRelationName', () => {
   });
 
   test('is stable for the same dataset id', () => {
-    // Re-deriving must return the same relation. A fresh name per call would orphan the relation
-    // that was actually created and leave every later query pointing at nothing.
+    // Re-deriving must return the existing relation name.
     const id = 'ds_7f98c3a1-4b2e-4c1d-9a0f-1234567890ab';
 
     expect(createRelationName(id)).toBe(createRelationName(id));
@@ -33,8 +32,7 @@ describe('createRelationName', () => {
   });
 
   test('stays within the allowlist even for an id with no hex characters', () => {
-    // The padding branch: a short or non-hex id must still produce a conforming identifier rather
-    // than a bare `dataset_`.
+    // Short or non-hex IDs still produce a conforming identifier.
     const relation = createRelationName('ds_zzzz');
 
     expect(isSafeIdentifier(relation)).toBe(true);
@@ -42,14 +40,13 @@ describe('createRelationName', () => {
   });
 
   test('the id prefix does not bleed into the relation name', () => {
-    // `ds_` ends in a hex character, so a naive strip would shift every name by one and make the
-    // identifier depend on the prefix's spelling rather than on the UUID.
+    // Drop the ds_ prefix before filtering ID characters.
     expect(createRelationName('ds_abcdef012345')).toBe('dataset_abcdef012345');
     expect(createRelationName('abcdef012345')).toBe('dataset_abcdef012345');
   });
 
   test('a hostile filename cannot influence the relation name', () => {
-    // The property the whole module exists for. The filename is never an input here at all.
+    // Filenames never enter relation-name generation.
     const relation = createRelationName('ds_abcdef01-2345-6789-abcd-ef0123456789');
 
     expect(relation).not.toContain('DROP');
@@ -74,8 +71,7 @@ describe('virtualImportPath', () => {
   });
 
   test('refuses a name outside the allowlist', () => {
-    // DuckDB's readers take the path as a string literal, so a filename-derived path would be an
-    // injection surface that identifier quoting does not cover.
+    // Virtual paths cannot derive from filenames.
     for (const hostile of ["x'); DROP TABLE y; --", '../../etc/passwd', 'Q4 sales.csv', '']) {
       expect(() => virtualImportPath(hostile)).toThrow();
     }
@@ -122,8 +118,7 @@ describe('quoteIdentifier', () => {
   });
 
   test('the thrown message does not echo the rejected identifier', () => {
-    // Identifiers can originate from imported file content, and error text must stay free of
-    // dataset-derived values.
+    // Error text must not include imported identifiers.
     const secret = 'alice_at_example_com';
 
     try {

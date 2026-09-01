@@ -1,6 +1,6 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 
-/** Window transformations over the aggregate. Each variant names only the columns it needs. */
+// Window transformations supported by metric creation.
 const modifier = {
   oneOf: [
     { type: 'object', properties: { kind: { const: 'none' } }, required: ['kind'], additionalProperties: false },

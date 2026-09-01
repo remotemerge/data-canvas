@@ -1,0 +1,1937 @@
+@import "tailwindcss";
+@import "./theme.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-workspace: var(--workspace);
+  --color-panel: var(--panel);
+  --color-panel-muted: var(--panel-muted);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--dc-color-surface);
+  color: var(--dc-color-text);
+  font-family: var(--dc-font-sans);
+  font-size: var(--dc-text-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--dc-color-accent);
+  outline-offset: 2px;
+}
+
+:where(button:not([class]), input:not([class]), select:not([class]), textarea:not([class])) {
+  min-height: 2rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+:where(input:not([class]), select:not([class]), textarea:not([class])) {
+  width: 100%;
+  padding-inline: var(--dc-space-2);
+}
+
+:where(button:not([class])) {
+  padding-inline: var(--dc-space-3);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+:where(button:not([class])):hover:not(:disabled) {
+  background: var(--secondary);
+}
+
+:where(label) {
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(small) {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+
+/*
+ * Card shell. The heading band and the field row are separate blocks: when the title shared the
+ * wrapping flex row with the controls it competed with them for space, so the fields wrapped around
+ * a text column instead of aligning.
+ */
+.visualization-builder {
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+}
+
+.visualization-builder__header {
+  padding: var(--dc-space-3) var(--dc-space-4);
+  border-bottom: 1px solid var(--dc-color-border);
+}
+
+.visualization-builder__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--dc-space-3);
+  padding: var(--dc-space-4);
+}
+
+.visualization-builder h2,
+.visualization-builder p,
+.chart-panel h3 {
+  margin: 0;
+}
+
+.visualization-builder__header p {
+  margin-top: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.visualization-builder label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.visualization-builder input,
+.visualization-builder select,
+.visualization-builder button,
+.chart-panel button {
+  min-height: 2rem;
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: var(--dc-color-surface);
+  color: var(--dc-color-text);
+}
+
+.visualization-builder__hint {
+  flex-basis: 100%;
+  color: var(--dc-color-text-muted);
+}
+
+.visualization-grid,
+.metric-grid {
+  display: grid;
+  gap: var(--dc-space-4);
+  margin-block: var(--dc-space-4);
+}
+
+.metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.visualization-grid__item {
+  min-height: 20rem;
+}
+
+.chart-panel,
+.metric-card {
+  height: 100%;
+  padding: var(--dc-space-4);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+}
+
+/* Let the chart fill the space left by the card header and badges. */
+.chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+}
+
+/* Let the card body shrink below its content height. */
+.chart-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-panel__header {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--dc-space-2);
+  justify-content: space-between;
+}
+
+/* Keep the title and provenance disclosure on one line. */
+.chart-panel__header h3 {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--dc-space-2);
+}
+
+/* Truncate long titles so the controls retain room. */
+.chart-panel__title {
+  min-width: 4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Let provenance yield space before the chart title. */
+.provenance {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--dc-space-1);
+}
+
+.provenance details {
+  position: relative;
+  font-weight: 400;
+}
+
+.provenance summary {
+  color: var(--muted-foreground);
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+/* Float history details so opening them does not resize the chart. */
+.provenance details[open] > :not(summary) {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + var(--dc-space-1));
+  left: 0;
+  width: max-content;
+  max-width: 20rem;
+  margin: 0;
+  padding: var(--dc-space-2) var(--dc-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 8%);
+  color: var(--popover-foreground);
+  font-size: var(--dc-text-sm);
+  list-style-position: inside;
+}
+
+.chart-panel__controls {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  margin-left: auto;
+  gap: var(--dc-space-2);
+}
+
+@container (max-width: 30rem) {
+  .chart-panel__header h3 {
+    flex-basis: 100%;
+  }
+
+  .chart-panel__title {
+    min-width: 0;
+  }
+}
+
+/* Hide the link-mode label on narrow cards so the title retains space. */
+@container (max-width: 30rem) {
+  .chart-panel .link-mode-control__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Let ECharts fill the chart body while retaining its readability floor. */
+.chart-panel__chart {
+  flex: 1;
+  width: 100%;
+  min-height: 20rem;
+}
+
+.chart-panel__badge,
+.chart-panel__loading {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+/* Keep the sampling badge with the chart; its border indicates metadata, not an error. */
+.sampling-badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  cursor: help;
+}
+
+/* Keep the full sampling explanation available to assistive technology. */
+.sampling-badge__explanation {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.query-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.query-progress__spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--dc-color-border);
+  border-top-color: var(--dc-color-accent);
+  border-radius: 50%;
+  animation: dc-spin 0.8s linear infinite;
+}
+
+/* Reserve chart space while rows load. */
+.query-skeleton {
+  display: grid;
+  align-content: end;
+  gap: var(--dc-space-2);
+  width: 100%;
+  min-height: 16rem;
+  padding: var(--dc-space-4);
+}
+
+.query-skeleton__bar {
+  height: 1.5rem;
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  animation: dc-pulse 1.4s ease-in-out infinite;
+}
+
+.query-skeleton__bar:nth-child(2) {
+  width: 70%;
+  animation-delay: 0.2s;
+}
+
+.query-skeleton__bar:nth-child(3) {
+  width: 45%;
+  animation-delay: 0.4s;
+}
+
+@keyframes dc-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes dc-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Disable decorative motion for reduced-motion users. */
+@media (prefers-reduced-motion: reduce) {
+  .query-progress__spinner,
+  .query-skeleton__bar {
+    animation: none;
+  }
+}
+
+.chart-panel__kpi,
+.metric-card strong {
+  display: block;
+  margin-top: var(--dc-space-4);
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Color reinforces the signed delta; it does not carry meaning alone. */
+.metric-card__value[data-tone="positive"] {
+  color: var(--dc-color-positive);
+}
+
+.metric-card__value[data-tone="negative"] {
+  color: var(--dc-color-negative);
+}
+
+/* Keep the annotation editor within the chart panel. */
+.annotation-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-3);
+  padding-top: var(--dc-space-3);
+  border-top: 1px solid var(--dc-color-border);
+  min-width: 0;
+}
+
+.annotation-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+/* Rebinding form inside a chart card, laid out like the annotation editor above it. */
+.visualization-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-3);
+  padding-top: var(--dc-space-3);
+  border-top: 1px solid var(--dc-color-border);
+  min-width: 0;
+}
+
+.visualization-editor h4 {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+}
+
+.visualization-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.visualization-editor small,
+.visualization-editor__hint {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.annotation-list h4 {
+  margin: 0;
+  font-size: var(--dc-text-sm);
+}
+
+.annotation-list ul {
+  display: grid;
+  gap: var(--dc-space-1);
+  margin: var(--dc-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.annotation-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  font-size: var(--dc-text-sm);
+}
+
+.metric-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-4);
+  padding-top: var(--dc-space-3);
+  border-top: 1px solid var(--dc-color-border);
+  text-align: left;
+}
+
+.metric-editor h3 {
+  margin: 0;
+  font-size: var(--dc-text-base);
+}
+
+.metric-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.metric-editor small {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+@media (max-width: 70rem) {
+  .visualization-grid {
+    display: block;
+  }
+  .visualization-grid__item {
+    margin-bottom: var(--dc-space-4);
+  }
+}
+
+/* Keep the optional update prompt from leaving an empty grid row. */
+/* Keep the workspace within the viewport so the table's window stays bounded. */
+.workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.workspace__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dc-space-4);
+  height: var(--dc-header-height);
+  padding-inline: var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-color-border);
+  background: var(--dc-color-surface-raised);
+}
+
+.workspace__title {
+  margin: 0;
+  font-size: var(--dc-text-lg);
+  font-weight: 600;
+}
+
+.workspace__identity,
+.workspace__header-status,
+.workspace__actions,
+.undo-redo-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--dc-space-1);
+}
+
+.workspace__identity {
+  gap: var(--dc-space-2);
+}
+
+.workspace__mobile-actions {
+  display: grid;
+  gap: var(--dc-space-2);
+}
+
+.workspace__mobile-actions .undo-redo-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.workspace__brand-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.workspace__brand {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.workspace__title {
+  max-width: 16rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badge the revision so it reads as workspace metadata rather than part of the title. */
+.workspace__revision {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.agent-status,
+.agent-created-badge {
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-status[data-active="true"],
+.agent-created-badge {
+  border-color: var(--agent-border);
+  background: var(--agent-soft);
+  color: var(--agent);
+}
+
+.agent-created-badge {
+  margin-left: var(--dc-space-2);
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+/* Let the middle grid track shrink below the table's intrinsic width. */
+/* Let the workspace row grow with its tallest panel so controls remain reachable. */
+.workspace__body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: var(--dc-panel-width) minmax(0, 1fr) var(--dc-panel-width);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Scroll panels when their contents exceed the available height. */
+.workspace__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-4);
+  padding: var(--dc-space-4);
+  border-right: 1px solid var(--dc-color-border);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.workspace__panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-4);
+}
+
+/* Add dividers between panel groups without separating headings from their content. */
+.workspace__panel-content > *:not(.workspace__panel-heading) + section,
+.workspace__panel-content > * + .workspace__panel-heading {
+  border-top: 1px solid var(--dc-color-border);
+  padding-top: var(--dc-space-4);
+}
+
+.workspace__panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted-foreground);
+}
+
+.workspace__panel--right {
+  border-right: 0;
+  border-left: 1px solid var(--dc-color-border);
+}
+
+/* Keep the destructive action after cancel in the dialog. */
+.workspace__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--dc-space-2);
+}
+
+/* Center section dividers within the surrounding spacing. */
+.settings {
+  display: grid;
+  gap: var(--dc-space-4);
+  align-content: start;
+}
+
+/* Add dividers between settings sections, not above the first. */
+.settings > * + * {
+  border-top: 1px solid var(--dc-color-border);
+  padding-top: var(--dc-space-4);
+}
+
+/* Do not apply the inspector's bottom anchoring inside the settings sheet. */
+.settings .privacy-notice {
+  margin-top: 0;
+}
+
+.privacy-notice {
+  margin-top: auto;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.privacy-notice p {
+  margin: 0 0 var(--dc-space-2);
+}
+
+.workspace__panel-heading {
+  margin: 0 0 var(--dc-space-3);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.workspace__canvas {
+  display: flex;
+  flex-direction: column;
+  /* Stretch canvas content to the available width. */
+  align-items: stretch;
+  /* Start canvas content at the top so preview tables grow downward. */
+  justify-content: flex-start;
+  gap: var(--dc-space-4);
+  padding: var(--dc-space-4);
+  background: var(--workspace);
+  /* Keep the canvas as the bounded chart-and-table region. */
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Let the chart region use the space left by the data panel, scrolling once charts outgrow it. */
+.workspace__views {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * Items span row tracks (grid-row: span N), so each track is a fixed unit rather than a fraction of
+ * the region. Fractional tracks resolved against this scroll container's collapsed height, which
+ * sized a span-4 card far taller than the region and clipped its axis and legend. The grid now grows
+ * to its content and .workspace__views scrolls once the cards outgrow the region.
+ */
+.workspace__views > .visualization-grid {
+  flex: none;
+  min-height: 100%;
+  margin-bottom: 0;
+  /* A span-4 item, the default height, resolves to the 20rem card floor. */
+  grid-auto-rows: var(--dc-layout-row-unit);
+  /* Rows keep their unit height instead of stretching to fill leftover region height. */
+  align-content: start;
+}
+
+/*
+ * A lone chart has no siblings to scroll past, so it stretches into the region instead. The height
+ * must be definite for the fractional track to resolve against the region rather than the content.
+ */
+.workspace__views > .visualization-grid:has(> .visualization-grid__item:only-child) {
+  height: 100%;
+  grid-auto-rows: minmax(var(--dc-layout-row-unit), 1fr);
+  align-content: stretch;
+}
+
+/* Rows carry the height, so the item tracks its span rather than its content. */
+.workspace__views .visualization-grid__item {
+  min-height: 0;
+}
+
+/* A lower floor than the standalone chart, so one still fits beside an open data panel. */
+.workspace__views .chart-panel__chart {
+  min-height: 9rem;
+}
+
+/* Keep status banners compact instead of stretching across the canvas. */
+.workspace__canvas > .engine-status,
+.workspace__canvas > .action-error {
+  align-self: center;
+}
+
+.data-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Keep the data panel at its own height in the flex column. */
+  flex: none;
+}
+
+/* Let the table fill remaining space when no chart exists. */
+.data-panel[data-fills="true"] {
+  flex: 1;
+}
+
+.workspace__views[data-empty="true"] {
+  flex: none;
+  overflow: visible;
+}
+
+.data-panel[data-collapsed="true"] {
+  height: auto;
+}
+
+/* The bar carries the boundary between the canvas and the table. */
+.data-panel__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: var(--dc-space-1);
+  border-top: 1px solid var(--dc-color-border);
+  margin-inline: calc(var(--dc-space-4) * -1);
+  padding-inline: var(--dc-space-4);
+}
+
+/* The title bar already separates the row count from the table. */
+.data-panel__body .data-table__status {
+  margin-bottom: 0;
+}
+
+.data-panel__title {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+}
+
+.data-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Center placeholders within their regions. */
+.workspace__canvas > .workspace__empty,
+.workspace__views > .workspace__empty {
+  margin-block: auto;
+  margin-inline: auto;
+  text-align: center;
+}
+
+/* Leave space below the builder before its placeholder. */
+.workspace__views > .workspace__empty {
+  padding-top: var(--dc-space-6);
+}
+
+/* Keep the side-panel placeholder left-aligned. */
+.workspace__empty {
+  max-width: 32rem;
+  color: var(--dc-color-text-muted);
+}
+
+.workspace__empty-icon {
+  margin: 0 auto var(--dc-space-3);
+  color: var(--muted-foreground);
+}
+
+.workspace__empty .import {
+  max-width: 12rem;
+  margin: var(--dc-space-4) auto 0;
+}
+
+.workspace__empty-title {
+  margin: 0 0 var(--dc-space-2);
+  color: var(--dc-color-text);
+  font-size: var(--dc-text-lg);
+  font-weight: 600;
+}
+
+.density__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dc-space-2);
+}
+
+.density__option {
+  /* Match the height of the surrounding controls. */
+  min-height: 2rem;
+  padding: var(--dc-space-1) var(--dc-space-3);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.density__option:hover {
+  color: var(--dc-color-text);
+  border-color: var(--dc-color-accent);
+}
+
+.density__option[aria-pressed="true"] {
+  border-color: var(--dc-color-accent);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text);
+}
+
+.density__value {
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+/*
+ * Cap the list at roughly four entries and scroll the rest so activity cannot push the inspector
+ * controls below the fold.
+ */
+.history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+  /* Keep the scrollbar clear of the entry text. */
+  padding-right: var(--dc-space-2);
+}
+
+/* Add dividers between history entries, not after the last one. */
+.history__entry:not(:last-child) {
+  padding-bottom: var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-color-border);
+}
+
+.history__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+}
+
+.history__actor {
+  padding: 0 var(--dc-space-2);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Use actor color to make history entries scannable. */
+.history__actor--human {
+  color: var(--dc-color-accent);
+}
+
+.history__actor--agent {
+  color: var(--agent);
+}
+
+.history__actor--system {
+  color: var(--dc-color-text-muted);
+}
+
+.history__revision {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.history__summary {
+  margin: var(--dc-space-1) 0 0;
+  font-size: var(--dc-text-sm);
+}
+
+.action-error {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-3);
+  padding: var(--dc-space-3) var(--dc-space-4);
+  width: 100%;
+  max-width: 40rem;
+  border: 1px solid var(--destructive-border);
+  border-radius: var(--dc-radius);
+  background: var(--destructive-soft);
+}
+
+.action-error__code {
+  color: var(--destructive-strong);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.action-error__message {
+  flex: 1;
+  font-size: var(--dc-text-sm);
+}
+
+.action-error__dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.engine-status {
+  padding: var(--dc-space-2) var(--dc-space-4);
+  width: 100%;
+  max-width: 40rem;
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  text-align: center;
+}
+
+.engine-status--failed {
+  border-color: var(--destructive-border);
+  background: var(--destructive-soft);
+  color: var(--destructive-strong);
+}
+
+/* Keep the native file input focusable beneath the styled button. */
+.import__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.import__button {
+  padding: var(--dc-space-2) var(--dc-space-4);
+  width: 100%;
+  border: 1px solid var(--dc-color-accent);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  color: var(--dc-color-text);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.import__button:disabled {
+  border-color: var(--dc-color-border);
+  color: var(--dc-color-text-muted);
+  cursor: not-allowed;
+}
+
+.import__hint {
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.import__progress {
+  display: grid;
+  gap: var(--dc-space-1);
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.import__progress-bar {
+  width: 100%;
+  height: 0.375rem;
+}
+
+.dataset-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dataset-list__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--dc-space-2);
+  padding: var(--dc-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--dc-radius);
+}
+
+.dataset-list__item[data-active="true"] {
+  border-color: var(--dc-color-accent);
+  background: var(--dc-color-surface-raised);
+}
+
+.dataset-list__select {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  min-width: 0;
+  grid-column: 1 / -1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dataset-list__select:disabled {
+  color: var(--dc-color-text-muted);
+  cursor: not-allowed;
+}
+
+/* Truncate long filenames within the panel. */
+.dataset-list__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dataset-list__rows,
+.dataset-list__status {
+  flex: none;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.dataset-list__rows {
+  font-family: var(--dc-font-mono);
+}
+
+.dataset-list__status[data-status="error"] {
+  color: var(--destructive-strong);
+}
+
+.dataset-list__remove {
+  flex: none;
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.dataset-list__remove:hover {
+  border-color: var(--destructive-border);
+  color: var(--destructive-strong);
+}
+
+/* Keep cascade details visible in the confirmation. */
+.dataset-list__warning {
+  flex-basis: 100%;
+  margin: var(--dc-space-1) 0 0;
+  color: var(--destructive-strong);
+  font-size: var(--dc-text-sm);
+}
+
+.relationship-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+}
+
+.relationship-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.relationship-editor select,
+.relationship-editor button {
+  min-height: 2rem;
+  min-width: 0;
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: var(--dc-color-surface);
+  color: var(--dc-color-text);
+  font: inherit;
+}
+
+.relationship-editor button:disabled {
+  color: var(--dc-color-text-muted);
+  cursor: not-allowed;
+}
+
+.relationship-editor__hint,
+.relationship-editor__notice,
+.relationship-editor__reason,
+.relationship-editor__suggestions-note {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+/* Keep fan-out warnings prominent. */
+.relationship-editor__notice {
+  color: var(--dc-color-accent);
+}
+
+.relationship-editor__suggestions h3 {
+  margin: var(--dc-space-3) 0 var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.relationship-editor__suggestions ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: var(--dc-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relationship-editor__suggestions li {
+  display: grid;
+  gap: var(--dc-space-1);
+}
+
+.relationship-graph__canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.relationship-graph__edge {
+  stroke: var(--dc-color-border);
+  stroke-width: 1.5;
+}
+
+/* Use a dashed line for left joins that retain unmatched rows. */
+.relationship-graph__edge[data-join="left"] {
+  stroke-dasharray: 4 3;
+}
+
+.relationship-graph__node circle {
+  fill: var(--dc-color-surface-raised);
+  stroke: var(--dc-color-accent);
+  stroke-width: 1.5;
+}
+
+.relationship-graph__node text {
+  fill: var(--dc-color-text-muted);
+  font-size: 11px;
+}
+
+.relationship-graph__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: var(--dc-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--dc-text-sm);
+}
+
+.relationship-graph__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+}
+
+.relationship-graph__meta {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+}
+
+.relationship-graph__list button {
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+}
+
+.link-mode-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+}
+
+.link-mode-control__label {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+/* Match the select height to adjacent icon buttons. */
+.link-mode-control__select {
+  height: 2rem;
+  padding: 0 var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: calc(var(--dc-radius) / 2);
+  background: transparent;
+  color: var(--dc-color-text);
+  font: inherit;
+  font-size: var(--dc-text-sm);
+}
+
+.selection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dc-space-2);
+}
+
+.selection-summary__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dc-space-2);
+  padding: var(--dc-space-1) var(--dc-space-2);
+  border: 1px solid var(--dc-color-accent);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+  font-size: var(--dc-text-sm);
+}
+
+/* Truncate selected values so header controls retain space. */
+.selection-summary__text {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selection-summary__clear {
+  border: 0;
+  background: transparent;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-base);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.selection-summary__clear:hover {
+  color: var(--dc-color-text);
+}
+
+.update-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-3);
+  padding: var(--dc-space-2) var(--dc-space-4);
+  border-bottom: 1px solid var(--dc-color-border);
+  background: var(--dc-color-surface-raised);
+  font-size: var(--dc-text-sm);
+}
+
+/* Align form actions and allow them to wrap in narrow panels. */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-3);
+}
+
+.schema__summary {
+  margin: 0 0 var(--dc-space-3);
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.schema__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Keep column rows compact; detailed type and statistics appear in the profile. */
+.schema__column {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--dc-space-2);
+  padding-block: 0.1875rem;
+  border-radius: calc(var(--dc-radius) / 2);
+  font-size: var(--dc-text-sm);
+}
+
+.schema__column:hover {
+  background: var(--dc-color-surface-raised);
+}
+
+.schema__glyph {
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.schema__glyph[data-logical-type="number"] {
+  color: var(--dc-color-accent);
+}
+
+/* Keep type text accessible when the glyph conveys it visually. */
+.schema__type-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Bound imported column names within the table. */
+.schema__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reveal row actions on hover or focus to reduce visual noise. */
+.schema__profile-toggle {
+  padding: 0 var(--dc-space-2);
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: none;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.schema__column:hover .schema__profile-toggle,
+.schema__profile-toggle:focus-visible,
+.schema__profile-toggle[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* Let an expanded profile span the row beneath its column. */
+/* Span the expanded profile across all grid tracks. */
+.column-profile,
+.column-profile__status {
+  grid-column: 1 / -1;
+  margin: var(--dc-space-2) 0 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.column-profile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--dc-space-1) var(--dc-space-3);
+  padding: var(--dc-space-3);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface);
+}
+
+.column-profile dt {
+  color: var(--dc-color-text-muted);
+}
+
+.column-profile dd {
+  margin: 0;
+  color: var(--dc-color-text);
+  font-family: var(--dc-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.column-profile__values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Truncate frequent values within their list. */
+.column-profile__values li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  overflow-wrap: anywhere;
+}
+
+.column-profile__values small {
+  color: var(--dc-color-text-muted);
+}
+
+.derived-column-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+}
+
+.derived-column-editor h3 {
+  margin: 0;
+  font-size: var(--dc-text-base);
+}
+
+.derived-column-editor p,
+.derived-column-editor small,
+.derived-column-editor__hint {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.derived-column-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.derived-column-editor button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.derived-column-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--dc-text-sm);
+}
+
+.derived-column-editor__list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+  overflow-wrap: anywhere;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.preview__caption {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.preview__scroll {
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  overflow: auto;
+  max-height: 60vh;
+}
+
+.preview__table {
+  border-collapse: collapse;
+  font-size: var(--dc-text-sm);
+  white-space: nowrap;
+}
+
+.preview__table th,
+.preview__table td {
+  padding: var(--dc-space-2) var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-color-border);
+  text-align: left;
+  /* Prevent one imported cell value from widening the table. */
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--dc-color-surface-raised);
+  font-weight: 600;
+}
+
+.data-table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.data-table__status {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--dc-space-2);
+  color: var(--dc-color-text-muted);
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+/* Follow the resized panel while retaining a readable minimum height. */
+.data-table__viewport {
+  flex: 1;
+  min-height: 8rem;
+  overflow: auto;
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+}
+
+.data-table__table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--dc-text-sm);
+}
+
+.data-table__table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dc-color-surface-raised);
+}
+
+.data-table__table tbody {
+  position: relative;
+  display: block;
+}
+
+.data-table__table tr {
+  display: flex;
+  width: 100%;
+}
+
+.data-table__table tbody tr {
+  position: absolute;
+  left: 0;
+  height: 34px;
+}
+
+.data-table__table th,
+.data-table__table td {
+  flex: 1 0 12rem;
+  padding: var(--dc-space-2) var(--dc-space-3);
+  overflow: hidden;
+  border-bottom: 1px solid var(--dc-color-border);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table__sort {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Right-align numeric values and use tabular figures for comparison. */
+.data-table__table th[data-align="end"],
+.data-table__table td[data-align="end"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Let the header control define the column alignment. */
+.data-table__table th[data-align="end"] .data-table__sort {
+  width: 100%;
+  text-align: right;
+}
+
+.filter-editor,
+.filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+}
+
+.filter-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  font-size: var(--dc-text-sm);
+}
+
+.filter-editor select,
+.filter-editor input,
+.filter-editor button,
+.filter-list button {
+  min-width: 0;
+  font: inherit;
+}
+
+.filter-list {
+  margin: var(--dc-space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.filter-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dc-space-2);
+}
+
+.filter-list button,
+.dataset-list__remove,
+.derived-column-editor__list button {
+  white-space: nowrap;
+}
+
+/* Map existing component hooks to semantic theme tokens. */
+.workspace__panel,
+.chart-panel,
+.metric-card,
+.visualization-builder {
+  box-shadow: none;
+}
+
+.chart-panel,
+.metric-card,
+.visualization-builder {
+  background: var(--panel);
+}
+
+/* Use a container query because chart width depends on its grid span. */
+.chart-panel {
+  container-type: inline-size;
+  padding: var(--dc-space-3);
+}
+
+/* The builder is a fixed block above the charts, so keep it compact to leave them height. */
+.visualization-builder__header {
+  padding: var(--dc-space-2) var(--dc-space-3);
+}
+
+.visualization-builder__body {
+  padding: var(--dc-space-3);
+  gap: var(--dc-space-2) var(--dc-space-3);
+}
+
+.chart-panel__header {
+  min-height: 2rem;
+}
+
+.chart-panel__header h3 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.chart-panel__controls {
+  align-items: center;
+}
+
+.chart-panel__chart {
+  min-height: 18rem;
+}
+
+.chart-panel__kpi,
+.metric-card strong {
+  font-size: clamp(1.5rem, 3vw, 1.75rem);
+  font-weight: 600;
+}
+
+.data-table__viewport {
+  background: var(--panel);
+}
+
+.data-table__table thead,
+.preview__table thead th {
+  background: var(--table-header);
+  color: var(--muted-foreground);
+}
+
+.data-table__table tbody tr:hover {
+  background: var(--table-hover);
+}
+
+.data-table__table th,
+.data-table__table td {
+  height: 34px;
+  padding: 0 var(--dc-space-3);
+  line-height: 34px;
+}
+
+.dataset-list__item[data-active="true"] {
+  border-color: var(--selection-border);
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+
+.import__button {
+  min-height: 2rem;
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.import__button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.import__button[data-emphasis="secondary"] {
+  border-color: var(--input);
+  background: var(--panel);
+  color: var(--foreground);
+}
+
+.import__button[data-emphasis="secondary"]:hover:not(:disabled) {
+  background: var(--secondary);
+}
+
+@media (max-width: 1023px) {
+  .workspace__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace__canvas {
+    padding: var(--dc-space-3);
+  }
+
+  .workspace__header-status {
+    margin-left: auto;
+  }
+
+  /*
+   * The panel triggers replace both side panels here, so they keep a visible label. An icon alone
+   * leaves dataset and inspector access undiscoverable for someone opening the workspace on a tablet.
+   */
+  .workspace__panel-trigger {
+    width: auto;
+    gap: var(--dc-space-1);
+    padding-inline: var(--dc-space-2);
+  }
+}
+
+/*
+ * Below the tablet breakpoint the header runs out of room, so secondary readouts collapse to icons
+ * and labels. Agent status and revision stay visible above it; they are the shared-workspace signals.
+ */
+@media (max-width: 767px) {
+  .workspace__brand-icon,
+  .workspace__brand {
+    display: none;
+  }
+
+  .workspace__panel-trigger__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .workspace__header .selection-summary,
+  .workspace__header .workspace__revision,
+  .workspace__header .agent-status {
+    display: none;
+  }
+
+  .workspace__title {
+    max-width: 9rem;
+  }
+
+  .workspace__canvas {
+    gap: var(--dc-space-3);
+    padding: var(--dc-space-2);
+  }
+
+  /* Stack the fields into one column; the header band stays full width above them. */
+  .visualization-builder__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .visualization-grid__item {
+    min-height: 18rem;
+  }
+
+  .chart-panel__header {
+    align-items: center;
+  }
+
+  .chart-panel__controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .link-mode-control__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .chart-panel__chart {
+    min-height: 15rem;
+  }
+
+  .data-table__viewport {
+    height: 48vh;
+    overscroll-behavior: contain;
+  }
+}

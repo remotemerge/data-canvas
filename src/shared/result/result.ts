@@ -1,12 +1,6 @@
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 
-/**
- * Discriminated result used across the domain and application layers.
- *
- * Validation failures at the agent boundary are expected control flow rather than exceptional
- * conditions, so this type models them as values. Callers must then handle the failure branch at
- * compile time instead of letting an unchecked `throw` escape a WebMCP tool handler.
- */
+// Discriminated result for expected success and failure values.
 export type Result<T, E = DomainError> = { ok: true; value: T } | { ok: false; error: E };
 
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });

@@ -8,26 +8,13 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-/**
- * Upper bound on `in` / `not_in` membership lists.
- *
- * A predicate list is agent-suppliable and compiles into SQL, so it is bounded to keep both the
- * generated statement and the stored filter finite.
- */
+// Maximum number of values in an `in` or `not_in` filter.
 export const MAX_FILTER_VALUE_LIST_LENGTH = 500;
 
-/*
- * Operator/column compatibility.
- *
- * This is the semantic half of validation: JSON Schema can check that `operator` is one of twelve
- * strings and that `value` is present, but it cannot know that `contains` is meaningless against a
- * numeric column, because that depends on the imported dataset rather than on the message shape.
- *
- * Privacy constraint. Messages name the column by display name and the operator by name, never the
- * rejected value, because they cross the agent boundary and may be logged.
- */
+/* Schema validates filter shape. These checks validate operator compatibility against the column and
+ * keep rejected values out of errors that cross the agent boundary. */
 
-/** Whether a runtime value is plausibly of the column's logical type. */
+// Checks whether a value matches a column's logical type.
 const matchesLogicalType = (value: unknown, logicalType: LogicalType): boolean => {
   switch (logicalType) {
     case 'number':
@@ -39,12 +26,10 @@ const matchesLogicalType = (value: unknown, logicalType: LogicalType): boolean =
       return typeof value === 'string';
     case 'date':
     case 'timestamp':
-      // Temporal values cross this boundary as ISO strings or epoch milliseconds; both are accepted
-      // and normalized by the query compiler, which owns the dialect-specific representation.
+      // The compiler normalizes ISO strings and epoch milliseconds to the engine's temporal type.
       return (typeof value === 'string' && !Number.isNaN(Date.parse(value))) || typeof value === 'number';
     case 'unknown':
-      // An unclassified column cannot support a type assertion, so any non-null value is permitted
-      // and the engine decides. Rejecting here would make unclassified columns unusable.
+      // Unknown columns accept non-null values; the engine decides their physical type.
       return value !== null && value !== undefined;
   }
 };
@@ -80,10 +65,7 @@ const validateOrdered = (column: Column, operator: FilterOperator, value: unknow
   return matchesLogicalType(value, column.logicalType) ? ok(undefined) : err(typeMismatch(column, operator));
 };
 
-/**
- * Projects a bound onto a common numeric scale so an ISO date pair orders the same way a numeric
- * pair does.
- */
+// Converts a filter value to the numeric scale used for comparison.
 const toComparable = (bound: unknown): number => (typeof bound === 'number' ? bound : Date.parse(bound as string));
 
 const validateBetween = (column: Column, value: unknown): Result<void, DomainError> => {
@@ -181,11 +163,7 @@ const validateEquality = (column: Column, operator: FilterOperator, value: unkno
   return matchesLogicalType(value, column.logicalType) ? ok(undefined) : err(typeMismatch(column, operator));
 };
 
-/**
- * Checks one filter against the column it targets.
- *
- * Runs after entity resolution, so the column is known to exist and to belong to the dataset.
- */
+// Validates a filter against its resolved column.
 export const validateFilter = (column: Column, operator: FilterOperator, value: unknown): Result<void, DomainError> => {
   if (NULLARY_FILTER_OPERATORS.includes(operator)) return validateNullary(column, operator, value);
 

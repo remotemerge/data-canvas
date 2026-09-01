@@ -4,12 +4,9 @@ import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
 /**
- * Describes a predicate in plain words.
+ * Describes a predicate without exposing markup.
  *
- * Values are rendered as text by React, never as markup — a selection can carry a cell value, and
- * cell values are untrusted imported content. The description is deliberately shallow: a deeply
- * nested predicate reports its shape rather than its full text, since a chip is not the place to
- * read a boolean tree.
+ * Values may come from imported data, so React renders them as text.
  */
 const describePredicate = (predicate: FilterExpression): string => {
   switch (predicate.kind) {
@@ -24,13 +21,7 @@ const describePredicate = (predicate: FilterExpression): string => {
   }
 };
 
-/**
- * Shows what is currently selected, with a one-click clear.
- *
- * Selection changes what charts display without appearing anywhere itself, which makes a stale
- * selection a common cause of "why is this chart wrong". Naming it in the header turns that into
- * something visible.
- */
+// Shows the current selection and a clear action.
 export const SelectionSummary = ({ onError }: { onError: (error: DomainError) => void }): React.JSX.Element | null => {
   const actions = useActions();
   const selections = useWorkspace((state) => state.workspace.selections);

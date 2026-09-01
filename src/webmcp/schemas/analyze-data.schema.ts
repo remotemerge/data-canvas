@@ -4,10 +4,7 @@ export const analyzeDataSchema = {
   type: 'object',
   properties: {
     datasetId: { type: 'string', minLength: 1, maxLength: 100 },
-    /**
-     * Relationships to traverse. Omitted, the join path is resolved from the columns named below,
-     * so an agent that already knows the column IDs need not name the joins connecting them.
-     */
+    // Optional relationship IDs used to constrain join-path resolution.
     relationshipIds: {
       type: 'array',
       items: { type: 'string', minLength: 1, maxLength: 100 },
@@ -16,7 +13,20 @@ export const analyzeDataSchema = {
     },
     dimensions: {
       type: 'array',
-      items: { type: 'string', minLength: 1, maxLength: 100 },
+      items: {
+        anyOf: [
+          { type: 'string', minLength: 1, maxLength: 100 },
+          {
+            type: 'object',
+            properties: {
+              columnId: { type: 'string', minLength: 1, maxLength: 100 },
+              timeGrain: { type: 'string', enum: ['day', 'week', 'month', 'quarter', 'year'] },
+            },
+            required: ['columnId', 'timeGrain'],
+            additionalProperties: false,
+          },
+        ],
+      },
       maxItems: 3,
       uniqueItems: true,
     },

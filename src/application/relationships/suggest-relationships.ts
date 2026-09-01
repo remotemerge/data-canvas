@@ -6,16 +6,9 @@ import type { LogicalType } from '@/domain/logical-type.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/*
- * Candidate relationship discovery.
- *
- * Manual join definition is where users give up, so the application proposes candidates by matching
- * column names and types across datasets. Every result is a proposal: nothing here creates a
- * relationship. A wrong automatic join silently corrupts every number downstream of it, which is a
- * far worse outcome than asking for one click.
- */
+// Schema-only relationship suggestions. This module never creates a relationship.
 
-/** Cap on returned proposals, so a workspace with many datasets cannot produce an unbounded list. */
+// Maximum number of relationship suggestions returned.
 export const MAX_SUGGESTIONS = 20;
 
 export interface RelationshipSuggestion {
@@ -23,13 +16,13 @@ export interface RelationshipSuggestion {
   rightDatasetId: EntityId;
   leftColumnId: EntityId;
   rightColumnId: EntityId;
-  /** Display names, so a caller can explain the proposal without re-resolving the columns. */
+  // Column display names included in the suggestion.
   leftColumnName: string;
   rightColumnName: string;
   kind: RelationshipKind;
-  /** 0-1. Ranks proposals; it is not a correctness claim about the data. */
+  // Score from 0 to 1; it ranks proposals but does not verify the data.
   confidence: number;
-  /** Why this pair was proposed, in words a user can judge. */
+  // Human-readable reason for the proposal.
   reason: string;
 }
 
@@ -41,23 +34,16 @@ const joinTypeClass = (type: LogicalType): string => {
   return type;
 };
 
-/** Normalizes a name for comparison: case, spaces, and separators carry no meaning here. */
+// Normalizes a name for comparison.
 const normalize = (name: string): string => name.toLowerCase().replaceAll(/[\s_-]+/gu, '');
 
-/** Strips a trailing `id`, so `customer_id` and `customer` compare equal. */
+// Removes a trailing `id` for key-name comparison.
 const withoutIdSuffix = (name: string): string => (name.endsWith('id') ? name.slice(0, -2) : name);
 
-/** Strips a trailing plural `s`, so a `customers` dataset matches a `customer_id` column. */
+// Removes a trailing plural `s` for dataset-name comparison.
 const singular = (name: string): string => (name.endsWith('s') ? name.slice(0, -1) : name);
 
-/**
- * Scores one candidate column pair.
- *
- * The three patterns are ranked by how specific the evidence is. An exact name match on a key-shaped
- * column is the strongest; matching a foreign key against the other dataset's own name is next; a
- * bare identical name is weakest because two datasets can share a `name` column meaning nothing.
- * Returns `undefined` when nothing connects the pair.
- */
+// Scores a compatible column pair from schema names and key shape.
 const scorePair = (
   left: Column,
   right: Column,
@@ -75,7 +61,7 @@ const scorePair = (
       : { confidence: 0.4, reason: `Both datasets have a column named '${left.name}'.` };
   }
 
-  // The `orders.customer_id` → `customers.id` shape: a foreign key naming the dataset it points at.
+  // A foreign key can name the dataset it points to, as in `orders.customer_id` → `customers.id`.
   const target = singular(normalize(rightDatasetName));
 
   if (rightName === 'id' && withoutIdSuffix(leftName) === target) {
@@ -92,17 +78,7 @@ const scorePair = (
   return undefined;
 };
 
-/**
- * Proposes relationships between datasets that are not related yet.
- *
- * Pairs are considered in both directions, because which dataset holds the foreign key determines
- * the proposal's shape: the side carrying `customer_id` is the many side. Datasets that are already
- * related are skipped — a second relationship over the same pair is rejected by validation anyway.
- *
- * Value overlap is not measured here. Verifying that keys actually intersect requires the data
- * engine; callers that can reach it confirm a proposal before offering it, and this function stays
- * a pure, testable ranking over schema alone.
- */
+// Proposes unconnected dataset pairs from schema names and types.
 export const suggestRelationships = (workspace: Workspace): RelationshipSuggestion[] => {
   const datasets = Object.values(workspace.datasets).filter((dataset) => dataset.importStatus === 'ready');
   const relationships = Object.values(workspace.relationships);
@@ -126,8 +102,7 @@ export const suggestRelationships = (workspace: Workspace): RelationshipSuggesti
             rightColumnId: rightColumn.id,
             leftColumnName: leftColumn.name,
             rightColumnName: rightColumn.name,
-            // The right side is proposed as the lookup: a suggestion points from the dataset
-            // holding the foreign key to the one holding the identity it references.
+            // Point from the foreign-key dataset to the lookup dataset.
             kind: 'many_to_one',
             confidence: scored.confidence,
             reason: scored.reason,
@@ -140,17 +115,12 @@ export const suggestRelationships = (workspace: Workspace): RelationshipSuggesti
   return dedupe(suggestions).slice(0, MAX_SUGGESTIONS);
 };
 
-/**
- * Keeps the strongest proposal per dataset pair.
- *
- * Without this a wide schema produces many weak variants of the same join, which buries the one
- * proposal worth acting on.
- */
+// Keeps the strongest proposal for each unordered dataset pair.
 const dedupe = (suggestions: readonly RelationshipSuggestion[]): RelationshipSuggestion[] => {
   const best = new Map<string, RelationshipSuggestion>();
 
   for (const suggestion of suggestions) {
-    // Unordered pair key: `a→b` and `b→a` are the same proposed relationship seen from either end.
+    // Treat both directions of a dataset pair as the same proposal.
     const key = [suggestion.leftDatasetId, suggestion.rightDatasetId].toSorted().join('|');
     const current = best.get(key);
 
@@ -160,7 +130,7 @@ const dedupe = (suggestions: readonly RelationshipSuggestion[]): RelationshipSug
   return [...best.values()].toSorted((a, b) => b.confidence - a.confidence);
 };
 
-/** Resolves a dataset's display name for a suggestion, for callers building user-facing text. */
+// Resolves display names for a relationship suggestion.
 export const suggestionDatasetNames = (
   workspace: Workspace,
   suggestion: RelationshipSuggestion,

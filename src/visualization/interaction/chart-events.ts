@@ -28,13 +28,7 @@ export const rangeSelection = (columnId: string, start: number, end: number): Fi
 export const isSameSelection = (left: FilterExpression | undefined, right: FilterExpression): boolean =>
   left !== undefined && JSON.stringify(left) === JSON.stringify(right);
 
-/**
- * True when a ctrl/cmd-click should extend the selection rather than replace it.
- *
- * Reading the modifier from the DOM event ECharts forwards, rather than from a React synthetic
- * event, because chart clicks arrive through ECharts' own handler. Meta is the macOS convention and
- * ctrl the one elsewhere; both are accepted on every platform so neither is wrong.
- */
+// Returns whether the click should extend selection.
 export const isAdditiveClick = (event: { event?: { ctrlKey?: boolean; metaKey?: boolean } }): boolean =>
   event.event?.ctrlKey === true || event.event?.metaKey === true;
 
@@ -73,18 +67,7 @@ const compare = (operator: string, cell: unknown, value: unknown): boolean => {
   }
 };
 
-/**
- * Evaluates a selection predicate against one chart row, for highlight rendering.
- *
- * This duplicates the *semantics* of the SQL compiler's operators but not its code, deliberately:
- * `highlight` must decide per rendered mark without a round trip to DuckDB, and the compiler emits
- * SQL text rather than a predicate function. The set of operators is closed and small, so the two
- * stay aligned by review; `filter` mode, which does re-query, is the path where the compiler's
- * evaluation is authoritative.
- *
- * A column the chart did not select on cannot be evaluated, so an unresolvable reference reports
- * `true` — an un-dimmed mark is a safer default than hiding data the user did not exclude.
- */
+// Evaluates a selection predicate against one chart row.
 export const rowMatchesPredicate = (
   predicate: FilterExpression,
   row: readonly unknown[],

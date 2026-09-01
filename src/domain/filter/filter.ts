@@ -29,15 +29,10 @@ export const FILTER_OPERATORS: readonly FilterOperator[] = [
   'is_not_null',
 ] as const;
 
-/** Operators that take no `value` at all; validation and compilation both depend on this. */
+// Operators without a `value`.
 export const NULLARY_FILTER_OPERATORS: readonly FilterOperator[] = ['is_null', 'is_not_null'] as const;
 
-/**
- * A semantic filter.
- *
- * Carries no raw `WHERE` fragment, by design. The query compiler is the only code that turns this
- * into SQL, which keeps agent input from reaching the database as text.
- */
+// Stored filter definition; the compiler creates SQL from it.
 export interface Filter {
   id: EntityId;
   datasetId: EntityId;
@@ -49,10 +44,7 @@ export interface Filter {
   createdBy: 'human' | 'agent' | 'system';
 }
 
-/**
- * A composable filter predicate for the places that need a filter tree rather than a flat stored
- * filter, namely `Selection.predicate` and `AnalysisQuery.filters`.
- */
+// Composable filter predicate for selections and analysis queries.
 export type FilterExpression =
   | { kind: 'comparison'; columnId: EntityId; operator: FilterOperator; value?: unknown }
   | { kind: 'and'; operands: FilterExpression[] }

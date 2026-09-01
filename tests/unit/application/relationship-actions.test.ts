@@ -11,7 +11,7 @@ const ORDERS_TO_CUSTOMERS = {
   join: 'inner' as const,
 };
 
-/** An engine whose sampled right key repeats, so a `many_to_one` claim fans out. */
+// An engine whose sampled right key repeats, so a `many_to_one` claim fans out.
 const fanningEngine = (): DataEnginePort => ({
   ...stubDataEngine(),
   measureKeyQuality: () => Promise.resolve(ok({ sampledRows: 1400, distinctKeys: 1000 })),
@@ -41,6 +41,31 @@ describe('relationship.create', () => {
     expect(result.value.summary).toContain('customers');
   });
 
+  // The summary is user-facing copy, so each join kind needs the article that reads correctly.
+  test('names each join kind with the correct article', async () => {
+    const cases = [
+      { join: 'inner', phrase: 'using an inner join' },
+      { join: 'left', phrase: 'using a left join' },
+    ] as const;
+
+    const summaries = await Promise.all(
+      cases.map(async ({ join }) => {
+        const harness = harnessWithJoinableDatasets();
+        const result = await harness.dispatcher.execute(
+          { type: 'relationship.create', payload: { ...ORDERS_TO_CUSTOMERS, join } },
+          { actor: 'human' },
+        );
+
+        return result.ok ? result.value.summary : null;
+      }),
+    );
+
+    for (const [index, { phrase }] of cases.entries()) {
+      expect(summaries[index]).toContain(phrase);
+      expect(summaries[index]).not.toContain('a inner join');
+    }
+  });
+
   test('records the actor that created it', async () => {
     const harness = harnessWithJoinableDatasets();
     const result = await harness.dispatcher.execute(
@@ -62,7 +87,7 @@ describe('relationship.create', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // Committed, with the measurement stated — not silently proceeding and not refusing.
+    // Commit the relationship and include the measurement warning.
     expect(Object.keys(harness.workspace().relationships)).toHaveLength(1);
     expect(result.value.summary).toContain('fan out');
     expect(result.value.summary).toContain('1.40');
@@ -163,7 +188,7 @@ describe('dataset.remove', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('DATASET_IN_USE');
     expect(result.error.message).toContain('1 visualizations');
-    // Nothing is orphaned, because nothing was removed.
+    // No dependents are orphaned because none were removed.
     expect(harness.workspace().datasets['ds_orders']).toBeDefined();
     expect(harness.workspace().visualizations['viz_1']).toBeDefined();
   });
@@ -195,7 +220,7 @@ describe('dataset.remove', () => {
     expect(after.datasets['ds_orders']).toBeUndefined();
     expect(after.visualizations['viz_1']).toBeUndefined();
     expect(Object.keys(after.relationships)).toHaveLength(0);
-    // The layout slot goes too, or the canvas would reserve space for a chart that no longer exists.
+    // Remove the layout slot with the visualization.
     expect(after.layout.items).toHaveLength(0);
     expect(result.value.summary).toContain('2 entities');
   });

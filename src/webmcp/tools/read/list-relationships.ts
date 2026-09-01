@@ -3,16 +3,10 @@ import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-ty
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { asInput, invalidEntity, success } from '@/webmcp/tools/tool-helpers.ts';
 
-/** Bound on returned proposals, kept well inside the shared output budget. */
+// Maximum suggestions returned by this tool.
 const MAX_LISTED_SUGGESTIONS = 5;
 
-/**
- * Lists existing relationships and, on request, candidate ones.
- *
- * Carries `untrustedContentHint` because it returns dataset-derived column names. Suggestions are
- * proposals: this tool creates nothing, and an agent acting on one must still call
- * `create_relationship`, which re-validates from scratch.
- */
+// Lists existing and optional suggested relationships.
 export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'list_relationships',
   description:
@@ -28,6 +22,8 @@ export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasT
     if (datasetId !== undefined && workspace.datasets[datasetId] === undefined) {
       return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
     }
+
+    const datasetName = (id: string): string => workspace.datasets[id]?.name ?? id;
 
     const relationships = Object.values(workspace.relationships).filter(
       (relationship) =>
@@ -51,10 +47,13 @@ export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasT
     return success({
       revision: workspace.revision,
       summary: `${relationships.length} relationships defined${input.includeSuggestions === true ? `, ${suggestions.length} suggested` : ''}.`,
+      // Names accompany the identifiers so identically sourced datasets stay distinguishable.
       relationships: relationships.map((relationship) => ({
         id: relationship.id,
         leftDatasetId: relationship.leftDatasetId,
+        leftDatasetName: datasetName(relationship.leftDatasetId),
         rightDatasetId: relationship.rightDatasetId,
+        rightDatasetName: datasetName(relationship.rightDatasetId),
         on: relationship.on,
         kind: relationship.kind,
         join: relationship.join,

@@ -1,28 +1,19 @@
 import { MAX_COLUMN_COUNT } from '@/data/import/import-limits.ts';
 
 /**
- * Converts a JSON or NDJSON file into CSV bytes for DuckDB's built-in CSV reader.
+ * Converts JSON or NDJSON text to CSV for DuckDB's built-in reader.
  *
- * **Why not DuckDB's JSON reader.** `read_json_auto` needs the `json` extension, and
- * `LOAD json` fetches it from `extensions.duckdb.org` — DuckDB-Wasm reports it as
- * `installed: false`, so the load is a network request. That would put a third-party fetch on the
- * import path and break JSON import offline, both of which the local-first requirement forbids.
- * (`insertJSONFromPath` is not an alternative: it fails on every shape in this DuckDB-Wasm version
- * with "Provided table/dataframe must have at least one column".)
- *
- * Re-emitting as CSV keeps ingestion entirely inside the built-in reader, so JSON import works
- * offline and issues no request. Type inference is unaffected — the CSV sniffer recovers
- * `BIGINT`, `DOUBLE`, `BOOLEAN`, `DATE`, and `VARCHAR` from the re-emitted text, which is verified
- * in the browser against `records.json` and `records.ndjson`.
+ * Keeping conversion in JavaScript avoids the JSON extension and its network request. CSV output
+ * preserves scalar type inference.
  */
 
-/** Both accepted JSON layouts: a top-level array of objects, or one object per line. */
+// Supported JSON layouts.
 type JsonRecord = Record<string, unknown>;
 
-/** Raised when the input is not a shape the importer can turn into a relation. */
+// Error for unsupported JSON shapes.
 export class JsonShapeError extends Error {
   constructor() {
-    // The message carries no file content: it reaches the UI and, through history, an agent.
+    // Keep parser errors free of file content because they reach the UI and agent history.
     super('The JSON file is not an array of records or newline-delimited records.');
     this.name = 'JsonShapeError';
   }
@@ -31,13 +22,7 @@ export class JsonShapeError extends Error {
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/**
- * Parses either supported layout.
- *
- * A top-level array is tried first because `JSON.parse` either succeeds on the whole document or
- * fails outright, which makes it a cheap and unambiguous test. Only on failure is the input
- * re-read as newline-delimited records.
- */
+// Parses a top-level array, object, or NDJSON document.
 const parseRecords = (text: string): JsonRecord[] => {
   const trimmed = text.trim();
 
@@ -52,20 +37,20 @@ const parseRecords = (text: string): JsonRecord[] => {
       return parsed;
     }
 
-    // A single top-level object is a one-row relation, which is a reasonable thing to import.
+    // Treat a single object as a one-row relation.
     if (isRecord(parsed)) return [parsed];
 
     throw new JsonShapeError();
   } catch (error) {
     if (error instanceof JsonShapeError) throw error;
 
-    // Not a single JSON document, so try newline-delimited records.
+    // If the whole document is not JSON, try newline-delimited records.
     const records: JsonRecord[] = [];
 
     for (const line of trimmed.split('\n')) {
       const candidate = line.trim();
 
-      // Blank lines between records are common in generated NDJSON and are not an error.
+      // Ignore blank lines between NDJSON records.
       if (candidate.length === 0) continue;
 
       let parsedLine: unknown;
@@ -87,13 +72,7 @@ const parseRecords = (text: string): JsonRecord[] => {
   }
 };
 
-/**
- * Collects the column set in first-seen order.
- *
- * Records in a JSON file need not share a key set, so the union is taken rather than the first
- * record's keys — otherwise a field appearing only in later rows would be silently dropped.
- * Insertion order is preserved so the resulting columns match the file's own reading order.
- */
+// Collects first-seen keys across all records.
 const collectColumns = (records: readonly JsonRecord[]): string[] => {
   const columns = new Set<string>();
 
@@ -101,8 +80,7 @@ const collectColumns = (records: readonly JsonRecord[]): string[] => {
     for (const key of Object.keys(record)) {
       columns.add(key);
 
-      // Bounded here as well as after ingestion: a pathological file must not first be expanded
-      // into an enormous in-memory CSV and only then rejected.
+      // Bound output before converting it to an in-memory CSV.
       if (columns.size > MAX_COLUMN_COUNT) throw new JsonShapeError();
     }
   }
@@ -110,18 +88,9 @@ const collectColumns = (records: readonly JsonRecord[]): string[] => {
   return [...columns];
 };
 
-/**
- * Renders one value as a CSV field.
- *
- * Everything non-null is quoted unconditionally rather than only when it contains a delimiter.
- * Unconditional quoting is what makes embedded commas, quotes, and newlines safe without a
- * per-value decision, and it costs two bytes.
- *
- * Nested objects and arrays are JSON-encoded rather than flattened. The domain has no column type
- * for them, so they land as text the user can see instead of silently vanishing.
- */
+// Encodes one JSON value as a quoted CSV field.
 const csvField = (value: unknown): string => {
-  // `undefined` and `null` both become an empty field, which the CSV reader reads back as NULL.
+  // Empty fields become NULL when DuckDB reads the CSV.
   if (value === null || value === undefined) return '';
 
   const text =
@@ -130,12 +99,7 @@ const csvField = (value: unknown): string => {
   return `"${text.replaceAll('"', '""')}"`;
 };
 
-/**
- * Converts JSON or NDJSON text into CSV bytes.
- *
- * Throws `JsonShapeError` for input that is not a set of records; the caller maps that onto the
- * generic `IMPORT_FAILED`, so no parser detail reaches the user or an agent.
- */
+// Converts JSON or NDJSON text to CSV bytes.
 export const jsonToCsvBytes = (text: string): Uint8Array => {
   const records = parseRecords(text);
   const columns = collectColumns(records);

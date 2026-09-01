@@ -8,6 +8,8 @@ import {
 import { describeSampling, foldOtherBucket, isAdditiveAggregate } from '@/application/queries/sampling-disclosure.ts';
 import { MAX_QUERY_LIMIT } from '@/data/compiler/compile-analysis-query.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import { MAX_BIN_COUNT, maxBinCardinality } from '@/domain/analysis/bin-strategy.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 const columnId = (name: string) => `col_${name}` as EntityId;
@@ -27,7 +29,39 @@ const temporalQuery = (): AnalysisQuery => ({
   filters: [],
 });
 
+const binnedQuery = (strategy: BinStrategy): AnalysisQuery => ({
+  datasetId: 'ds_1' as EntityId,
+  dimensions: [],
+  binnedDimensions: [{ columnId: columnId('sales'), strategy }],
+  measures: [{ aggregate: 'count', alias: 'count' }],
+  filters: [],
+});
+
+describe('bin cardinality bounds', () => {
+  // Bucket counts follow the strategy, so a chart's group count cannot depend on column cardinality.
+  test('each non-temporal strategy bounds its own group count', () => {
+    expect(maxBinCardinality({ kind: 'equalWidth', binCount: 20 })).toBe(20);
+    expect(maxBinCardinality({ kind: 'quantile', quantiles: 4 })).toBe(4);
+    // Each break opens a bucket, plus the trailing bucket above the last break.
+    expect(maxBinCardinality({ kind: 'explicit', breaks: [10, 20, 30] })).toBe(4);
+    expect(maxBinCardinality({ kind: 'equalWidthOf', width: 5 })).toBe(MAX_BIN_COUNT);
+  });
+
+  test('a temporal bucket count depends on the data, so it has no static bound', () => {
+    expect(maxBinCardinality({ kind: 'temporal', unit: 'day' })).toBeUndefined();
+  });
+});
+
 describe('adaptive sampling policy', () => {
+  // A 20-bucket histogram returns 20 rows regardless of how many distinct values the column holds.
+  test('leaves a bounded histogram exact', () => {
+    const query = binnedQuery({ kind: 'equalWidth', binCount: 20 });
+    const plan = planSampling({ query, kind: 'histogram', estimatedRows: 20, budget: 5_000 });
+
+    expect(plan.disclosure).toBeNull();
+    expect(plan.query).toEqual(query);
+  });
+
   test('leaves a result within the budget exact', () => {
     const plan = planSampling({ query: groupedQuery(), kind: 'bar', estimatedRows: 40, budget: 100 });
 
@@ -51,15 +85,14 @@ describe('adaptive sampling policy', () => {
     const plan = planSampling({ query: groupedQuery(), kind: 'bar', estimatedRows: 500_000, budget: 100 });
 
     expect(plan.disclosure?.strategy).toEqual({ kind: 'topN', retained: 99, otherBucket: true });
-    // Every row is read, so the retained values are exact even though the categories are not all shown.
+    // Every row is read, so retained values remain exact.
     expect(plan.disclosure?.rate).toBe(1);
     expect(plan.query.limit).toBe(99);
     expect(plan.query.orderBy).toEqual([{ measureAlias: 'revenue', direction: 'desc' }]);
   });
 
   test('never claims to retain more groups than the compiler will return', () => {
-    // Caught in a browser run: the badge read "Top 4,999" while the compiler's own row cap meant
-    // only 500 arrived. A disclosure that overstates what was kept is worse than no disclosure.
+    // The disclosure must not exceed the compiler's row cap.
     const plan = planSampling({ query: groupedQuery(), kind: 'bar', estimatedRows: 500_000 });
     const strategy = plan.disclosure?.strategy;
 
@@ -102,10 +135,80 @@ describe('adaptive sampling policy', () => {
     expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'month' });
   });
 
+  // A daily year-and-a-half series fits the hard cap but exceeds a 900px readable target.
+  test('widens a temporal bucket to what the plot can legibly show', () => {
+    const plan = planSampling({
+      query: temporalQuery(),
+      kind: 'line',
+      estimatedRows: 550,
+      budget: 5_000,
+      readableBudget: 180,
+    });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'week' });
+  });
+
+  test('a temporal result the plot can already show is left exact', () => {
+    const plan = planSampling({
+      query: temporalQuery(),
+      kind: 'line',
+      estimatedRows: 90,
+      budget: 5_000,
+      readableBudget: 180,
+    });
+
+    expect(plan.disclosure).toBeNull();
+  });
+
+  // Widening preserves data; lossy category sampling must stay within the performance budget.
+  test('a narrow plot never triggers lossy reduction of a categorical result', () => {
+    const plan = planSampling({
+      query: groupedQuery(),
+      kind: 'bar',
+      estimatedRows: 400,
+      budget: 5_000,
+      readableBudget: 60,
+    });
+
+    expect(plan.disclosure).toBeNull();
+    expect(plan.query).toEqual(groupedQuery());
+  });
+
+  test('the performance budget still applies when it is the tighter of the two', () => {
+    const plan = planSampling({
+      query: temporalQuery(),
+      kind: 'line',
+      estimatedRows: 3_650,
+      budget: 200,
+      readableBudget: 5_000,
+    });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'month' });
+  });
+
   test('widening picks the narrowest unit that fits', () => {
     expect(widenTemporalUnit('day', 3_650, 200)).toBe('month');
     expect(widenTemporalUnit('day', 3_650, 600)).toBe('week');
     expect(widenTemporalUnit('year', 100, 10)).toBe('year');
+  });
+
+  /*
+   * A histogram groups by bucket, so a categorical `Other` row would put a synthetic category on a
+   * continuous axis and describe the chart as top-N categories. The bucket bound normally keeps this
+   * path unreachable; the guard covers the case where an estimate still exceeds the budget.
+   */
+  test('never folds an Other bucket into a binned distribution', () => {
+    const plan = planSampling({
+      query: binnedQuery({ kind: 'equalWidth', binCount: 20 }),
+      kind: 'histogram',
+      estimatedRows: 500_000,
+      budget: 100,
+    });
+
+    expect(plan.disclosure?.strategy.kind).toBe('binTruncation');
+    expect(plan.totalQuery).toBeUndefined();
+    expect(describeSampling(plan.disclosure!).label).not.toContain('Other');
+    expect(describeSampling(plan.disclosure!).explanation).not.toContain('categories');
   });
 
   test('samples rows for a row-level scatter query', () => {
@@ -118,8 +221,7 @@ describe('adaptive sampling policy', () => {
     const plan = planSampling({ query: scatter, kind: 'scatter', estimatedRows: 1_000_000, budget: 5_000 });
 
     expect(plan.disclosure?.strategy.kind).toBe('reservoir');
-    // Capped by the compiler's row limit rather than the nominal budget, so the plan asks only for
-    // rows that can actually come back.
+    // Use the compiler's row cap, not the nominal display budget.
     expect(plan.query.limit).toBe(Math.min(5_000, MAX_QUERY_LIMIT));
   });
 });
@@ -129,6 +231,7 @@ describe('sampling disclosure', () => {
     const strategies = [
       { kind: 'exact' as const },
       { kind: 'topN' as const, retained: 99, otherBucket: true as const },
+      { kind: 'binTruncation' as const, retained: 99 },
       { kind: 'temporalWiden' as const, from: 'day' as const, to: 'month' as const },
       { kind: 'reservoir' as const, rate: 0.005 },
       { kind: 'tablesample' as const, rate: 0.01 },

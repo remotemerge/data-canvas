@@ -1,9 +1,4 @@
-/**
- * Stable machine-readable error codes.
- *
- * This union lists every code up front so new failure modes extend it rather than growing parallel
- * error vocabularies. Agents branch on `code`, so codes must stay stable once published.
- */
+// Stable error codes used by callers and agents.
 export type DomainErrorCode =
   | 'INVALID_TOOL_ARGUMENTS'
   | 'DATASET_NOT_FOUND'
@@ -15,20 +10,18 @@ export type DomainErrorCode =
   | 'RELATIONSHIP_CYCLE'
   | 'DATASET_IN_USE'
   | 'STALE_WORKSPACE_REVISION'
+  // Persisted workspace cannot be loaded by this schema version.
+  | 'WORKSPACE_VERSION_UNSUPPORTED'
   | 'RESULT_LIMIT_EXCEEDED'
   | 'UNSUPPORTED_OPERATION'
   | 'IMPORT_FAILED'
   | 'QUERY_FAILED'
   | 'ENGINE_UNAVAILABLE';
 
-/**
- * Privacy constraint. Both `message` and `details` cross the agent boundary, so neither may
- * interpolate cell values, row contents, or file contents. Reference columns and entities by ID or
- * display name only.
- */
+// Error payload safe to cross the agent boundary.
 export interface DomainError {
   code: DomainErrorCode;
-  /** Short corrective text; safe to surface to an agent. Must never contain dataset values. */
+  // Short corrective text that must not contain dataset values.
   message: string;
   details?: Record<string, unknown>;
 }

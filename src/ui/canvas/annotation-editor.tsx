@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AnnotationAnchor } from '@/domain/annotation/annotation.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
+import { Button } from '@/ui/components/ui/button.tsx';
 
 export const AnnotationEditor = ({
   visualizationId,
@@ -33,12 +34,14 @@ export const AnnotationEditor = ({
         Note
         <input maxLength={280} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
       </label>
-      <button type="submit" disabled={text.trim().length === 0}>
-        Save
-      </button>
-      <button type="button" onClick={onClose}>
-        Cancel
-      </button>
+      <div className="form-actions">
+        <Button type="submit" disabled={text.trim().length === 0}>
+          Save
+        </Button>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
     </form>
   );
 };

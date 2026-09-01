@@ -8,13 +8,7 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
-/**
- * The two shapes the form can build.
- *
- * A general tree editor would be the eventual product, but the value here is proving the tree
- * survives from a human control to the compiler. These two cover the plan's own examples, arithmetic
- * between two columns and a date part, and both exercise the same validation an agent's tree meets.
- */
+// Expression shapes currently supported by the editor.
 type FormMode = 'arithmetic' | 'datePart';
 
 const OPERATOR_LABEL: Readonly<Record<ArithmeticOperator, string>> = {
@@ -31,7 +25,7 @@ export const DerivedColumnEditor = ({
   dataset: Dataset;
   onError(error: DomainError | null): void;
 }): React.JSX.Element => {
-  const workspace = useWorkspace((state) => state.workspace);
+  const derivedColumns = useWorkspace((state) => state.workspace.derivedColumns);
   const { createDerivedColumn, removeDerivedColumn } = useActions();
   const [mode, setMode] = useState<FormMode>('arithmetic');
   const [name, setName] = useState('');
@@ -47,8 +41,8 @@ export const DerivedColumnEditor = ({
   );
 
   const existing = useMemo(
-    () => Object.values(workspace.derivedColumns).filter((column) => column.datasetId === dataset.id),
-    [workspace.derivedColumns, dataset.id],
+    () => Object.values(derivedColumns).filter((column) => column.datasetId === dataset.id),
+    [derivedColumns, dataset.id],
   );
 
   const expression = useMemo<DerivedExpression | null>(() => {
@@ -66,12 +60,11 @@ export const DerivedColumnEditor = ({
     };
   }, [mode, dateColumn, part, left, right, operator]);
 
-  // Validated as the form changes, using the same function the handler runs. The button cannot
-  // submit a definition the dispatcher would reject, and the message explains why while typing.
+  // Validate with the same function used by the action handler.
   const validation =
     expression === null || name.trim() === ''
       ? null
-      : validateDerivedColumn(dataset, { name, expression }, workspace.derivedColumns);
+      : validateDerivedColumn(dataset, { name, expression }, derivedColumns);
 
   const submit = (): void => {
     if (expression === null || validation === null || !validation.ok) return;
@@ -85,7 +78,7 @@ export const DerivedColumnEditor = ({
   return (
     <section className="derived-column-editor" aria-labelledby="derived-column-title">
       <h3 id="derived-column-title">Derived columns</h3>
-      <p>Build a computed column from existing ones. Values compute in the engine, not in the browser.</p>
+      <p>Build a column from existing data. DuckDB calculates its values when you query the dataset.</p>
 
       <label>
         Name
@@ -134,7 +127,7 @@ export const DerivedColumnEditor = ({
               ))}
             </select>
           </label>
-          {operator === 'div' ? <small>Division by zero produces an empty value rather than an error.</small> : null}
+          {operator === 'div' ? <small>Division by zero returns null instead of an error.</small> : null}
         </>
       ) : (
         <>

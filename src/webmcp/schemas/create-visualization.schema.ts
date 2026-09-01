@@ -1,12 +1,6 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 
-/**
- * Bin strategies an agent may request.
- *
- * Duplicated rather than shared with `create-derived-column.schema.ts` because Ajv compiles each
- * tool schema independently and a `$ref` across files would need a resolver the registry does not
- * have. The bounds are asserted against the domain constants in the schema tests.
- */
+// Bin strategies accepted by visualization creation.
 const binStrategy = {
   oneOf: [
     {

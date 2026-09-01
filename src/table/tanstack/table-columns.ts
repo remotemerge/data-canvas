@@ -1,6 +1,7 @@
 import { columnFilteringFeature, rowPaginationFeature, rowSortingFeature, tableFeatures } from '@tanstack/react-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { Column } from '@/domain/dataset/dataset.ts';
+import { isNumericType } from '@/domain/logical-type.ts';
 
 export type TableRow = readonly (string | number | boolean | null)[];
 export const workspaceTableFeatures = tableFeatures({
@@ -9,6 +10,10 @@ export const workspaceTableFeatures = tableFeatures({
   rowPaginationFeature,
 });
 export const formatCellValue = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
+
+// Returns the alignment for a table column.
+export const columnAlignment = (column: Column): 'end' | 'start' =>
+  isNumericType(column.logicalType) ? 'end' : 'start';
 
 export const createTableColumns = (columns: readonly Column[]): ColumnDef<typeof workspaceTableFeatures, TableRow>[] =>
   columns.map((column, index) => ({

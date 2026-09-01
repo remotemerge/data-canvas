@@ -10,12 +10,7 @@ export interface CompiledBin {
   parameters: unknown[];
 }
 
-/**
- * DuckDB's `date_trunc` unit names.
- *
- * A fixed lookup rather than an interpolated domain value, so the emitted string can only ever be
- * one of these five literals no matter what a caller passes.
- */
+// Allowlisted DuckDB `date_trunc` units.
 const TRUNC_UNIT: Readonly<Record<TemporalUnit, string>> = {
   day: 'day',
   week: 'week',
@@ -27,16 +22,7 @@ const TRUNC_UNIT: Readonly<Record<TemporalUnit, string>> = {
 const missingRange = (kind: string): DomainError =>
   domainError('UNSUPPORTED_OPERATION', `Bin strategy '${kind}' requires the column's range.`, { kind });
 
-/**
- * Compiles a bin strategy into a grouping expression over an already-resolved column reference.
- *
- * `reference` is emitted by the caller's identifier resolver and is quoted before it arrives, so
- * this function never touches a physical name. Every numeric boundary becomes a bound parameter
- * rather than SQL text, which keeps the strategy's numbers on the same footing as filter values.
- *
- * Returns the bucket's lower bound, not its ordinal, so a chart axis reads in the column's own units
- * without the renderer having to reverse the bucketing.
- */
+// Compiles a bin strategy over a resolved column reference.
 export const compileBinStrategy = (
   strategy: BinStrategy,
   reference: string,
@@ -48,8 +34,7 @@ export const compileBinStrategy = (
 
       const width = (range.max - range.min) / strategy.binCount;
 
-      // A constant column has no width to divide by. One bucket holding every row is the honest
-      // answer; emitting a division would yield NULL for the whole chart.
+      // A constant column has no range to divide; place every row in one bucket.
       if (!(width > 0)) return ok({ sql: '?', parameters: [range.min] });
 
       return ok({
@@ -63,8 +48,7 @@ export const compileBinStrategy = (
 
       const buckets = Math.ceil((range.max - range.min) / strategy.width);
 
-      // Guards the one bin bound the validator cannot check: it sees the width but not the range,
-      // so only here is the resulting bucket count knowable.
+      // Only the compiler knows the column range, so it enforces the resulting bucket count here.
       if (buckets > MAX_BIN_COUNT) {
         return err(
           domainError(
@@ -82,13 +66,11 @@ export const compileBinStrategy = (
     }
 
     case 'quantile':
-      // `ntile` returns the bucket's ordinal rather than a value boundary, because quantile edges
-      // are data-dependent and cannot be computed without a second pass over the column.
+      // Quantile edges are data-dependent, so `ntile` returns the bucket ordinal.
       return ok({ sql: `NTILE(?) OVER (ORDER BY ${reference})`, parameters: [strategy.quantiles] });
 
     case 'explicit': {
-      // Emitted as a searched CASE over ascending breaks. The validator guarantees the order, which
-      // is what makes the arms non-overlapping and the first match correct.
+      // The validator orders breaks, so the searched CASE arms are non-overlapping.
       const arms = strategy.breaks.map(() => `WHEN ${reference} < ? THEN ?`).join(' ');
       const parameters = strategy.breaks.flatMap((value, index) => [
         value,

@@ -10,17 +10,11 @@ import type { Result } from '@/shared/result/result.ts';
 export interface CompiledTimeComparison {
   sql: string;
   parameters: unknown[];
-  /** Result column keys the query emits, in select order. */
+  // Result column keys in SELECT order.
   resultKeys: string[];
 }
 
-/**
- * DuckDB interval literals, one per bucket unit.
- *
- * A fixed table so the interval reaching `generate_series` can only be one of these five strings.
- * DuckDB will not accept an interval as a bound parameter in a series bound, so this is the one
- * place a unit becomes SQL text, and a lookup is what keeps that safe.
- */
+// Allowlisted DuckDB intervals used by `generate_series`.
 const SERIES_INTERVAL: Readonly<Record<TemporalUnit, string>> = {
   day: "INTERVAL '1 day'",
   week: "INTERVAL '1 week'",
@@ -37,13 +31,7 @@ const TRUNC_UNIT: Readonly<Record<TemporalUnit, string>> = {
   year: 'year',
 };
 
-/**
- * How the current and prior period combine into the returned value.
- *
- * `percentChange` divides through `NULLIF`, so a prior period of zero yields NULL rather than
- * failing. That matters more than usual here: a gap-filled spine deliberately produces zero-valued
- * periods, so the zero denominator is the expected case rather than a rare one.
- */
+// Computes the comparison value for the current and prior period.
 const comparisonSql = (output: TimeComparisonOutput, current: string, prior: string): string => {
   switch (output) {
     case 'absolute':
@@ -57,28 +45,18 @@ const comparisonSql = (output: TimeComparisonOutput, current: string, prior: str
 
 export interface TimeSpineRequest {
   modifier: Extract<MetricModifier, { kind: 'timeComparison' }>;
-  /** Compiled aggregate, for example `SUM("c2")`. */
+  // Compiled aggregate, such as `SUM("c2")`.
   aggregate: string;
-  /** The FROM/JOIN fragment the base query would use. */
+  // Base FROM/JOIN fragment.
   from: string;
-  /** Compiled WHERE fragment without the keyword, or an empty string. */
+  // WHERE fragment without the keyword.
   where: string;
   whereParameters: readonly unknown[];
   resolve: ColumnReferenceResolver;
   limit: number;
 }
 
-/**
- * Compiles a time comparison over a gap-filled date axis.
- *
- * The gap filling is the whole point. `LAG` steps back one *row*, not one period, so a month with
- * no rows would silently shift the comparison onto the wrong month and the chart would look
- * plausible while being wrong. Generating the series and left-joining the aggregate onto it means
- * every period exists, so `LAG` and the period offset agree.
- *
- * The series runs between the column's own min and max, both read inside the statement, so the spine
- * needs no pre-query and stays consistent with whatever the filters selected.
- */
+// Compiles a time comparison over a gap-filled temporal axis.
 export const compileTimeSpine = (request: TimeSpineRequest): Result<CompiledTimeComparison, DomainError> => {
   const { modifier, aggregate, from, where, resolve, limit } = request;
 
@@ -115,8 +93,7 @@ export const compileTimeSpine = (request: TimeSpineRequest): Result<CompiledTime
 
   const whereClause = where === '' ? '' : `WHERE ${where}`;
 
-  // Three stages. `bucketed` aggregates per period, `spine` enumerates every period between the
-  // observed bounds, and the outer select joins them so absent periods appear as zero.
+  // Aggregate by period, build the complete period spine, then join them so gaps appear as zero.
   const sql = [
     'WITH bucketed AS (',
     `SELECT date_trunc(?, ${dateColumn.sql}) AS bucket, ${aggregate} AS value`,
@@ -141,8 +118,7 @@ export const compileTimeSpine = (request: TimeSpineRequest): Result<CompiledTime
     .filter((fragment) => fragment !== '')
     .join(' ');
 
-  // Parameter order follows the statement: the trunc unit opens `bucketed`, the filter values
-  // follow inside it, and the lag offset appears last in the outer select.
+  // Bind parameters in statement order: trunc unit, filters, then the lag offset.
   return ok({
     sql,
     parameters: [truncUnit, ...request.whereParameters, modifier.offset],

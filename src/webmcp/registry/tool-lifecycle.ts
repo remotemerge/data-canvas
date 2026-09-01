@@ -15,12 +15,14 @@ export const startToolLifecycle = async (deps: ToolLifecycleDependencies): Promi
   }
 
   const registry = await createToolRegistry(host, deps);
-  let enabled: boolean | undefined;
+  let readyCount: number | undefined;
   const sync = (): void => {
-    const next = Object.values(deps.getWorkspace().datasets).some((dataset) => dataset.importStatus === 'ready');
-    if (next === enabled) return;
-    enabled = next;
-    void registry.setDatasetToolsEnabled(next);
+    const next = Object.values(deps.getWorkspace().datasets).filter(
+      (dataset) => dataset.importStatus === 'ready',
+    ).length;
+    if (next === readyCount) return;
+    readyCount = next;
+    void registry.setReadyDatasetCount(next);
   };
   sync();
   const unsubscribe = deps.subscribeWorkspace(sync);

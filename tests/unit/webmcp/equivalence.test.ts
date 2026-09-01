@@ -13,8 +13,7 @@ const stripGeneratedIds = (value: unknown): unknown => {
   const ids = new Map<string, string>();
   let next = 0;
   const visit = (item: unknown): unknown => {
-    // Derived columns are generated with the `col_` prefix, so they normalize here too. Fixture
-    // columns use readable ids like `col_revenue` and are excluded by the uuid shape.
+    // Normalize generated derived IDs; readable fixture IDs are already stable.
     if (
       typeof item === 'string' &&
       (/^(flt|viz|sel|rel|mtr|ann)_[\w-]+$/u.test(item) ||

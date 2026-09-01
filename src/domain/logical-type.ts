@@ -1,7 +1,4 @@
-/**
- * Normalized logical column types. DuckDB's physical type vocabulary is much larger. The domain
- * collapses it on purpose so operator compatibility and visual-channel rules stay decidable.
- */
+// Domain logical types after DuckDB type normalization.
 export type LogicalType = 'number' | 'string' | 'boolean' | 'date' | 'timestamp' | 'category' | 'unknown';
 
 export const LOGICAL_TYPES: readonly LogicalType[] = [

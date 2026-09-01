@@ -106,8 +106,7 @@ describe('history written by the dispatcher', () => {
 
     const [recorded] = harness.history();
 
-    // Structural, not just textual: an added `payload` field would carry cell values into the UI
-    // and into anything that persists or logs history.
+    // Keep history payload-free so cell values cannot leak through it.
     expect(Object.keys(recorded ?? {}).toSorted()).toEqual([
       'actionId',
       'actor',

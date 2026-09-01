@@ -1,12 +1,6 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 
-/**
- * The agent names datasets and columns; the compiler decides the SQL.
- *
- * There is deliberately no field here for a join condition, an expression, or a join kind beyond the
- * two the domain supports. An agent cannot describe a join the application would not have built for
- * a human doing the same thing through the relationship editor.
- */
+// Agents supply dataset and column IDs; the application builds the join.
 export const createRelationshipSchema = {
   type: 'object',
   properties: {
@@ -26,7 +20,7 @@ export const createRelationshipSchema = {
       minItems: 1,
       maxItems: 4,
     },
-    kind: { type: 'string', enum: ['one_to_one', 'one_to_many', 'many_to_one'] },
+    kind: { type: 'string', enum: ['one_to_one', 'one_to_many', 'many_to_one', 'oneToOne', 'oneToMany', 'manyToOne'] },
     join: { type: 'string', enum: ['inner', 'left'] },
     expectedRevision: { type: 'integer', minimum: 0 },
   },

@@ -85,8 +85,7 @@ describe('createEntityId', () => {
 });
 
 describe('logical type helpers', () => {
-  // Exhaustive rather than sampled. These helpers back operator and visual-channel compatibility
-  // rules, so a newly added LogicalType must fail here until someone classifies it.
+  // Exhaustive compatibility helpers require new logical types to be classified explicitly.
   const expected: Record<LogicalType, { numeric: boolean; temporal: boolean; text: boolean }> = {
     number: { numeric: true, temporal: false, text: false },
     string: { numeric: false, temporal: false, text: true },

@@ -29,6 +29,12 @@ export const addAnnotationSchema = {
           required: ['kind', 'from', 'to'],
           additionalProperties: false,
         },
+        {
+          type: 'object',
+          properties: { kind: { type: 'string', enum: ['category'] }, value: {} },
+          required: ['kind', 'value'],
+          additionalProperties: false,
+        },
       ],
     },
     expectedRevision: { type: 'integer', minimum: 0 },

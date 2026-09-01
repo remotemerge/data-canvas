@@ -7,13 +7,7 @@ import type { Filter } from '@/domain/filter/filter.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { ok } from '@/shared/result/result.ts';
 
-/**
- * Applies a filter to a column.
- *
- * Applying a second filter with the same column and operator *replaces* the first rather than
- * stacking a contradictory pair. An agent re-issuing a narrowed filter is expressing a new
- * intention, not asking for an unsatisfiable conjunction.
- */
+// Applies a filter, replacing an existing filter with the same column and operator.
 export const handleApplyFilter: ActionHandler<ApplyFilterInput> = (workspace, payload, deps) => {
   const resolved = resolveDatasetColumn(workspace, payload.datasetId, payload.columnId);
 
@@ -43,7 +37,7 @@ export const handleApplyFilter: ActionHandler<ApplyFilterInput> = (workspace, pa
   return ok({
     workspace: { ...workspace, filters: { ...workspace.filters, [filter.id]: filter } },
     changedEntityIds: [filter.id],
-    // The value is deliberately absent from the summary; it can be a dataset cell value.
+    // Keep filter values out of history; they may be dataset cell values.
     summary: `${existing === undefined ? 'Applied' : 'Updated'} filter '${payload.operator}' on column '${column.name}'.`,
   });
 };

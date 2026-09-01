@@ -20,14 +20,7 @@ export interface CompiledExpression {
   parameters: unknown[];
 }
 
-/*
- * Fixed operator tables.
- *
- * The emitted SQL operator is looked up rather than derived from the domain value, so the only
- * strings that can reach the statement are the ones written here. A missing key compiles to
- * `undefined` and is rejected below, which is what keeps an unexpected enum value from producing a
- * malformed statement instead of an error.
- */
+// Allowlisted SQL operators; domain values are looked up here, not interpolated.
 const ARITHMETIC_SQL: Readonly<Record<ArithmeticOperator, string>> = {
   add: '+',
   sub: '-',
@@ -44,12 +37,7 @@ const COMPARISON_SQL: Readonly<Record<ComparisonOperator, string>> = {
   lte: '<=',
 };
 
-/**
- * DuckDB `date_part` field names.
- *
- * `dayOfWeek` maps to `dow` rather than passing the domain spelling through, keeping the domain
- * vocabulary independent of the engine's.
- */
+// Maps domain date-part names to DuckDB names.
 const DATE_PART_SQL: Readonly<Record<DatePart, string>> = {
   year: 'year',
   quarter: 'quarter',
@@ -66,12 +54,12 @@ const CAST_SQL: Readonly<Record<CastTarget, string>> = {
   date: 'TIMESTAMP',
 };
 
-/** Ranges for binning inside an expression, keyed by the column being binned. */
+// Ranges for expression-level binning, keyed by column ID.
 export type ColumnRangeLookup = (columnId: EntityId) => ColumnRange | undefined;
 
 export interface DerivedCompilerContext {
   resolve: ColumnReferenceResolver;
-  /** Definitions available for reference, so a derived column can build on another. */
+  // Derived-column definitions available to references.
   derivedColumns: Record<EntityId, DerivedColumn>;
   rangeFor?: ColumnRangeLookup;
 }
@@ -79,17 +67,7 @@ export interface DerivedCompilerContext {
 const missingColumn = (columnId: EntityId): DomainError =>
   domainError('COLUMN_NOT_FOUND', 'The expression references a column that does not exist.', { columnId });
 
-/**
- * Compiles a derived expression tree to a parameterized SQL fragment.
- *
- * Security invariant. Every identifier arrives already quoted from `resolve`, every operator is a
- * table lookup, and every literal becomes a bound parameter. No branch interpolates caller-supplied
- * text into the statement, which is what makes this safe to expose to an agent when a formula string
- * would not be.
- *
- * `depth` guards against a cyclic reference between derived columns surviving validation and
- * recursing forever here. It is a backstop, not the primary check.
- */
+// Compiles a derived-expression tree to a parameterized SQL fragment.
 export const compileDerivedExpression = (
   expression: DerivedExpression,
   context: DerivedCompilerContext,
@@ -101,9 +79,7 @@ export const compileDerivedExpression = (
 
   switch (expression.kind) {
     case 'column': {
-      // A reference may name a physical column or another derived one. Derived definitions are
-      // inlined rather than aliased, because a derived column is an expression in the SELECT list
-      // and SQL cannot reference a sibling select alias in the same GROUP BY.
+      // Inline derived definitions because sibling SELECT aliases are not valid in GROUP BY.
       const derived = context.derivedColumns[expression.columnId];
 
       if (derived !== undefined) return compileDerivedExpression(derived.expression, context, depth + 1);
@@ -135,8 +111,7 @@ export const compileDerivedExpression = (
         );
       }
 
-      // Division guards the denominator with NULLIF so a zero yields NULL for that row instead of
-      // failing the statement. One malformed row must not take out an entire chart.
+      // Return NULL for zero denominators so the query continues.
       const denominator = expression.op === 'div' ? `NULLIF(${right.value.sql}, 0)` : right.value.sql;
 
       return ok({
@@ -201,7 +176,7 @@ export const compileDerivedExpression = (
         return err(domainError('UNSUPPORTED_OPERATION', 'That date part is not supported.', { part: expression.part }));
       }
 
-      return ok({ sql: `date_part(?, ${resolved.sql})`, parameters: [part] });
+      return ok({ sql: `date_part('${part}', ${resolved.sql})`, parameters: [] });
     }
 
     case 'bin': {
@@ -225,8 +200,7 @@ export const compileDerivedExpression = (
         return err(domainError('UNSUPPORTED_OPERATION', 'That cast target is not supported.', { to: expression.to }));
       }
 
-      // `TRY_CAST` rather than `CAST`: a value that will not convert becomes NULL instead of
-      // aborting the query, matching how division by zero behaves.
+      // Invalid casts become NULL so they do not abort the query.
       return ok({ sql: `TRY_CAST(${operand.value.sql} AS ${target})`, parameters: operand.value.parameters });
     }
   }

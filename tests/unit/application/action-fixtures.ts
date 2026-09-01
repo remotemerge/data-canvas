@@ -16,13 +16,7 @@ import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import type { WorkspaceState } from '@/state/workspace-store.ts';
 
-/*
- * Shared fixtures for application-layer tests.
- *
- * Tests build an isolated store per case rather than sharing the application singleton, so a
- * concurrency test cannot be perturbed by another file's state.
- */
-
+// Shared fixtures for application-layer tests.
 export const column = (id: string, name: string, logicalType: LogicalType): Column => ({
   id,
   name,
@@ -37,8 +31,7 @@ export const SALES_COLUMNS: Column[] = [
   column('col_region', 'region', 'category'),
   column('col_notes', 'notes', 'string'),
   column('col_revenue', 'revenue', 'number'),
-  // A second numeric column, so a derived expression can divide one measure by another and the
-  // zero-denominator case has somewhere to come from.
+  // Include a second numeric column for derived division tests.
   column('col_units', 'units', 'number'),
   column('col_returned', 'returned', 'boolean'),
 ];
@@ -71,7 +64,7 @@ export const visualization = (id: string, datasetId: string): Visualization => (
   createdBy: 'human',
 });
 
-/** A workspace holding one ready dataset, the starting point for most action tests. */
+// A workspace holding one ready dataset, the starting point for most action tests.
 export const workspaceWithDataset = (): Workspace => {
   const dataset = salesDataset();
 
@@ -116,12 +109,7 @@ export const customersDataset = (): Dataset =>
 export const productsDataset = (): Dataset =>
   readyDataset('ds_products', 'products', 'dataset_products', PRODUCTS_COLUMNS);
 
-/**
- * The join fixture: orders, customers, and products, with no relationships defined yet.
- *
- * Three datasets rather than two, so a test can build a chain (orders→customers→products) and
- * exercise cycle rejection, which needs at least three nodes to be meaningful.
- */
+// Join fixture with orders, customers, and products.
 export const workspaceWithJoinableDatasets = (): Workspace => {
   const orders = ordersDataset();
   const customers = customersDataset();
@@ -134,12 +122,7 @@ export const workspaceWithJoinableDatasets = (): Workspace => {
   };
 };
 
-/**
- * A stand-in engine for handler tests.
- *
- * Handler logic is independent of DuckDB, so these tests must not need a worker. The real engine is
- * exercised in the browser, where it can actually run.
- */
+// Stand-in engine for handler tests.
 export const stubDataEngine = (
   importFile: DataEnginePort['importFile'] = (_file, datasetId) =>
     Promise.resolve(
@@ -149,32 +132,8 @@ export const stubDataEngine = (
         columns: [column('col_a', 'a', 'number')],
       }),
     ),
-  /**
-   * The columns a Parquet export should report per dataset.
-   *
-   * Supplied by portability tests so a round trip reproduces the schema it started with. Handler
-   * tests never reach the Parquet path and can leave it at the default.
-   */
-  exportedColumns: (datasetId: string) => Column[] = () => [column('col_a', 'a', 'number')],
 ): DataEnginePort => ({
   importFile,
-  // Stand-in Parquet bytes carrying the schema the export was asked for. Portability tests assert
-  // the archive plumbing — which datasets are written, and that import routes each file back
-  // through the engine — not DuckDB's encoding. Echoing the schema back is what lets the import's
-  // column-match check be exercised: real DuckDB reads these names out of the Parquet file.
-  exportDatasetParquet: (datasetId) =>
-    Promise.resolve(ok(new TextEncoder().encode(JSON.stringify({ datasetId, columns: exportedColumns(datasetId) })))),
-  importDatasetParquet: (datasetId, bytes) => {
-    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as { columns?: Column[] };
-
-    return Promise.resolve(
-      ok<ImportedRelation>({
-        relationId: `dataset_${datasetId.slice(-4)}`,
-        rowCount: 42,
-        columns: decoded.columns ?? [column('col_a', 'a', 'number')],
-      }),
-    );
-  },
   fetchTableWindow: () =>
     Promise.resolve(ok({ rows: [], columnIds: [], columns: [], totalRowCount: 0, offset: 0, stale: false })),
   executeAnalysis: () => Promise.resolve(ok({ rows: [], columns: [] })),
@@ -182,18 +141,12 @@ export const stubDataEngine = (
   getColumnStatistics: () =>
     Promise.resolve(ok({ rowCount: 0, nullCount: 0, distinctCount: 0, distinctCountCapped: false })),
   getColumnRange: () => Promise.resolve(ok({ min: 0, max: 0 })),
-  // A unique key by default, so a relationship created in a test carries no fan-out warning unless
-  // the test deliberately overrides this to measure one.
+  // Default to a unique key so relationships have no fan-out warning.
   measureKeyQuality: () => Promise.resolve(ok({ sampledRows: 100, distinctKeys: 100 })),
   dropDataset: () => Promise.resolve(ok(undefined)),
 });
 
-/**
- * Wires the column-statistics dependency the tool surface needs.
- *
- * Shared so the six call sites that build `ToolDependencies` do not each restate how the profile
- * reaches the engine, which is the application query's job rather than each test's.
- */
+// Adds the column-statistics dependency used by WebMCP tool tests.
 export const stubColumnStatistics =
   (engine: DataEnginePort, workspace: () => Workspace): ToolDependencies['fetchColumnStatistics'] =>
   (request) =>
@@ -220,13 +173,7 @@ export const createHarness = (
   };
 };
 
-/**
- * Runs the full import lifecycle: commit the `loading` placeholder, then resolve it.
- *
- * Tests go through both actions rather than calling `dataset.import` alone, because an import that
- * skips the placeholder is not a path the application has — the handler rejects a dataset that is
- * not already loading.
- */
+// Runs the import lifecycle through begin and import actions.
 export const importThroughDispatcher = async (
   harness: TestHarness,
   file: unknown,

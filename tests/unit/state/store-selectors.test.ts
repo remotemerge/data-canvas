@@ -1,30 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-/**
- * Guards against unstable Zustand selectors.
- *
- * A selector that builds a new array or object on every call — `state.x.filter(...)`,
- * `Object.values(state.x).filter(...)` — makes `useSyncExternalStore` see a changed snapshot on
- * every render. React then re-renders forever and throws "Maximum update depth exceeded".
- *
- * This is not hypothetical. `Provenance` filtered the history array inside its selector, and because
- * it renders inside every chart panel and metric card, the loop took down the whole canvas the first
- * time a chart was created against a real dataset. Unit tests did not catch it because the crash
- * only appears once a component actually subscribes and re-renders.
- *
- * The rule: select the stable reference, derive with `useMemo`.
- */
+// Guards against selectors that allocate new references on each read.
 
-/** Selector bodies that allocate. `find` is excluded: it returns an element, not a new container. */
+// Selector bodies that allocate new containers.
 const ALLOCATING_CALL = /\.(filter|map|flatMap|slice|concat|toSorted|toReversed|sort)\s*\(/u;
 
-/**
- * Extracts each `useWorkspace((state) => …)` selector body by matching parentheses.
- *
- * A regex cannot do this correctly — a selector body contains its own parens — so the opening call
- * is found by pattern and the body is then scanned to its balanced close.
- */
+// Extracts selector bodies with balanced-parenthesis scanning.
 const SELECTOR_START = /useWorkspace\(\s*\((?:state|s)\)\s*=>/gu;
 
 const selectorBodies = (source: string): string[] => {

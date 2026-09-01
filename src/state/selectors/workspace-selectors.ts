@@ -6,12 +6,7 @@ import type { WorkspaceRevision } from '@/domain/workspace/workspace.ts';
 import type { WorkspaceState } from '@/state/workspace-store.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/*
- * Selectors return the stored record itself rather than mapping to a new array.
- * Building an array inside a selector allocates on every store read, so `useStore` sees a new
- * reference each time and re-renders on unrelated changes.
- * Components derive arrays with `useMemo` instead.
- */
+// Keep selector results referentially stable; derive arrays in useMemo.
 
 export const selectWorkspaceName = (state: WorkspaceState): string => state.workspace.name;
 
@@ -24,11 +19,15 @@ export const selectVisualizations = (state: WorkspaceState): Record<EntityId, Vi
 
 export const selectFilters = (state: WorkspaceState): Record<EntityId, Filter> => state.workspace.filters;
 
+// Whether the canvas contains any chart.
+export const selectHasVisualizations = (state: WorkspaceState): boolean =>
+  Object.keys(state.workspace.visualizations).length > 0;
+
 export const selectActiveDatasetId = (state: WorkspaceState): EntityId | undefined => state.workspace.activeDatasetId;
 
 export const selectLayoutColumns = (state: WorkspaceState): number => state.workspace.layout.columns;
 
-/** Returns the stored array; components reverse or slice it inside a `useMemo`. */
+// Returns the stored history array.
 export const selectHistory = (state: WorkspaceState): ActionHistoryEntry[] => state.history;
 
 export const selectActiveDataset = (state: WorkspaceState): Dataset | undefined => {
@@ -37,10 +36,7 @@ export const selectActiveDataset = (state: WorkspaceState): Dataset | undefined 
   return activeDatasetId === undefined ? undefined : datasets[activeDatasetId];
 };
 
-/**
- * Returns filter entities belonging to one dataset. This allocates, so callers subscribing through
- * `useWorkspace` should select `selectFilters` and narrow inside a `useMemo`.
- */
+// Returns filters for one dataset as a new array.
 export const selectFiltersForDataset = (state: WorkspaceState, datasetId: EntityId): Filter[] =>
   Object.values(state.workspace.filters).filter((filter) => filter.datasetId === datasetId);
 

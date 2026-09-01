@@ -1,23 +1,13 @@
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/**
- * Dataset and column statistics, keyed by dataset revision.
- *
- * These back three decisions that would otherwise each pay for their own query: how to bin a column,
- * whether a result needs sampling, and which order to join datasets in. Recomputing them per query
- * would cancel out the planner's gains, since profiling a column costs roughly what the query it is
- * meant to optimize costs.
- *
- * Revision-keyed rather than time-expired: a statistic is valid exactly as long as the data it
- * describes is unchanged, and the dataset revision is precisely that fact.
- */
+// Column statistics cached by dataset revision.
 
 export interface DatasetStatistics {
   rowCount: number;
 }
 
 export interface ColumnStatisticsEntry {
-  /** Bounded: equal to the cap means "at least this many". */
+  // Capped distinct count; equality with the cap means "at least this many."
   distinctCount: number;
   distinctCountCapped: boolean;
   min?: number;
@@ -34,17 +24,12 @@ export interface StatisticsCache {
   setDatasetStatistics(datasetId: EntityId, revision: number, value: DatasetStatistics): void;
   columnStatistics(columnId: EntityId, revision: number): ColumnStatisticsEntry | undefined;
   setColumnStatistics(columnId: EntityId, revision: number, value: ColumnStatisticsEntry): void;
-  /** Drops everything a dataset contributed. Used when a dataset is removed. */
+  // Removes all entries contributed by a dataset.
   invalidateDataset(datasetId: EntityId, columnIds: readonly EntityId[]): void;
   clear(): void;
 }
 
-/**
- * Reads an entry, discarding it when it describes a superseded revision.
- *
- * Deleted rather than kept: the revision it describes will never return, so holding it only costs
- * memory.
- */
+// Reads an entry only when its dataset revision is still current.
 const readForRevision = <T>(
   store: Map<EntityId, RevisionedEntry<T>>,
   id: EntityId,

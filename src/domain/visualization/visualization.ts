@@ -28,16 +28,10 @@ export const VISUALIZATION_KINDS: readonly VisualizationKind[] = [
   'heatmap',
 ] as const;
 
-/** Kinds whose result rows DuckDB computes as a distribution rather than a plain grouped aggregate. */
+// Kinds with distribution-specific query results.
 export const DISTRIBUTION_KINDS: readonly VisualizationKind[] = ['histogram', 'boxplot', 'heatmap'] as const;
 
-/**
- * Maps dataset columns onto visual channels by ID.
- *
- * This records intent rather than configuration. The ECharts adapter translates a binding into
- * `dataset` + `series.encode`. Keeping it ID-based lets a visualization survive a renderer change
- * without a migration.
- */
+// Maps dataset columns to visual channels by ID.
 export interface VisualBinding {
   x?: EntityId;
   y?: EntityId[];
@@ -45,14 +39,9 @@ export interface VisualBinding {
   color?: EntityId;
   size?: EntityId;
   tooltip?: EntityId[];
-  /**
-   * Bins the `x` dimension before grouping. Required by `histogram`, optional elsewhere.
-   *
-   * A strategy rather than a bucket count so the choice of `width_bucket`, `ntile`, or `date_trunc`
-   * stays a compiler decision instead of leaking into the binding.
-   */
+  // Optional binning for the x dimension.
   binX?: BinStrategy;
-  /** Bins the `series` dimension. Only `heatmap` uses it, where both axes may be continuous. */
+  // Optional binning for the series dimension.
   binSeries?: BinStrategy;
 }
 
@@ -60,7 +49,7 @@ export interface VisualizationPresentation {
   showLegend: boolean;
   showGrid: boolean;
   stacked: boolean;
-  /** Chart-relative sizing hints; the concrete grid geometry lives in `WorkspaceLayout`. */
+  // Chart-relative sizing hints.
   colSpan?: number;
   rowSpan?: number;
 }
@@ -73,13 +62,9 @@ export interface Visualization {
   query: AnalysisQuery;
   binding: VisualBinding;
   presentation: VisualizationPresentation;
-  /** How this chart responds to a selection made elsewhere in the workspace. */
+  // How this chart responds to external selection.
   linkMode: SelectionLinkMode;
   createdBy: 'human' | 'agent' | 'system';
 }
 
-/*
- * Invariant. A `Visualization` must never hold an `EChartsOption` or any other renderer object.
- * ECharts renders this definition; it does not define it. Storing renderer config here would give
- * an agent a path to pass arbitrary chart configuration through the domain model.
- */
+// Visualization definitions do not contain ECharts renderer objects.

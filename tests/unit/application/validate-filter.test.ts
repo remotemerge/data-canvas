@@ -6,7 +6,7 @@ import { LOGICAL_TYPES } from '@/domain/logical-type.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
 import { column } from './action-fixtures.ts';
 
-/** A representative valid value for each logical type, used to probe operator compatibility. */
+// A representative valid value for each logical type, used to probe operator compatibility.
 const sampleValue: Record<LogicalType, unknown> = {
   number: 42,
   string: 'north',
@@ -17,13 +17,7 @@ const sampleValue: Record<LogicalType, unknown> = {
   unknown: 'anything',
 };
 
-/**
- * The full compatibility matrix, asserted exhaustively rather than sampled.
- *
- * `true` means the operator is legal against that column type when given a well-typed value. A new
- * logical type or operator fails this table until someone classifies it, which is the point:
- * silently defaulting a new pair to "allowed" would let it reach the query compiler unchecked.
- */
+// Exhaustive compatibility matrix for filter operators and logical types.
 const isCompatible: Record<FilterOperator, Record<LogicalType, boolean>> = {
   eq: { number: true, string: true, boolean: true, date: true, timestamp: true, category: true, unknown: true },
   neq: { number: true, string: true, boolean: true, date: true, timestamp: true, category: true, unknown: true },
@@ -63,7 +57,7 @@ const isCompatible: Record<FilterOperator, Record<LogicalType, boolean>> = {
   },
 };
 
-/** Builds the value shape each operator expects, from a single well-typed sample. */
+// Builds the value shape each operator expects, from a single well-typed sample.
 const valueFor = (operator: FilterOperator, logicalType: LogicalType): unknown => {
   const sample = sampleValue[logicalType];
 

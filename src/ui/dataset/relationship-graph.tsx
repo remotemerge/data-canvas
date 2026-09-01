@@ -3,27 +3,16 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 
-/*
- * Layout constants. A radial arrangement rather than a force simulation: the graph is acyclic and
- * small by construction, and a deterministic layout means the same workspace always draws the same
- * shape — which matters more here than optimal edge routing.
- */
+// Use a deterministic radial layout for the small acyclic relationship graph.
 const VIEWBOX = 320;
 const CENTER = VIEWBOX / 2;
 const RADIUS = 110;
 const NODE_RADIUS = 26;
 
-/** Beyond this a radial layout stops being readable and the textual list below carries the detail. */
+// Maximum datasets shown in the radial graph.
 const MAX_RENDERED_NODES = 12;
 
-/**
- * A node/edge view of datasets and their relationships.
- *
- * Past three datasets a textual list stops conveying the shape of the join graph — which dataset is
- * the hub, which is a leaf, what a query can reach. Plain SVG, no charting dependency: this is a
- * schema diagram, not a data visualization, so ECharts would be the wrong tool as well as a new
- * import in a module that does not need one.
- */
+// Renders dataset relationships as a small SVG diagram.
 export const RelationshipGraph = ({ onError }: { onError: (error: DomainError) => void }): React.JSX.Element => {
   const datasets = useWorkspace((state) => state.workspace.datasets);
   const relationships = useWorkspace((state) => state.workspace.relationships);
@@ -35,7 +24,7 @@ export const RelationshipGraph = ({ onError }: { onError: (error: DomainError) =
       .slice(0, MAX_RENDERED_NODES);
 
     return ready.map((dataset, index) => {
-      // A single dataset sits at the centre; otherwise nodes spread evenly around the circle.
+      // Place a single dataset at the center; arrange larger graphs around it.
       const angle = ready.length === 1 ? 0 : (index / ready.length) * 2 * Math.PI - Math.PI / 2;
 
       return {
@@ -93,7 +82,7 @@ export const RelationshipGraph = ({ onError }: { onError: (error: DomainError) =
         {nodes.map((node) => (
           <g key={node.dataset.id} className="relationship-graph__node">
             <circle cx={node.x} cy={node.y} r={NODE_RADIUS} />
-            {/* Dataset names are untrusted display text; SVG text renders them as a text child. */}
+            {/* Dataset names are untrusted text. */}
             <text x={node.x} y={node.y + NODE_RADIUS + 12} textAnchor="middle">
               {node.dataset.name}
             </text>
@@ -102,7 +91,7 @@ export const RelationshipGraph = ({ onError }: { onError: (error: DomainError) =
       </svg>
 
       {edges.length === 0 ? (
-        <p className="workspace__empty">No relationships defined yet.</p>
+        <p className="workspace__empty">No relationships yet.</p>
       ) : (
         <ul className="relationship-graph__list">
           {edges.map(({ relationship, from, to }) => (

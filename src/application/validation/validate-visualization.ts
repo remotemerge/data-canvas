@@ -9,19 +9,10 @@ import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 import { resolveColumn } from '@/application/validation/validate-entity-refs.ts';
 
-/**
- * Upper bound on measures bound to one chart. Beyond this the chart is unreadable and the series
- * count starts to matter for render cost, so it is rejected rather than silently truncated.
- */
+// Maximum number of measures bound to one chart.
 export const MAX_BOUND_MEASURES = 12;
 
-/*
- * Per-kind binding rules.
- *
- * Messages are written so an agent can self-correct without another round trip: they state the
- * requirement and the actual column type that violated it. Column display names are safe to
- * include; column values are not, and never appear here.
- */
+// Per-kind binding rules. Error messages may include column names, but never column values.
 
 const missingChannel = (kind: VisualizationKind, channel: string, requirement: string): DomainError =>
   domainError('INCOMPATIBLE_COLUMN', `${kind} requires ${requirement}; '${channel}' is not bound.`, { kind, channel });
@@ -33,13 +24,7 @@ const wrongType = (kind: VisualizationKind, channel: string, column: Column, req
     { kind, channel, columnId: column.id, logicalType: column.logicalType },
   );
 
-/**
- * Resolves every bound channel so an unknown column ID cannot survive into a stored visualization.
- *
- * `related` carries datasets reachable from the anchor through a relationship. A chart may bind a
- * dimension from one dataset and a measure from another, so resolution spans them — but only over
- * datasets the caller has already established are joinable, never the whole workspace.
- */
+// Resolves bound channels against the anchor and its reachable datasets.
 const resolveBoundColumns = (
   dataset: Dataset,
   binding: VisualBinding,
@@ -66,8 +51,7 @@ const resolveBoundColumns = (
       continue;
     }
 
-    // Falls back to the anchor last, so its error message names the anchor — the dataset the caller
-    // actually chose — rather than whichever related dataset happened to be checked first.
+    // Check the anchor last so errors name the dataset the caller selected.
     const column = resolveColumn(dataset, columnId);
 
     if (!column.ok) return column;
@@ -118,8 +102,7 @@ const validateSeriesKind = (
 
   const x = columns.get(binding.x);
 
-  // `line` and `area` imply progression along x, so an unordered text dimension misrepresents the
-  // data. `bar` has no such implication and accepts categories.
+  // Line and area charts need an ordered x-axis; bar charts can use categories.
   if (x !== undefined && kind !== 'bar' && !isTemporalType(x.logicalType) && !isNumericType(x.logicalType)) {
     return err(wrongType(kind, 'x', x, 'a temporal or ordered numeric x'));
   }
@@ -214,20 +197,10 @@ const validateTable = (binding: VisualBinding, columns: Map<EntityId, Column>): 
     ? err(missingChannel('table', 'x', 'at least one bound column'))
     : ok(undefined);
 
-/**
- * Upper bound on box plots in one chart.
- *
- * A box plot with hundreds of boxes is unreadable, and each box is a separate quantile computation,
- * so the limit protects legibility and query cost together.
- */
+// Maximum number of boxes in one chart.
 export const MAX_BOXPLOT_CATEGORIES = 50;
 
-/**
- * A histogram bins one continuous column and counts the rows in each bucket.
- *
- * The measure comes from the bin, so `y` stays unbound: requiring a measure would invite a caller
- * to bind one that contradicts the count the histogram actually shows.
- */
+// Validates a histogram binding, which counts rows in x-axis bins.
 const validateHistogram = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
   if (binding.x === undefined) {
     return err(missingChannel('histogram', 'x', 'one numeric or temporal column to bin'));
@@ -252,8 +225,7 @@ const validateHistogram = (binding: VisualBinding, columns: Map<EntityId, Column
 
   if (!strategy.ok) return strategy;
 
-  // A temporal strategy on a numeric column, or the reverse, compiles to a function the column's
-  // type cannot accept. Caught here so the message names the mismatch rather than DuckDB's error.
+  // Reject temporal strategies on numeric columns and numeric strategies on temporal columns.
   if (column !== undefined) {
     const temporalStrategy = binding.binX.kind === 'temporal';
 
@@ -269,7 +241,7 @@ const validateHistogram = (binding: VisualBinding, columns: Map<EntityId, Column
   return ok(undefined);
 };
 
-/** A box plot summarizes one numeric measure, optionally split by a low-cardinality category. */
+// Validates a box-plot binding with an optional category split.
 const validateBoxplot = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
   const measures = measureIds(binding);
 
@@ -304,7 +276,7 @@ const validateBoxplot = (binding: VisualBinding, columns: Map<EntityId, Column>)
   return ok(undefined);
 };
 
-/** A heatmap needs both axes and one measure, since colour encodes the cell's value. */
+// Validates a heatmap binding with two axes and one measure.
 const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
   if (binding.x === undefined) return err(missingChannel('heatmap', 'x', 'two dimensions and one measure'));
   if (binding.series === undefined) return err(missingChannel('heatmap', 'series', 'two dimensions and one measure'));
@@ -356,13 +328,7 @@ const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>)
   return ok(undefined);
 };
 
-/**
- * Checks a visualization's binding against its kind and the available columns.
- *
- * Runs after the dataset is resolved. Resolves every referenced column itself, so callers do not
- * need a separate reference check for the binding. `related` is the datasets joinable to the anchor;
- * omitting it restricts the binding to the anchor's own columns.
- */
+// Validates a visualization binding against its kind and reachable columns.
 export const validateVisualization = (
   dataset: Dataset,
   kind: VisualizationKind,

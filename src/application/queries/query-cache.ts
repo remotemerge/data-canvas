@@ -24,13 +24,7 @@ const stableValue = (value: unknown): unknown => {
 
 export const createQueryCacheKey = (key: QueryCacheKey): string => JSON.stringify(stableValue(key));
 
-/**
- * The part of a key that identifies the same underlying result set regardless of windowing.
- *
- * Two requests differing only in `limit` or `offset` read the same ordered rows, so a wider cached
- * result can serve a narrower one by slicing. Excluding those two fields is what makes that lookup
- * possible without a second index.
- */
+// Key for the underlying ordered result, excluding its window.
 export const createResultSetKey = (key: QueryCacheKey): string => {
   const { limit: _limit, offset: _offset, ...rest } = key;
 
@@ -38,61 +32,43 @@ export const createResultSetKey = (key: QueryCacheKey): string => {
 };
 
 export interface CacheEntryCost {
-  /** Rows the entry holds. Drives eviction weight, since a wide result costs more to keep. */
+  // Rows held by the entry; used for weighted eviction.
   size: number;
-  /** Milliseconds the query took. An expensive entry resists eviction by a stream of cheap ones. */
+  // Query duration in milliseconds; expensive entries receive more cache weight.
   computeMs: number;
 }
 
 interface CacheEntry<T> {
   value: T;
   cost: CacheEntryCost;
-  /** Monotonic access counter, standing in for recency without reading the clock. */
+  // Monotonic access counter used for recency.
   usedAt: number;
-  /** The entry's key with the window fields removed, so covering lookups compare like with like. */
+  // Underlying result key without window fields.
   resultSetKey: string;
   limit: number;
   offset: number;
 }
 
-/**
- * A cached result that covers a narrower window than the one requested.
- *
- * The caller receives the wider value plus where its window starts, and slices accordingly. The
- * cache cannot do the slicing itself: it is generic over the value type and has no idea whether the
- * value is an array of rows, a count, or something else.
- */
+// Cached value whose window contains the requested window.
 export interface CoveringEntry<T> {
   value: T;
-  /** Offset the cached value starts at, always at or before the requested offset. */
+  // Offset of the cached value.
   offset: number;
   limit: number;
 }
 
 export interface QueryCache<T> {
   get(key: QueryCacheKey): T | undefined;
-  /**
-   * Finds a cached entry whose window contains the requested one.
-   *
-   * Separate from `get` because reuse is only valid for values the caller can slice; a count cached
-   * under a different limit describes a different question and must not be reused this way.
-   */
+  // Finds a cached entry whose window contains the requested one.
   getCovering(key: QueryCacheKey): CoveringEntry<T> | undefined;
   set(key: QueryCacheKey, value: T, cost?: CacheEntryCost): void;
   clear(): void;
-  /** Hit and miss tallies, asserted by the performance regression tests. */
+  // Cache hit and miss counts.
   statistics(): { hits: number; misses: number };
 }
 
-/**
- * The cache used for counts and analysis results.
- *
- * Eviction is weighted rather than plain LRU. Straight LRU lets a burst of trivial lookups evict a
- * multi-second aggregate that a chart is about to ask for again, which is precisely the case worth
- * keeping. The score combines recency with computation cost per row held, so a cheap large entry
- * goes before an expensive small one.
- */
-/** Lower is evicted first: old, cheap, and large entries score lowest. */
+// Weighted cache for counts and analysis results.
+// Lower scores are evicted first.
 const evictionScore = (entry: CacheEntry<unknown>): number =>
   entry.usedAt + Math.max(entry.cost.computeMs, 1) / Math.max(entry.cost.size, 1);
 
@@ -153,10 +129,7 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
         return { value: exact.value, offset: exact.offset, limit: exact.limit };
       }
 
-      // Partial reuse. An entry over the same result set that starts no later and ends no earlier
-      // than this request already holds every row the caller wants, so re-querying would read rows
-      // that are in memory. The window bounds go back with the value; slicing belongs to the caller,
-      // which is the only side that knows the value's shape.
+      // Reuse a wider cached window; the caller slices it because only the caller knows the value's shape.
       const resultSetKey = createResultSetKey(key);
       const offset = key.offset ?? 0;
 

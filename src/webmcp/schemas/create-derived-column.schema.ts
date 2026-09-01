@@ -1,17 +1,7 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 
-/**
- * The recursive expression-node schema.
- *
- * Ajv resolves `#/$defs/expression` recursively, so the tree's *shape* is fully described here. What
- * JSON Schema cannot express is a maximum recursion depth or a total node count, so both are
- * enforced in domain validation instead. Ajv accepting a tree is necessary, not sufficient.
- *
- * Every node's `kind` is a closed enum and no branch carries free-form text that becomes SQL. The
- * only strings are literal values and identifiers, and both are bound as parameters.
- */
-// No `type` on the wrapper: each branch already declares `type: 'object'`, and repeating it here
-// would be an object node with no properties of its own to bound.
+// Recursive expression-node schema. Runtime depth and node-count limits are domain validation.
+// Each branch declares its own object type; the wrapper needs no duplicate type.
 const binStrategy = {
   oneOf: [
     {
@@ -61,13 +51,7 @@ const expressionNode = {
       required: ['kind', 'columnId'],
       additionalProperties: false,
     },
-    /*
-     * One branch per literal type rather than a union `type`.
-     *
-     * Ajv's strict mode rejects a union type keyword, and `allowUnionTypes` would relax it for
-     * every schema rather than this one field. Separate branches also let the string case carry its
-     * own `maxLength`, which a union cannot express.
-     */
+    // Use one schema branch per literal type so string length can be bounded.
     {
       type: 'object',
       properties: { kind: { const: 'literal' }, value: { type: 'number' } },

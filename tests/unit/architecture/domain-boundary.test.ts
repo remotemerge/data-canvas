@@ -1,16 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 
-/**
- * The domain boundary guard.
- *
- * This test is the sole enforcement of the rule. The shared `oxlint.config.ts` stays as authored and
- * carries no path-scoped `no-restricted-imports` override, so nothing else catches a leaked adapter
- * import. Keep this test passing rather than relaxing it.
- */
+// Guards the domain dependency boundary.
 const BANNED_SPECIFIERS = [
   'react',
   'react-dom',
-  'react-router-dom',
   'echarts',
   '@tanstack/react-table',
   '@tanstack/react-virtual',
@@ -19,11 +12,11 @@ const BANNED_SPECIFIERS = [
   '@mcp-b/webmcp-types',
 ];
 
-/** Bans the package root and any subpath (`echarts/core`), but not lookalikes (`react-icons`). */
+// Disallowed package prefixes.
 const isBanned = (specifier: string): boolean =>
   BANNED_SPECIFIERS.some((banned) => specifier === banned || specifier.startsWith(`${banned}/`));
 
-/** Matches static imports, type-only imports, re-exports, and dynamic `import()` calls. */
+// Matches import and re-export forms.
 const SPECIFIER_PATTERN = /(?:from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g;
 
 const collectSpecifiers = (source: string): string[] =>

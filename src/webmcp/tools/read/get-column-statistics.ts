@@ -2,16 +2,7 @@ import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-ty
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { asInput, boundedCell, failure, invalidEntity, success } from '@/webmcp/tools/tool-helpers.ts';
 
-/**
- * Returns a bounded statistical profile of one column.
- *
- * This is the read tool worth having over wider preview access. "Which columns suit a time series?"
- * is answerable from types, null counts, and distinct counts alone, so an agent gets a better answer
- * while fewer raw values leave the device.
- *
- * `untrustedContentHint` is set because `topValues` is dataset content. Those values are capped in
- * count and truncated in length, the same treatment `preview_data` gives its cells.
- */
+// Returns a bounded statistical profile for one column.
 export const createGetColumnStatisticsTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'get_column_statistics',
   description:

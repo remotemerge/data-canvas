@@ -12,7 +12,7 @@ import type { DerivedExpression } from '@/domain/analysis/derived-expression.ts'
 
 const column = (id: string): DerivedExpression => ({ kind: 'column', columnId: id });
 
-/** Builds a left-leaning arithmetic chain of the requested depth. */
+// Builds a left-leaning arithmetic chain of the requested depth.
 const nest = (depth: number): DerivedExpression =>
   depth <= 1 ? column('col_a') : { kind: 'arithmetic', op: 'add', left: nest(depth - 1), right: column('col_b') };
 

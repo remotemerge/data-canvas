@@ -1,18 +1,16 @@
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-/**
- * Where an annotation attaches to a visualization. Anchors reference domain dimensions and data
- * values, never pixel coordinates or DOM nodes, so they survive re-rendering and re-layout.
- */
+// Domain anchor for an annotation; anchors survive re-rendering and layout changes.
 export type AnnotationAnchor =
   | { kind: 'data'; dimension: EntityId; value: unknown }
   | { kind: 'point'; x: unknown; y: unknown }
-  | { kind: 'range'; from: unknown; to: unknown };
+  | { kind: 'range'; from: unknown; to: unknown }
+  | { kind: 'category'; value: unknown };
 
 export interface Annotation {
   id: EntityId;
   visualizationId: EntityId;
-  /** Free text from a human or agent. Renders as plain text only, never as HTML. */
+  // Human- or agent-authored text rendered as plain text.
   text: string;
   anchor: AnnotationAnchor;
   origin: 'human' | 'agent';
