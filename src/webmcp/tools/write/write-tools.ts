@@ -14,6 +14,8 @@ import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { createCreateDerivedColumnTool } from '@/webmcp/tools/write/create-derived-column.ts';
+import { createClearSelectionTool } from '@/webmcp/tools/write/clear-selection.ts';
+import { createHistoryTools } from '@/webmcp/tools/write/history-tools.ts';
 import { createCreateRelationshipTool } from '@/webmcp/tools/write/create-relationship.ts';
 import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 
@@ -109,6 +111,8 @@ const queryFrom = (
 export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   createCreateRelationshipTool(deps),
   createCreateDerivedColumnTool(deps),
+  createClearSelectionTool(deps),
+  ...createHistoryTools(deps),
   {
     name: 'create_visualization',
     description:
