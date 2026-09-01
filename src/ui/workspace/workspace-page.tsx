@@ -103,6 +103,7 @@ export const WorkspacePage = (): React.JSX.Element => {
               </SheetContent>
             </Sheet>
           ) : null}
+          <img src="/icon.svg" alt="" className="workspace__brand-icon" />
           <span className="workspace__brand">Data Canvas</span>
           <h1 className="workspace__title">{name}</h1>
           <span className="workspace__revision" aria-label={`Workspace revision ${revision}`}>

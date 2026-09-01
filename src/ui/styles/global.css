@@ -588,6 +588,12 @@ textarea:focus-visible,
   grid-template-columns: 1fr 1fr;
 }
 
+.workspace__brand-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
 .workspace__brand {
   font-size: 0.8125rem;
   font-weight: 650;
@@ -1864,6 +1870,7 @@ textarea:focus-visible,
  * and labels. Agent status and revision stay visible above it; they are the shared-workspace signals.
  */
 @media (max-width: 767px) {
+  .workspace__brand-icon,
   .workspace__brand {
     display: none;
   }
