@@ -1,6 +1,6 @@
 {
   "name": "@remotemerge/data-canvas",
-  "description": "The shared visual workspace for humans and AI to explore data together.",
+  "description": "Local-first visual analytics workspace where humans and AI agents share the same data, state, and analytical context.",
   "homepage": "https://data-canvas.madansapkota.com",
   "bugs": {
     "url": "https://github.com/remotemerge/data-canvas/issues"
