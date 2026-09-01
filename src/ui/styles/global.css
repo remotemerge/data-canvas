@@ -431,6 +431,37 @@ textarea:focus-visible,
   font-size: var(--dc-text-sm);
 }
 
+/* Rebinding form inside a chart card, laid out like the annotation editor above it. */
+.visualization-editor {
+  display: grid;
+  gap: var(--dc-space-2);
+  margin-top: var(--dc-space-3);
+  padding-top: var(--dc-space-3);
+  border-top: 1px solid var(--dc-color-border);
+  min-width: 0;
+}
+
+.visualization-editor h4 {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+  font-weight: 600;
+}
+
+.visualization-editor label {
+  display: grid;
+  gap: var(--dc-space-1);
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.visualization-editor small,
+.visualization-editor__hint {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
 .annotation-list h4 {
   margin: 0;
   font-size: var(--dc-text-sm);
@@ -1794,15 +1825,37 @@ textarea:focus-visible,
     margin-left: auto;
   }
 
-  .workspace__header .selection-summary,
-  .workspace__header .workspace__revision,
-  .workspace__header .agent-status {
-    display: none;
+  /*
+   * The panel triggers replace both side panels here, so they keep a visible label. An icon alone
+   * leaves dataset and inspector access undiscoverable for someone opening the workspace on a tablet.
+   */
+  .workspace__panel-trigger {
+    width: auto;
+    gap: var(--dc-space-1);
+    padding-inline: var(--dc-space-2);
   }
 }
 
+/*
+ * Below the tablet breakpoint the header runs out of room, so secondary readouts collapse to icons
+ * and labels. Agent status and revision stay visible above it; they are the shared-workspace signals.
+ */
 @media (max-width: 767px) {
   .workspace__brand {
+    display: none;
+  }
+
+  .workspace__panel-trigger__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .workspace__header .selection-summary,
+  .workspace__header .workspace__revision,
+  .workspace__header .agent-status {
     display: none;
   }
 

@@ -1,4 +1,4 @@
-import { LuTrash2 } from 'react-icons/lu';
+import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { executeVisualizationQuery, type ChartResult } from '@/application/queries/visualization-query.ts';
@@ -12,6 +12,7 @@ import { LinkModeControl } from '@/ui/canvas/link-mode-control.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
 import { QueryProgress, QuerySkeleton } from '@/ui/components/query-progress.tsx';
 import { SamplingBadge } from '@/ui/components/sampling-badge.tsx';
+import { VisualizationEditor } from '@/ui/canvas/visualization-editor.tsx';
 import { Button } from '@/ui/components/ui/button.tsx';
 
 // ECharts is a large dependency that only chart kinds need, so it loads on first chart render.
@@ -89,6 +90,7 @@ export const ChartPanel = ({
   const [result, setResult] = useState<ChartResult | null>(null);
   const [error, setError] = useState<DomainError | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const plotWidth = usePlotWidth(bodyRef);
 
@@ -126,6 +128,18 @@ export const ChartPanel = ({
         </h3>
         <div className="chart-panel__controls">
           <LinkModeControl visualizationId={visualization.id} linkMode={visualization.linkMode} onError={onError} />
+          {/* Table views render dataset rows directly, so they have no binding to rebind. */}
+          {visualization.kind === 'table' ? null : (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Edit ${visualization.title}`}
+              aria-expanded={editing}
+              onClick={() => setEditing(!editing)}
+            >
+              <LuPencil size={15} aria-hidden="true" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -137,6 +151,9 @@ export const ChartPanel = ({
           {resizeControls}
         </div>
       </header>
+      {editing ? (
+        <VisualizationEditor visualization={visualization} onError={onError} onDone={() => setEditing(false)} />
+      ) : null}
       {loading && result !== null ? <QueryProgress /> : null}
       {error === null ? null : (
         <div className="chart-panel__error" role="alert">
