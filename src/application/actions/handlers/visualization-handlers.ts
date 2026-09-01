@@ -6,6 +6,7 @@ import type {
 } from '@/application/actions/action-types.ts';
 import { omitKeys } from '@/application/actions/handlers/handler-types.ts';
 import type { ActionHandler } from '@/application/actions/handlers/handler-types.ts';
+import { placeNewVisualization } from '@/application/layout/place-visualization.ts';
 import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { resolveDataset, resolveVisualization } from '@/application/validation/validate-entity-refs.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
@@ -92,6 +93,10 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
     workspace: {
       ...workspace,
       visualizations: { ...workspace.visualizations, [visualization.id]: visualization },
+      layout: {
+        ...workspace.layout,
+        items: placeNewVisualization(workspace.layout.items, visualization.id, workspace.layout.columns),
+      },
     },
     changedEntityIds: [visualization.id],
     summary: `Created ${visualization.kind} visualization '${visualization.title}'.`,

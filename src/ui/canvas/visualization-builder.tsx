@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { placeNewVisualization } from '@/application/layout/place-visualization.ts';
 import { suggestVisualizationTitle } from '@/application/layout/visualization-title.ts';
 import { reachableDatasets } from '@/application/relationships/related-datasets.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
@@ -42,7 +41,6 @@ const groupByDataset = (columns: readonly ScopedColumn[]): { dataset: Dataset; c
 export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError) => void }) => {
   const workspace = useWorkspace((state) => state.workspace);
   const datasets = workspace.datasets;
-  const layoutItems = workspace.layout.items;
   const actions = useActions();
   const datasetList = useMemo(
     () => Object.values(datasets).filter((item) => item.importStatus === 'ready'),
@@ -170,13 +168,6 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
     if (!result.ok) {
       onError(result.error);
       return;
-    }
-    const visualizationId = result.value.changedEntityIds[0];
-    if (visualizationId !== undefined) {
-      const layout = await actions.updateLayout({
-        items: placeNewVisualization(layoutItems, visualizationId, workspace.layout.columns),
-      });
-      if (!layout.ok) onError(layout.error);
     }
     setTitle('');
   };
