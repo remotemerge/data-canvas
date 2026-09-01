@@ -1,3 +1,4 @@
+import { requiredDatasetCount } from '@/webmcp/registry/tool-types.ts';
 import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 import { createToolDefinitions, executeTool } from '@/webmcp/registry/tool-registry.ts';
 import { setToolStatus } from '@/webmcp/registry/tool-status.ts';
@@ -19,15 +20,16 @@ declare global {
   }
 }
 
-const hasReadyDataset = (): boolean =>
-  Object.values(workspaceStore.getState().workspace.datasets).some((dataset) => dataset.importStatus === 'ready');
+const readyDatasetCount = (): number =>
+  Object.values(workspaceStore.getState().workspace.datasets).filter((dataset) => dataset.importStatus === 'ready')
+    .length;
 
 export const installTestHooks = (deps: ToolDependencies): void => {
   if (!import.meta.env.DEV) return;
   installNetworkRecorder();
   const tools = createToolDefinitions(deps);
   const availableTools = (): string[] =>
-    tools.filter((tool) => !tool.needsDataset || hasReadyDataset()).map((tool) => tool.name);
+    tools.filter((tool) => requiredDatasetCount(tool) <= readyDatasetCount()).map((tool) => tool.name);
   const updateStatus = (): void => {
     const names = availableTools();
     setToolStatus({ available: names.length > 0, registeredCount: names.length });

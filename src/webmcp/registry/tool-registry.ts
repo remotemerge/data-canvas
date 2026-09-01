@@ -1,6 +1,7 @@
 import type { ErrorObject } from 'ajv';
 import type { ModelContext } from '@mcp-b/webmcp-types';
 import { domainError } from '@/shared/errors/domain-error.ts';
+import { requiredDatasetCount } from '@/webmcp/registry/tool-types.ts';
 import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 import { setToolStatus } from '@/webmcp/registry/tool-status.ts';
 import { toolValidators } from '@/webmcp/schemas/compile-schemas.ts';
@@ -56,7 +57,7 @@ export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise
 };
 
 export interface ToolRegistry {
-  setDatasetToolsEnabled(enabled: boolean): Promise<void>;
+  setReadyDatasetCount(count: number): Promise<void>;
   dispose(): void;
 }
 
@@ -99,14 +100,19 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
     setToolStatus({ registeredCount: controllers.size });
   };
 
-  await Promise.all(tools.filter((candidate) => !candidate.needsDataset).map(register));
+  await Promise.all(tools.filter((candidate) => requiredDatasetCount(candidate) === 0).map(register));
   setToolStatus({ available: true });
 
   return {
-    setDatasetToolsEnabled: async (enabled) => {
-      const datasetTools = tools.filter((candidate) => candidate.needsDataset);
-      if (enabled) await Promise.all(datasetTools.map(register));
-      else for (const tool of datasetTools) unregister(tool);
+    // Registration follows the ready-dataset count, so a tool appears only once it can succeed.
+    setReadyDatasetCount: async (count) => {
+      const satisfied = tools.filter(
+        (candidate) => requiredDatasetCount(candidate) > 0 && requiredDatasetCount(candidate) <= count,
+      );
+      const unsatisfied = tools.filter((candidate) => requiredDatasetCount(candidate) > count);
+
+      for (const tool of unsatisfied) unregister(tool);
+      await Promise.all(satisfied.map(register));
     },
     dispose: () => {
       for (const controller of controllers.values()) controller.abort();

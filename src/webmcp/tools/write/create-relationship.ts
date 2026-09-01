@@ -12,6 +12,8 @@ export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvas
   schema: toolSchemas.create_relationship,
   annotations: { readOnlyHint: false },
   needsDataset: true,
+  // A relationship joins two datasets, so one import is not enough for this tool to succeed.
+  minimumDatasets: 2,
   handler: async (raw) => {
     const input = asInput(raw);
     // Normalize camelCase kind values that round-1 contracts accepted.

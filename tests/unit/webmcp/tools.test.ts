@@ -175,6 +175,46 @@ describe('WebMCP semantic tool behavior', () => {
     expect(Object.values(harness.workspace().selections)).toHaveLength(1);
   });
 
+  /*
+   * Registering a tool that cannot yet succeed makes an agent discover the precondition by failing a
+   * call. Relationship creation needs two datasets, so it appears only after the second import.
+   */
+  test('registration follows each tool own dataset precondition', async () => {
+    const { deps } = setup();
+    const registered = new Set<string>();
+    const host = {
+      registerTool: (descriptor: { name: string }, options?: { signal?: AbortSignal }) => {
+        registered.add(descriptor.name);
+        options?.signal?.addEventListener('abort', () => registered.delete(descriptor.name));
+        return Promise.resolve();
+      },
+    } as unknown as ModelContext;
+
+    const registry = await createToolRegistry(host, deps);
+
+    expect(registered.has('get_workspace')).toBe(true);
+    expect(registered.has('apply_filter')).toBe(false);
+    expect(registered.has('create_relationship')).toBe(false);
+
+    await registry.setReadyDatasetCount(1);
+
+    expect(registered.has('apply_filter')).toBe(true);
+    // One dataset cannot be related to anything, so the tool stays hidden.
+    expect(registered.has('create_relationship')).toBe(false);
+
+    await registry.setReadyDatasetCount(2);
+
+    expect(registered.has('create_relationship')).toBe(true);
+
+    // Removing a dataset withdraws the tool again rather than leaving a call that must fail.
+    await registry.setReadyDatasetCount(1);
+
+    expect(registered.has('create_relationship')).toBe(false);
+    expect(registered.has('apply_filter')).toBe(true);
+
+    registry.dispose();
+  });
+
   test('registry rejects malformed input before dispatch', async () => {
     const { harness, deps } = setup();
     const executions = new Map<string, (input: unknown) => unknown>();
@@ -185,7 +225,7 @@ describe('WebMCP semantic tool behavior', () => {
       },
     } as unknown as ModelContext;
     const registry = await createToolRegistry(host, deps);
-    await registry.setDatasetToolsEnabled(true);
+    await registry.setReadyDatasetCount(1);
     const before = structuredClone(harness.workspace());
     const execute = executions.get('apply_filter');
     if (!execute) throw new Error('apply_filter was not registered');
