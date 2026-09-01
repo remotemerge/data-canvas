@@ -1,5 +1,14 @@
 export const MAX_TOOL_OUTPUT_LENGTH = 1500;
 
+/**
+ * Marks a payload whose column list was explicitly requested by the caller.
+ *
+ * Such a projection is preserved when trimming: the agent named those columns, so dropping one forces
+ * a second call for a field it already asked for, while fewer rows still answer the question. The key
+ * is stripped before the response is returned.
+ */
+export const PRESERVE_COLUMNS_KEY = 'preserveColumns';
+
 // Fields retained when trimming a payload.
 const PRESERVED_LIST_KEYS = ['datasets'] as const;
 
@@ -33,7 +42,10 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   // Set when the projection is narrowed, then appended to the summary once row trimming settles.
   let columnNotice: string | undefined;
+  // Internal hint from the producing tool; it directs trimming and never reaches the agent.
+  const preserveColumns = parsed[PRESERVE_COLUMNS_KEY] === true;
   for (const [key, value] of Object.entries(parsed)) {
+    if (key === PRESERVE_COLUMNS_KEY) continue;
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
       result[key] = typeof value === 'string' ? value.slice(0, 1200) : value;
     }
@@ -54,7 +66,7 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   const isColumnObjects = Array.isArray(result['columns']);
   const columnCountKey = isColumnObjects ? 'columns' : 'columnIds';
 
-  if (Array.isArray(originalColumns) && Array.isArray(keptColumns) && Array.isArray(keptRows)) {
+  if (Array.isArray(originalColumns) && Array.isArray(keptColumns) && Array.isArray(keptRows) && !preserveColumns) {
     const measured = (): number =>
       serializedLength({
         ...result,
@@ -125,8 +137,21 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   return { ...result, truncated: true };
 };
 
+// Removes the internal trimming hint from a payload that is returned as-is.
+const withoutInternalKeys = (serialized: string): string => {
+  if (!serialized.includes(`"${PRESERVE_COLUMNS_KEY}"`)) return serialized;
+
+  try {
+    const { [PRESERVE_COLUMNS_KEY]: _internal, ...rest } = JSON.parse(serialized) as ToolPayload;
+
+    return JSON.stringify(rest);
+  } catch {
+    return serialized;
+  }
+};
+
 export const enforceOutputBudget = (serialized: string): string => {
-  if (serialized.length <= MAX_TOOL_OUTPUT_LENGTH) return serialized;
+  if (serialized.length <= MAX_TOOL_OUTPUT_LENGTH) return withoutInternalKeys(serialized);
 
   try {
     const parsed = JSON.parse(serialized) as ToolPayload;

@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import { enforceOutputBudget, MAX_TOOL_OUTPUT_LENGTH } from '@/webmcp/results/enforce-output-budget.ts';
+import {
+  enforceOutputBudget,
+  MAX_TOOL_OUTPUT_LENGTH,
+  PRESERVE_COLUMNS_KEY,
+} from '@/webmcp/results/enforce-output-budget.ts';
 
 const column = (index: number) => ({
   id: `col_f8aed260-d59f-4837-8e5e-df6e0d0feb${String(index).padStart(3, '0')}`,
@@ -99,6 +103,66 @@ test('a narrowed projection is stated in the summary, not only in the counters',
   expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
   expect(parsed.columnsReturned).toBeLessThan(parsed.columnsTotal ?? 0);
   expect(parsed.summary).toContain(`Returned ${parsed.columnsReturned} of ${parsed.columnsTotal} requested columns`);
+});
+
+/*
+ * The agent named these columns, so losing one costs a second call for a field it already requested.
+ * Fewer rows still answer the question, and the row count is disclosed.
+ */
+test('an explicitly requested projection is preserved by dropping rows instead of columns', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 5,
+      summary: 'Returned 100 of 10194 rows.',
+      columnIds: ['col_region', 'col_sales'],
+      rows: Array.from({ length: 100 }, (_, index) => [`Region ${index}`, index * 1.5]),
+      rowsTotal: 10194,
+      [PRESERVE_COLUMNS_KEY]: true,
+    }),
+  );
+  const parsed = JSON.parse(output) as {
+    columnIds?: string[];
+    rows?: unknown[][];
+    columnIdsReturned?: number;
+    summary?: string;
+  };
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  // Both requested columns survive, and every returned row still carries both values.
+  expect(parsed.columnIds).toEqual(['col_region', 'col_sales']);
+  expect(parsed.columnIdsReturned).toBeUndefined();
+  expect(parsed.rows?.every((row) => Array.isArray(row) && row.length === 2)).toBe(true);
+  expect(parsed.rows?.length).toBeLessThan(100);
+  expect(parsed.summary).toContain('rows');
+});
+
+test('the internal preserve hint never reaches the agent', () => {
+  const withinBudget = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 1,
+      summary: 'Returned 2 of 2 rows.',
+      columnIds: ['a'],
+      rows: [[1], [2]],
+      [PRESERVE_COLUMNS_KEY]: true,
+    }),
+  );
+  const overBudget = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 1,
+      summary: 'Returned 100 of 10194 rows.',
+      columnIds: ['col_region', 'col_sales'],
+      rows: Array.from({ length: 100 }, (_, index) => [`Region ${index}`, index]),
+      [PRESERVE_COLUMNS_KEY]: true,
+    }),
+  );
+
+  expect(withinBudget).not.toContain(PRESERVE_COLUMNS_KEY);
+  expect(overBudget).not.toContain(PRESERVE_COLUMNS_KEY);
+  // Stripping the hint must leave the rest of a within-budget payload intact.
+  expect(JSON.parse(withinBudget)).toMatchObject({ ok: true, revision: 1, rows: [[1], [2]] });
 });
 
 test('output that fits the budget keeps its summary untouched', () => {
