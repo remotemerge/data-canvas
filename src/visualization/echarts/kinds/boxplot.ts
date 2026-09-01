@@ -2,7 +2,7 @@ type Cell = string | number | boolean | null;
 
 const toNumber = (value: Cell): number => (typeof value === 'number' ? value : Number(value ?? 0));
 
-// Maps DuckDB's five-number summary to an ECharts boxplot. Outlier count stays tooltip-only.
+// Maps DuckDB's five-number summary to an ECharts boxplot.
 export const buildBoxplotSeries = (
   rows: readonly Cell[][],
   summaryOffset: number,
@@ -17,15 +17,13 @@ export const buildBoxplotSeries = (
     toNumber(row[summaryOffset + 4] ?? null),
   ]);
 
-  const outliers = rows.map((row) => toNumber(row[summaryOffset + 5] ?? null));
-
   return {
     categories,
     series: [
       {
         type: 'boxplot' as const,
         name: 'distribution',
-        data: boxes.map((box, index) => ({ value: box, outlierCount: outliers[index] ?? 0 })),
+        data: boxes,
       },
     ],
   };

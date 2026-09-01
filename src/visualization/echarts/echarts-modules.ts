@@ -4,6 +4,7 @@ import {
   DatasetComponent,
   GridComponent,
   LegendComponent,
+  ToolboxComponent,
   TooltipComponent,
   VisualMapComponent,
 } from 'echarts/components';
@@ -21,6 +22,7 @@ use([
   DatasetComponent,
   GridComponent,
   LegendComponent,
+  ToolboxComponent,
   TooltipComponent,
   BrushComponent,
   VisualMapComponent,

@@ -291,7 +291,7 @@ export const compileAnalysisQuery = (
     });
   }
 
-  // Box plots return a five-number summary and an outlier count, never outlier rows.
+  // Box plots return the five-number summary consumed by ECharts.
   if (query.distribution !== undefined) {
     const target = resolve(query.distribution.columnId);
     if (target === undefined) return err(missingColumn(query.distribution.columnId));
@@ -317,11 +317,6 @@ export const compileAnalysisQuery = (
       ['q2', quartile(0.5)],
       ['q3', quartile(0.75)],
       ['q4', `MAX(${target.sql})`],
-      // Compute Tukey's outlier count in DuckDB so individual outliers do not cross the boundary.
-      [
-        'outliers',
-        `COUNT(*) FILTER (WHERE ${target.sql} < ${quartile(0.25)} - 1.5 * (${quartile(0.75)} - ${quartile(0.25)}) OR ${target.sql} > ${quartile(0.75)} + 1.5 * (${quartile(0.75)} - ${quartile(0.25)}))`,
-      ],
     ];
 
     for (const [key, expression] of summary) {
