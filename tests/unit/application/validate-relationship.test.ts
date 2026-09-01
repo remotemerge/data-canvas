@@ -6,7 +6,7 @@ import {
 } from '@/application/validation/validate-relationship.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
-import { workspaceWithJoinableDatasets } from './action-fixtures.ts';
+import { column, salesDataset, workspaceWithJoinableDatasets } from './action-fixtures.ts';
 
 const ORDERS_TO_CUSTOMERS = {
   leftDatasetId: 'ds_orders',
@@ -67,6 +67,48 @@ describe('validateRelationship', () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  // Temporal and text are separate key classes, so a date key cannot join a label.
+  test('rejects a temporal key against a text key', () => {
+    const result = validateRelationship(workspaceWithJoinableDatasets(), {
+      leftDatasetId: 'ds_orders',
+      rightDatasetId: 'ds_products',
+      on: [{ leftColumnId: 'col_order_placed', rightColumnId: 'col_product_label' }],
+      kind: 'many_to_one',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+  });
+
+  /*
+   * Boolean belongs to none of the numeric, temporal, or text key classes, so it falls through to its
+   * own logical type and matches only another boolean.
+   */
+  test('a boolean key joins only another boolean', () => {
+    const base = workspaceWithJoinableDatasets();
+    const flags = {
+      ...salesDataset('ds_flags'),
+      name: 'Flags',
+      columns: [column('col_flag', 'flag', 'boolean'), column('col_other_flag', 'other_flag', 'boolean')],
+    };
+    const workspace = { ...base, datasets: { ...base.datasets, ds_flags: flags } };
+
+    const mismatched = validateRelationship(workspace, {
+      leftDatasetId: 'ds_flags',
+      rightDatasetId: 'ds_products',
+      on: [{ leftColumnId: 'col_flag', rightColumnId: 'col_product_label' }],
+      kind: 'many_to_one',
+    });
+
+    expect(mismatched.ok).toBe(false);
+    if (!mismatched.ok) {
+      expect(mismatched.error.code).toBe('INCOMPATIBLE_COLUMN');
+    }
   });
 
   test('rejects a self-join', () => {

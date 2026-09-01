@@ -236,6 +236,37 @@ describe('derived column validation', () => {
     }
   });
 
+  /*
+   * Node validation walks the whole tree, not only its root, so an unsupported operator buried under a
+   * valid parent is still refused before it can reach the compiler.
+   */
+  test('an unsupported operator nested below a valid parent is refused', () => {
+    const result = validate({
+      kind: 'cast',
+      to: 'number',
+      expr: { kind: 'arithmetic', op: 'pow' as 'add', left: REVENUE, right: UNITS },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  // Cycle detection walks only the derived definitions it holds; a physical column ends the walk.
+  test('a definition mixing a derived reference with a physical column is accepted', () => {
+    const base = derivedColumn('col_base', REVENUE);
+
+    const result = validate(
+      { kind: 'arithmetic', op: 'add', left: { kind: 'column', columnId: 'col_base' }, right: UNITS },
+      { col_base: base },
+      'Mixed',
+      'col_mixed',
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
   test('a bin over a numeric column within the bucket bounds is accepted', () => {
     expect(validate({ kind: 'bin', columnId: 'col_revenue', strategy: { kind: 'equalWidth', binCount: 4 } }).ok).toBe(
       true,

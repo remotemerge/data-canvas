@@ -65,6 +65,11 @@ describe('per-kind binding rules', () => {
     expect(check('bar', { x: REGION, y: [REGION] }).ok).toBe(false);
   });
 
+  // Both axes carry a value, so a scatter with no x has nothing to plot against.
+  test('scatter without an x channel is refused', () => {
+    expect(check('scatter', { y: [REVENUE] }).ok).toBe(false);
+  });
+
   test('scatter requires numeric x and exactly one numeric y', () => {
     expect(check('scatter', { x: REGION, y: [REVENUE] }).ok).toBe(false);
     expect(check('scatter', { x: REVENUE, y: [REVENUE, REVENUE] }).ok).toBe(false);
@@ -110,6 +115,22 @@ describe('per-kind binding rules', () => {
 
   test('an out-of-bounds histogram bin strategy surfaces the bin error', () => {
     const result = check('histogram', { x: REVENUE, binX: { kind: 'equalWidth', binCount: 1 } });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('RESULT_LIMIT_EXCEEDED');
+  });
+
+  // Both bin channels are validated, so an invalid series strategy is refused like an invalid x one.
+  test('an out-of-bounds series bin strategy surfaces the bin error', () => {
+    const result = check('heatmap', {
+      x: REGION,
+      series: REVENUE,
+      y: [REVENUE],
+      binSeries: { kind: 'equalWidth', binCount: 1 },
+    });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
