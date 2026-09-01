@@ -55,7 +55,18 @@ describe('convertArrowValue', () => {
     expect(convertArrowValue(new Date(Number.NaN))).toBeNull();
   });
 
-  test('drops typed arrays, which have no scalar meaning', () => {
+  test('converts 16-byte HugeInt typed arrays to numbers or strings', () => {
+    // 38654 in little-endian Uint32Array
+    expect(convertArrowValue(new Uint32Array([38654, 0, 0, 0]))).toBe(38654);
+    // Negative HugeInt
+    expect(convertArrowValue(new Uint32Array([0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff]))).toBe(-1);
+  });
+
+  test('converts 8-byte BigInt typed arrays', () => {
+    expect(convertArrowValue(new BigInt64Array([42n]))).toBe(42);
+  });
+
+  test('drops non-integer typed arrays, which have no scalar meaning', () => {
     expect(convertArrowValue(new Uint8Array([1, 2, 3]))).toBeNull();
   });
 

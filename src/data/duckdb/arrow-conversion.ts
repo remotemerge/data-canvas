@@ -31,6 +31,19 @@ const toDate = (value: unknown): Date | null => {
 // Formats a date-only value in UTC to avoid local-time shifts.
 const toDateString = (value: Date): string => value.toISOString().slice(0, 10);
 
+// Decodes a 128-bit little-endian two's complement integer (HugeInt / Decimal128).
+const decodeHugeInt = (view: ArrayBufferView): bigint => {
+  const u32 = new Uint32Array(view.buffer, view.byteOffset, 4);
+  const low = BigInt(u32[0]!) | (BigInt(u32[1]!) << 32n);
+  const highUnsigned = BigInt(u32[2]!) | (BigInt(u32[3]!) << 32n);
+  const isNegative = (u32[3]! & 0x80000000) !== 0;
+  if (isNegative) {
+    const highSigned = highUnsigned - (1n << 64n);
+    return (highSigned << 64n) | low;
+  }
+  return (highUnsigned << 64n) | low;
+};
+
 // Converts one Arrow cell to a JSON-safe scalar.
 export const convertArrowValue = (value: unknown): CellValue => {
   if (value === null || value === undefined) return null;
@@ -46,8 +59,21 @@ export const convertArrowValue = (value: unknown): CellValue => {
 
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
 
-  // Binary and list vectors do not have a scalar representation for table cells.
-  if (ArrayBuffer.isView(value)) return null;
+  if (ArrayBuffer.isView(value)) {
+    if (value.byteLength === 16) {
+      return convertBigInt(decodeHugeInt(value));
+    }
+    if (value.byteLength === 8) {
+      const i64 = new BigInt64Array(value.buffer, value.byteOffset, 1)[0]!;
+      return convertBigInt(i64);
+    }
+    // 32-bit integer types that DuckDB may emit for aggregate results fitting within INT32.
+    if (value.byteLength === 4) {
+      const i32 = new Int32Array(value.buffer, value.byteOffset, 1)[0]!;
+      return Number(i32);
+    }
+    return null;
+  }
 
   return String(value);
 };
