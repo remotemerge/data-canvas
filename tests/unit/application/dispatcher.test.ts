@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { APPLICATION_ACTION_TYPES } from '@/application/actions/action-types.ts';
 import type { ApplicationAction } from '@/application/actions/action-types.ts';
+import { createEmptyWorkspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import {
@@ -330,6 +331,38 @@ describe('data engine port', () => {
     expect(imported?.importStatus).toBe('ready');
     expect(imported?.rowCount).toBe(42);
     expect(imported?.relationId.startsWith('dataset_')).toBe(true);
+  });
+
+  /*
+   * Importing the same file twice is a normal way to compare extracts, but two datasets sharing one
+   * visible name make relationship cards and field pickers ambiguous even though the ids stay distinct.
+   */
+  test('a repeated file name is disambiguated while provenance keeps the original', async () => {
+    const harness = createHarness(createEmptyWorkspace('Test workspace'), stubDataEngine());
+
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'superstore.csv');
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'superstore.csv');
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'superstore.csv');
+
+    const datasets = Object.values(harness.workspace().datasets);
+    const names = datasets.map((dataset) => dataset.name);
+
+    expect(names).toEqual(['superstore.csv', 'superstore.csv (2)', 'superstore.csv (3)']);
+    // The display name is disambiguated; the recorded source file name is not.
+    expect(datasets.every((dataset) => dataset.source.fileName === 'superstore.csv')).toBe(true);
+    expect(new Set(names).size).toBe(3);
+  });
+
+  test('a distinct file name is left alone', async () => {
+    const harness = createHarness(createEmptyWorkspace('Test workspace'), stubDataEngine());
+
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'orders.csv');
+    await importThroughDispatcher(harness, new Blob(['a\n1']), 'customers.csv');
+
+    expect(Object.values(harness.workspace().datasets).map((dataset) => dataset.name)).toEqual([
+      'orders.csv',
+      'customers.csv',
+    ]);
   });
 
   test('the import lifecycle moves loading to ready across two attributable commits', async () => {
