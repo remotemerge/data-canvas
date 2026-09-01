@@ -5,6 +5,7 @@ import {
   measureSync,
   recordRenderCompletion,
   recordRowsReturned,
+  createPerformanceInstrumentation,
 } from '@/shared/perf/performance-marks.ts';
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -76,5 +77,24 @@ describe('getPerformanceRecords', () => {
 
     expect(first.some((record) => record.name === 'coverage-snapshot-later')).toBe(false);
     expect(getPerformanceRecords().some((record) => record.name === 'coverage-snapshot-later')).toBe(true);
+  });
+});
+
+describe('production instrumentation', () => {
+  test('disabled instrumentation runs operations without recording', async () => {
+    const disabled = createPerformanceInstrumentation(false);
+    let framed = false;
+    globalThis.requestAnimationFrame = () => {
+      framed = true;
+      return 0;
+    };
+
+    expect(await disabled.measureAsync('disabled-async', async () => 7)).toBe(7);
+    expect(disabled.measureSync('disabled-sync', () => 8)).toBe(8);
+    disabled.recordRowsReturned('disabled-rows', 2);
+    disabled.recordRenderCompletion('disabled-render');
+
+    expect(disabled.getPerformanceRecords()).toEqual([]);
+    expect(framed).toBe(false);
   });
 });
