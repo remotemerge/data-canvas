@@ -29,7 +29,7 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:unit": "bun test tests/unit",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage-reporter=lcov"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
