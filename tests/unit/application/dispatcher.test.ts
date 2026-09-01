@@ -306,6 +306,15 @@ describe('entity reference resolution', () => {
 });
 
 describe('data engine port', () => {
+  test('a rejected begin-import stops before the engine action', async () => {
+    const harness = createHarness();
+    const { datasetId, result } = await importThroughDispatcher(harness, new Blob(['a\n1']), ' ');
+
+    expect(datasetId).toBeUndefined();
+    expect(result.ok ? null : result.error.code).toBe('IMPORT_FAILED');
+    expect(harness.workspace().revision).toBe(0);
+  });
+
   test('dataset.import fails with ENGINE_UNAVAILABLE while no engine is installed', async () => {
     const harness = createHarness();
     const { datasetId, result } = await importThroughDispatcher(harness, new Blob(['a,b\n1,2']));

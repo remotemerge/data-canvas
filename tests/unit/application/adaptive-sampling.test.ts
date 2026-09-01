@@ -137,6 +137,20 @@ describe('adaptive sampling policy', () => {
     expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'month' });
   });
 
+  test('truncates a yearly series that is already at the coarsest temporal unit', () => {
+    const query = temporalQuery();
+    query.binnedDimensions = [{ columnId: columnId('date'), strategy: { kind: 'temporal', unit: 'year' } }];
+    const plan = planSampling({ query, kind: 'line', estimatedRows: 250, budget: 100 });
+
+    expect(plan.disclosure).toEqual({
+      strategy: { kind: 'binTruncation', retained: 100 },
+      rate: 0.4,
+      estimatedRows: 250,
+    });
+    expect(plan.query.limit).toBe(100);
+    expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'year' });
+  });
+
   // A daily year-and-a-half series fits the hard cap but exceeds a 900px readable target.
   test('widens a temporal bucket to what the plot can legibly show', () => {
     const plan = planSampling({

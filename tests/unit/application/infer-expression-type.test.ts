@@ -209,6 +209,19 @@ describe('expression type inference', () => {
     }
   });
 
+  test('bin rejects an unknown column before validating its strategy', () => {
+    const result = infer({
+      kind: 'bin',
+      columnId: 'col_missing',
+      strategy: { kind: 'equalWidth', binCount: 10 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
+  });
+
   /*
    * Comparability is decided per type family rather than by exact equality, so a case arm may compare
    * two texts, two temporals, or two booleans. An unknown operand stays comparable with anything.
