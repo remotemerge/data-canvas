@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ModelContext } from '@mcp-b/webmcp-types';
+import { createUndoRedo } from '@/application/history/undo-redo.ts';
 import {
   createHarness,
   stubColumnStatistics,
@@ -14,6 +15,7 @@ const setup = () => {
   const harness = createHarness(workspaceWithDataset(), engine);
   const deps: ToolDependencies = {
     dispatcher: harness.dispatcher,
+    history: createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store }),
     getWorkspace: harness.workspace,
     fetchTableWindow: (request) => engine.fetchTableWindow(request),
     executeAnalysis: (query) => engine.executeAnalysis(query),
@@ -90,6 +92,86 @@ describe('WebMCP semantic tool behavior', () => {
     const { tool } = setup();
     const output = await tool('preview_data').handler({ datasetId: 'ds_sales', limit: 100 });
     expect(output.length).toBeLessThanOrEqual(1500);
+  });
+
+  test('clear_selection removes the current dataset selection through the shared action', async () => {
+    const { harness, tool } = setup();
+
+    const highlighted = JSON.parse(
+      await tool('highlight_selection').handler({
+        datasetId: 'ds_sales',
+        columnId: 'col_region',
+        values: ['Europe'],
+      }),
+    ) as { ok: boolean };
+    expect(highlighted.ok).toBe(true);
+    expect(Object.values(harness.workspace().selections)).toHaveLength(1);
+
+    const cleared = JSON.parse(await tool('clear_selection').handler({ datasetId: 'ds_sales' })) as { ok: boolean };
+    expect(cleared.ok).toBe(true);
+    expect(Object.values(harness.workspace().selections)).toHaveLength(0);
+  });
+
+  test('get_workspace includes bounded filter values and provenance', async () => {
+    const { tool } = setup();
+    await tool('apply_filter').handler({
+      datasetId: 'ds_sales',
+      columnId: 'col_region',
+      operator: 'in',
+      value: ['Europe', 'Asia'],
+    });
+
+    const workspace = JSON.parse(await tool('get_workspace').handler({})) as {
+      filters: { value: unknown; origin: string }[];
+    };
+    expect(workspace.filters).toHaveLength(1);
+    expect(workspace.filters[0]).toMatchObject({ value: ['Europe', 'Asia'], origin: 'agent' });
+  });
+
+  test('analyze_data converts a temporal dimension into the domain bin strategy', async () => {
+    const { deps, tool } = setup();
+    const executeAnalysis = deps.executeAnalysis;
+    let observedQuery: Parameters<ToolDependencies['executeAnalysis']>[0] | undefined;
+    deps.executeAnalysis = (query) => {
+      observedQuery = query;
+      return executeAnalysis(query);
+    };
+
+    const output = JSON.parse(
+      await tool('analyze_data').handler({
+        datasetId: 'ds_sales',
+        dimensions: [{ columnId: 'col_date', timeGrain: 'month' }],
+        measures: [{ columnId: 'col_revenue', aggregate: 'sum' }],
+      }),
+    ) as { ok: boolean };
+
+    expect(output.ok).toBe(true);
+    expect(observedQuery?.dimensions).toEqual([]);
+    expect(observedQuery?.binnedDimensions).toEqual([
+      { columnId: 'col_date', strategy: { kind: 'temporal', unit: 'month' } },
+    ]);
+  });
+
+  test('undo and redo expose shared workspace history to agents', async () => {
+    const { harness, tool } = setup();
+    await tool('highlight_selection').handler({
+      datasetId: 'ds_sales',
+      columnId: 'col_region',
+      values: ['Europe'],
+    });
+    expect(Object.values(harness.workspace().selections)).toHaveLength(1);
+
+    const undone = JSON.parse(await tool('undo').handler({ expectedRevision: harness.workspace().revision })) as {
+      ok: boolean;
+    };
+    expect(undone.ok).toBe(true);
+    expect(Object.values(harness.workspace().selections)).toHaveLength(0);
+
+    const redone = JSON.parse(await tool('redo').handler({ expectedRevision: harness.workspace().revision })) as {
+      ok: boolean;
+    };
+    expect(redone.ok).toBe(true);
+    expect(Object.values(harness.workspace().selections)).toHaveLength(1);
   });
 
   test('registry rejects malformed input before dispatch', async () => {

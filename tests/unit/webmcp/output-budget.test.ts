@@ -9,6 +9,28 @@ const column = (index: number) => ({
   nullable: true,
 });
 
+test('truncation preserves dataset identifiers and pagination metadata', () => {
+  const datasets = [
+    { id: 'ds_orders', name: 'Orders', rowCount: 10_194 },
+    { id: 'ds_customers', name: 'Customers', rowCount: 793 },
+  ];
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      datasets,
+      visualizations: Array.from({ length: 20 }, (_, index) => ({ id: `viz_${index}`, title: 'x'.repeat(200) })),
+      offset: 5,
+      nextOffset: 10,
+      columnsTotal: 21,
+      rowsTotal: 10_194,
+    }),
+  );
+  const parsed = JSON.parse(output) as Record<string, unknown>;
+
+  expect(parsed['datasets']).toEqual(datasets);
+  expect(parsed).toMatchObject({ offset: 5, nextOffset: 10, columnsTotal: 21, rowsTotal: 10_194, truncated: true });
+});
+
 test('oversized output remains valid JSON and carries a truncation marker', () => {
   const output = enforceOutputBudget(JSON.stringify({ ok: true, revision: 4, summary: 'x'.repeat(5000), rows: [] }));
   expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
@@ -43,7 +65,7 @@ test('a schema over budget keeps columns rather than degrading to its summary', 
   expect(parsed.rowCount).toBe(10194);
 });
 
-test('rows are sacrificed before columns, since rows without columns cannot be read', () => {
+test('wide tabular output narrows columns before sacrificing complete rows', () => {
   const output = enforceOutputBudget(
     JSON.stringify({
       ok: true,
@@ -56,8 +78,9 @@ test('rows are sacrificed before columns, since rows without columns cannot be r
   const parsed = JSON.parse(output) as { columns?: unknown[]; rows?: unknown[] };
 
   expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
-  expect(parsed.columns?.length).toBe(6);
-  expect(parsed.rows?.length).toBeLessThan(100);
+  expect(parsed.columns?.length).toBe(1);
+  expect(parsed.rows?.length).toBe(100);
+  expect(parsed.rows?.every((row) => Array.isArray(row) && row.length === 1)).toBe(true);
 });
 
 test('a payload whose scalars alone exceed the budget still parses', () => {

@@ -147,8 +147,9 @@ describe('compiler injection boundaries', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.sql).toContain('quantile_cont');
+    expect(result.value.sql).not.toContain('FILTER');
     // The summary columns are fixed names this module chooses, never caller text.
-    for (const key of ['q0', 'q1', 'q2', 'q3', 'q4', 'outliers']) {
+    for (const key of ['q0', 'q1', 'q2', 'q3', 'q4']) {
       expect(result.value.sql).toContain(`"${key}"`);
     }
   });

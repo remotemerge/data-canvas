@@ -60,6 +60,9 @@ const validInputs: Record<keyof typeof toolSchemas, { minimal: object; canonical
     canonical: { datasetId: 'ds', columnId: 'col', operator: 'eq', value: 'x', expectedRevision: 1 },
   },
   clear_filters: { minimal: {}, canonical: { datasetId: 'ds', expectedRevision: 1 } },
+  clear_selection: { minimal: {}, canonical: { datasetId: 'ds', expectedRevision: 1 } },
+  undo: { minimal: {}, canonical: { expectedRevision: 1 } },
+  redo: { minimal: {}, canonical: { expectedRevision: 1 } },
   highlight_selection: {
     minimal: { datasetId: 'ds', columnId: 'col', values: ['x'] },
     canonical: { datasetId: 'ds', columnId: 'col', values: ['x', 'y'], label: 'Focus', expectedRevision: 1 },
@@ -126,6 +129,23 @@ describe('WebMCP canonical schemas', () => {
 
     test(`${name} bounds variable input`, () => walkBounds(schema));
   }
+});
+
+test('analyze_data accepts bounded temporal dimensions', () => {
+  expect(
+    toolValidators.analyze_data({
+      datasetId: 'ds',
+      dimensions: [{ columnId: 'ordered_at', timeGrain: 'month' }],
+      measures: [{ aggregate: 'count' }],
+    }),
+  ).toBe(true);
+  expect(
+    toolValidators.analyze_data({
+      datasetId: 'ds',
+      dimensions: [{ columnId: 'ordered_at', timeGrain: 'decade' }],
+      measures: [{ aggregate: 'count' }],
+    }),
+  ).toBe(false);
 });
 
 test('tool names and prohibited control fields stay out of the contract', () => {
