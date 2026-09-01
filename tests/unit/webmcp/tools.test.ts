@@ -3,6 +3,7 @@ import type { ModelContext } from '@mcp-b/webmcp-types';
 import type { ActionContext, ApplicationAction } from '@/application/actions/action-types.ts';
 import {
   visualization as makeVisualization,
+  stubDataEngine,
   workspaceWithDataset,
   workspaceWithJoinableDatasets,
 } from '../application/action-fixtures.ts';
@@ -109,6 +110,102 @@ describe('WebMCP semantic tool behavior', () => {
     expect(
       JSON.parse(await tool('preview_data').handler({ datasetId: 'ds_sales', columnIds: ['missing'] })),
     ).toMatchObject({ ok: false, code: 'COLUMN_NOT_FOUND' });
+  });
+
+  /*
+   * Every read tool resolves its dataset before touching the engine, so an unknown ID is answered with a
+   * corrective code rather than a query against a relation that does not exist.
+   */
+  test('each dataset-scoped read tool refuses an unknown dataset', async () => {
+    const { tool } = setup();
+    const names = ['preview_data', 'analyze_data'] as const;
+
+    const responses = await Promise.all(
+      names.map(async (name) => ({
+        name,
+        response: JSON.parse(
+          await tool(name).handler({ datasetId: 'missing', measures: [{ aggregate: 'count' }] }),
+        ) as {
+          ok: boolean;
+          code?: string;
+        },
+      })),
+    );
+
+    for (const { name, response } of responses) {
+      expect(`${name}: ${response.ok}`).toBe(`${name}: false`);
+      expect(response.code).toBe('DATASET_NOT_FOUND');
+    }
+  });
+
+  // Column IDs are checked against the workspace so the compiler is never asked to reach an absent column.
+  test('analyze_data refuses a measure or dimension naming an unknown column', async () => {
+    const { tool } = setup();
+
+    expect(
+      JSON.parse(
+        await tool('analyze_data').handler({
+          datasetId: 'ds_sales',
+          dimensions: ['col_missing'],
+          measures: [{ aggregate: 'count' }],
+        }),
+      ),
+    ).toMatchObject({ ok: false, code: 'COLUMN_NOT_FOUND' });
+  });
+
+  /*
+   * An engine failure is reported to the agent rather than surfacing as a rejected promise, so the
+   * tool call still returns a structured result the agent can act on.
+   */
+  test('a read tool reports an engine failure as a structured result', async () => {
+    const failing = domainError('QUERY_FAILED', 'The engine rejected the query.');
+    const { tool } = webmcpFixture(workspaceWithDataset(), {
+      ...stubDataEngine(),
+      fetchTableWindow: () => Promise.resolve(err(failing)),
+      executeAnalysis: () => Promise.resolve(err(failing)),
+    });
+
+    expect(JSON.parse(await tool('preview_data').handler({ datasetId: 'ds_sales' }))).toMatchObject({
+      ok: false,
+      code: 'QUERY_FAILED',
+    });
+    expect(
+      JSON.parse(await tool('analyze_data').handler({ datasetId: 'ds_sales', measures: [{ aggregate: 'count' }] })),
+    ).toMatchObject({ ok: false, code: 'QUERY_FAILED' });
+  });
+
+  /*
+   * A write tool reports a rejected action as a structured failure rather than claiming success, so the
+   * agent learns the workspace is unchanged and why.
+   */
+  test('a rejected write is reported with the domain code that refused it', async () => {
+    const { tool, harness } = setup();
+    const initial = structuredClone(harness.workspace());
+
+    const derived = JSON.parse(
+      await tool('create_derived_column').handler({
+        datasetId: 'ds_sales',
+        name: 'Broken',
+        expression: { kind: 'column', columnId: 'col_missing' },
+      }),
+    ) as { ok: boolean; code?: string };
+
+    expect(derived.ok).toBe(false);
+    expect(derived.code).toBe('COLUMN_NOT_FOUND');
+
+    const relationship = JSON.parse(
+      await tool('create_relationship').handler({
+        leftDatasetId: 'ds_sales',
+        rightDatasetId: 'ds_missing',
+        on: [{ leftColumnId: 'col_region', rightColumnId: 'col_region' }],
+        kind: 'manyToOne',
+        join: 'inner',
+      }),
+    ) as { ok: boolean; code?: string };
+
+    expect(relationship.ok).toBe(false);
+    expect(relationship.code).toBe('DATASET_NOT_FOUND');
+    expect(harness.workspace()).toEqual(initial);
   });
 
   test('semantic conflicts and stale writes mutate nothing', async () => {
