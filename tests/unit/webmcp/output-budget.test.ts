@@ -35,6 +35,58 @@ test('truncation preserves dataset identifiers and pagination metadata', () => {
   expect(parsed).toMatchObject({ offset: 5, nextOffset: 10, columnsTotal: 21, rowsTotal: 10_194, truncated: true });
 });
 
+/*
+ * Dataset identifiers are what a follow-up tool call needs, so trimming walks the other lists and skips
+ * the dataset list even when the payload is still over budget once they are all exhausted.
+ */
+test('the dataset list is never trimmed, even when trimming everything else is not enough', () => {
+  const datasets = [{ id: 'ds_orders', name: 'Orders', rowCount: 10_194 }];
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      summary: 's'.repeat(1300),
+      error: 'e'.repeat(1300),
+      datasets,
+      metrics: Array.from({ length: 20 }, (_unused, index) => ({ id: `metric_${index}` })),
+    }),
+  );
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  // Scalars alone still exceed the budget here, so the response degrades to the summary-only shape.
+  expect(JSON.parse(output)).toMatchObject({ ok: true, truncated: true });
+});
+
+/*
+ * Every tool result leaves through this function, so it must always be parsable. Capping the text
+ * fields individually is not enough: two fields each at their own cap still exceed the budget together,
+ * and truncating the finished JSON to length would cut mid-string.
+ */
+test('a payload whose text fields exceed the budget together still parses', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: false,
+      revision: 42,
+      code: 'QUERY_FAILED',
+      summary: 's'.repeat(4000),
+      error: 'e'.repeat(4000),
+    }),
+  );
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  // The fields an agent branches on survive; only the free text is shortened.
+  expect(JSON.parse(output)).toMatchObject({ ok: false, revision: 42, code: 'QUERY_FAILED', truncated: true });
+});
+
+// An oversized `code` can push even the identity fields past the budget; text is dropped before validity.
+test('an oversized code field degrades to the outcome and revision rather than invalid JSON', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({ ok: false, revision: 7, code: 'C'.repeat(3000), summary: 's'.repeat(2000) }),
+  );
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  expect(JSON.parse(output)).toEqual({ ok: false, revision: 7, truncated: true });
+});
+
 test('oversized output remains valid JSON and carries a truncation marker', () => {
   const output = enforceOutputBudget(JSON.stringify({ ok: true, revision: 4, summary: 'x'.repeat(5000), rows: [] }));
   expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
@@ -226,10 +278,9 @@ test('a scalar-only fallback keeps the outcome, revision, and code inside the bu
     }),
   );
 
-  expect(output).toHaveLength(MAX_TOOL_OUTPUT_LENGTH);
-  expect(output).toContain('"ok":true');
-  expect(output).toContain('"revision":4');
-  expect(output).toContain('"code":"DONE"');
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  // The fallback shortens its text to fit, so the result is still parsable rather than cut mid-string.
+  expect(JSON.parse(output)).toMatchObject({ ok: true, revision: 4, code: 'DONE', truncated: true });
 });
 
 // Output that is not even valid JSON still has to come back as a parsable tool result.

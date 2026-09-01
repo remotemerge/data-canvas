@@ -160,6 +160,48 @@ const withoutInternalKeys = (serialized: string): string => {
   }
 };
 
+/**
+ * Last-resort payload for output whose scalar fields alone exceed the budget.
+ *
+ * The identity fields an agent branches on (`ok`, `revision`, `code`) are kept whole; only the free
+ * text is shortened. Both text fields are capped together rather than individually, because two
+ * separately capped strings can still exceed the budget once serialized. Truncating the finished JSON
+ * instead would cut mid-string and hand the agent a payload it cannot parse.
+ */
+const scalarFallback = (parsed: ToolPayload): string => {
+  const revision = typeof parsed.revision === 'number' ? { revision: parsed.revision } : {};
+  const code = typeof parsed.code === 'string' ? { code: parsed.code } : {};
+  const summary = typeof parsed.summary === 'string' ? parsed.summary : undefined;
+  const error = typeof parsed.error === 'string' ? parsed.error : undefined;
+
+  const build = (textBudget: number): string =>
+    JSON.stringify({
+      ok: parsed.ok === true,
+      ...revision,
+      ...code,
+      ...(summary === undefined ? {} : { summary: summary.slice(0, textBudget) }),
+      ...(error === undefined ? {} : { error: error.slice(0, textBudget) }),
+      truncated: true,
+    });
+
+  let textBudget = 1200;
+  let candidate = build(textBudget);
+
+  // Shrink the text allowance until the serialized payload fits, so the result stays parsable JSON.
+  while (candidate.length > MAX_TOOL_OUTPUT_LENGTH && textBudget > 0) {
+    textBudget = Math.max(0, textBudget - Math.ceil((candidate.length - MAX_TOOL_OUTPUT_LENGTH) / 2));
+    candidate = build(textBudget);
+  }
+
+  /*
+   * The identity fields alone can still exceed the budget when a caller supplies an oversized `code`.
+   * Dropping the text entirely is preferable to returning something that does not parse.
+   */
+  return candidate.length <= MAX_TOOL_OUTPUT_LENGTH
+    ? candidate
+    : JSON.stringify({ ok: parsed.ok === true, ...revision, truncated: true });
+};
+
 export const enforceOutputBudget = (serialized: string): string => {
   if (serialized.length <= MAX_TOOL_OUTPUT_LENGTH) {
     return withoutInternalKeys(serialized);
@@ -170,16 +212,7 @@ export const enforceOutputBudget = (serialized: string): string => {
     const trimmed = JSON.stringify({ ...trimToBudget(parsed), ok: parsed.ok === true });
 
     // Scalar fields alone exceed the budget, so return valid summary-only JSON.
-    return trimmed.length <= MAX_TOOL_OUTPUT_LENGTH
-      ? trimmed
-      : JSON.stringify({
-          ok: parsed.ok === true,
-          ...(typeof parsed.revision === 'number' ? { revision: parsed.revision } : {}),
-          ...(typeof parsed.code === 'string' ? { code: parsed.code } : {}),
-          ...(typeof parsed.summary === 'string' ? { summary: parsed.summary.slice(0, 1200) } : {}),
-          ...(typeof parsed.error === 'string' ? { error: parsed.error.slice(0, 1200) } : {}),
-          truncated: true,
-        }).slice(0, MAX_TOOL_OUTPUT_LENGTH);
+    return trimmed.length <= MAX_TOOL_OUTPUT_LENGTH ? trimmed : scalarFallback(parsed);
   } catch {
     return JSON.stringify({ ok: false, error: 'Tool output exceeded the disclosure limit.', truncated: true });
   }
