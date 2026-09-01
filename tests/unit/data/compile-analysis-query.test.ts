@@ -283,6 +283,143 @@ describe('compileAnalysisQuery refusals', () => {
       expect(result.error.code).toBe('COLUMN_NOT_FOUND');
     }
   });
+
+  /*
+   * Every clause resolves its own column references, so each one must refuse an unknown ID rather than
+   * emit SQL naming a column that does not exist. A dimension is covered above; the rest follow here.
+   */
+  test('an unknown column is refused wherever a clause references one', () => {
+    const missing = 'col_missing';
+    const clauses: { name: string; query: AnalysisQuery }[] = [
+      {
+        name: 'binned dimension',
+        query: {
+          datasetId: compilerDataset.id,
+          dimensions: [],
+          binnedDimensions: [{ columnId: missing, strategy: { kind: 'equalWidth', binCount: 4 } }],
+          measures: [{ aggregate: 'count' }],
+          filters: [],
+        },
+      },
+      {
+        name: 'measure',
+        query: {
+          datasetId: compilerDataset.id,
+          dimensions: [],
+          measures: [{ columnId: missing, aggregate: 'sum' }],
+          filters: [],
+        },
+      },
+      {
+        name: 'distribution target',
+        query: {
+          datasetId: compilerDataset.id,
+          dimensions: [],
+          measures: [],
+          distribution: { columnId: missing },
+          filters: [],
+        },
+      },
+      {
+        name: 'distribution category',
+        query: {
+          datasetId: compilerDataset.id,
+          dimensions: [],
+          measures: [],
+          distribution: { columnId: 'col_value', categoryColumnId: missing },
+          filters: [],
+        },
+      },
+      {
+        name: 'sort',
+        query: {
+          datasetId: compilerDataset.id,
+          dimensions: ['col_name'],
+          measures: [{ columnId: 'col_value', aggregate: 'sum' }],
+          filters: [],
+          orderBy: [{ columnId: missing, direction: 'asc' }],
+        },
+      },
+      {
+        name: 'filter',
+        query: {
+          datasetId: compilerDataset.id,
+          dimensions: [],
+          measures: [],
+          filters: [{ kind: 'comparison', columnId: missing, operator: 'eq', value: 1 }],
+        },
+      },
+    ];
+
+    for (const { name, query } of clauses) {
+      const result = compileAnalysisQuery(query, compilerDataset);
+
+      expect(`${name}: ${result.ok}`).toBe(`${name}: false`);
+      if (!result.ok) {
+        expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+      }
+    }
+  });
+
+  // An aggregate the column's type cannot support is refused rather than emitted for the engine to reject.
+  test('a numeric aggregate over a text column is refused', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: compilerDataset.id,
+        dimensions: [],
+        measures: [{ columnId: 'col_name', aggregate: 'sum' }],
+        filters: [],
+      },
+      compilerDataset,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
+    }
+  });
+
+  /*
+   * Equal-width bins need the column range to size a bucket, and only the caller can supply it. Without
+   * it the query is refused rather than compiled with a guessed width.
+   */
+  test('a bin strategy missing its required range fails the query', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: compilerDataset.id,
+        dimensions: [],
+        binnedDimensions: [{ columnId: 'col_value', strategy: { kind: 'equalWidth', binCount: 4 } }],
+        measures: [{ aggregate: 'count' }],
+        filters: [],
+      },
+      compilerDataset,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  // A modifier that cannot compile must abort the query, since the measure would otherwise lose its meaning.
+  test('a metric modifier ordering by an unknown column fails the query', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: compilerDataset.id,
+        dimensions: [],
+        measures: [
+          { columnId: 'col_value', aggregate: 'sum', modifier: { kind: 'runningTotal', orderBy: 'col_missing' } },
+        ],
+        filters: [],
+      },
+      compilerDataset,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
+  });
 });
 
 describe('derived columns in a compiled query', () => {
@@ -320,6 +457,73 @@ describe('derived columns in a compiled query', () => {
     expect(result.value.sql).toContain('AVG(("c1" - ?))');
     expect(result.value.sql).toContain('GROUP BY 1');
     expect(result.value.resultColumns[0]).toEqual({ key: 'derived_margin', name: 'Margin', logicalType: 'number' });
+  });
+});
+
+describe('derived column failures in a compiled query', () => {
+  // A derived definition that cannot compile must fail the query in whichever role it is referenced.
+  const broken: DerivedColumn = {
+    id: 'derived_broken',
+    datasetId: compilerDataset.id,
+    name: 'Broken',
+    expression: { kind: 'column', columnId: 'col_missing' },
+    logicalType: 'number',
+    typeVerified: false,
+    createdBy: 'agent',
+  };
+
+  test('a derived dimension that cannot compile fails the query', () => {
+    const result = compileAnalysisQuery(
+      { datasetId: compilerDataset.id, dimensions: [broken.id], measures: [], filters: [] },
+      { datasets: [compilerDataset], derivedColumns: { [broken.id]: broken } },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
+  });
+
+  test('a derived measure that cannot compile fails the query', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: compilerDataset.id,
+        dimensions: [],
+        measures: [{ columnId: broken.id, aggregate: 'sum' }],
+        filters: [],
+      },
+      { datasets: [compilerDataset], derivedColumns: { [broken.id]: broken } },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
+  });
+});
+
+describe('negated filters', () => {
+  /*
+   * Join resolution walks the filter tree to learn which datasets a query reads. A `not` wrapper must be
+   * unwrapped, or its inner column would be invisible and the required dataset never joined.
+   */
+  test('a negated filter still contributes its column to the compiled query', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: compilerDataset.id,
+        dimensions: [],
+        measures: [],
+        filters: [{ kind: 'not', operand: { kind: 'comparison', columnId: 'col_value', operator: 'gt', value: 5 } }],
+      },
+      compilerDataset,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.sql).toContain('NOT');
+    expect(result.value.parameters).toEqual([5]);
   });
 });
 
@@ -564,6 +768,184 @@ describe('joined queries', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+  /*
+   * A relationship names its key columns by ID. If either side is absent from the datasets the query
+   * was given, the ON clause cannot be built and the query is refused rather than joined on a guess.
+   */
+  test('a relationship whose key column is missing from either side is refused', () => {
+    const keyPairs = [
+      { leftColumnId: 'col_missing', rightColumnId: 'col_customer_id' },
+      { leftColumnId: 'col_order_customer', rightColumnId: 'col_missing' },
+    ];
+
+    for (const pair of keyPairs) {
+      const broken: Relationship = {
+        id: 'rel_broken_key',
+        leftDatasetId: orders.id,
+        rightDatasetId: customers.id,
+        on: [pair],
+        kind: 'many_to_one',
+        join: 'inner',
+        createdBy: 'human',
+      };
+
+      const result = compileAnalysisQuery(
+        {
+          datasetId: orders.id,
+          relationshipIds: [broken.id],
+          dimensions: ['col_customer_region'],
+          measures: [],
+          filters: [],
+        },
+        { datasets: [orders, customers], relationships: [broken] },
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+      }
+    }
+  });
+
+  // Joined queries alias every relation, so a bare projection must resolve columns through those aliases.
+  test('a joined bare projection selects the anchor columns through their aliases', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: orders.id,
+        relationshipIds: ['rel_orders_customers'],
+        dimensions: [],
+        measures: [],
+        filters: [{ kind: 'comparison', columnId: 'col_customer_region', operator: 'eq', value: 'West' }],
+      },
+      { datasets: [orders, customers], relationships },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.joined).toBe(true);
+    // Every anchor column is projected, each qualified by the anchor's alias.
+    expect(result.value.resultColumns).toHaveLength(orders.columns.length);
+    expect(result.value.sql).toContain(`"${joinAlias(0)}"."order_id"`);
+  });
+
+  // A box plot split by a joined column still leads the projection with its category.
+  test('a joined distribution keeps its category grouped at the leading position', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: orders.id,
+        relationshipIds: ['rel_orders_customers'],
+        dimensions: [],
+        measures: [],
+        distribution: { columnId: 'col_order_revenue', categoryColumnId: 'col_customer_region' },
+        filters: [],
+      },
+      { datasets: [orders, customers], relationships },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.resultColumns[0]?.key).toBe('col_customer_region');
+    expect(result.value.sql).toContain('GROUP BY 1');
+  });
+});
+
+describe('distribution position alignment', () => {
+  const orders = ordersDataset();
+
+  /*
+   * The category is prepended to the projection, so every position already recorded in GROUP BY shifts
+   * by one. Leaving them unshifted would group by the wrong SELECT entries once a dimension is present.
+   */
+  test('a category prepended to an existing dimension shifts the grouped positions', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: orders.id,
+        dimensions: ['col_order_id'],
+        measures: [],
+        distribution: { columnId: 'col_order_revenue', categoryColumnId: 'col_order_placed' },
+        filters: [],
+      },
+      orders,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    // The category takes position 1 and the pre-existing dimension moves to position 2.
+    expect(result.value.sql).toContain('GROUP BY 1, 2');
+    expect(result.value.resultColumns.map((column) => column.key).slice(0, 2)).toEqual([
+      'col_order_placed',
+      'col_order_id',
+    ]);
+  });
+});
+
+describe('time comparison refusals', () => {
+  const orders = ordersDataset();
+
+  test('a time comparison over an unknown measure column is refused', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: orders.id,
+        dimensions: [],
+        measures: [
+          {
+            columnId: 'col_missing',
+            aggregate: 'sum',
+            modifier: {
+              kind: 'timeComparison',
+              dateColumnId: 'col_order_placed',
+              unit: 'month',
+              offset: 1,
+              as: 'absolute',
+            },
+          },
+        ],
+        filters: [],
+      },
+      orders,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
+  });
+
+  // The spine still aggregates, so an aggregate the column type cannot support is refused here too.
+  test('a time comparison whose aggregate rejects the column type is refused', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: orders.id,
+        dimensions: [],
+        measures: [
+          {
+            columnId: 'col_order_placed',
+            aggregate: 'sum',
+            modifier: {
+              kind: 'timeComparison',
+              dateColumnId: 'col_order_placed',
+              unit: 'month',
+              offset: 1,
+              as: 'absolute',
+            },
+          },
+        ],
+        filters: [],
+      },
+      orders,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
     }
   });
 });
