@@ -91,3 +91,21 @@ test('a payload whose scalars alone exceed the budget still parses', () => {
   expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
   expect(JSON.parse(output)).toMatchObject({ ok: false, code: 'UNSUPPORTED_OPERATION', truncated: true });
 });
+
+test('preview_data with columnIds narrows columns and preserves rows and rowsTotal', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 1,
+      summary: 'Returned 20 of 10194 rows.',
+      columnIds: Array.from({ length: 21 }, (_, index) => `col_${index}`),
+      rows: Array.from({ length: 20 }, (_, r) => Array.from({ length: 21 }, (_, c) => `cell_${r}_${c}`)),
+      rowsTotal: 10194,
+    }),
+  );
+  const parsed = JSON.parse(output) as { columnIds?: string[]; rows?: unknown[][]; rowsTotal?: number };
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  expect(parsed.rows?.length).toBeGreaterThan(1);
+  expect(parsed.rowsTotal).toBe(10194);
+});
