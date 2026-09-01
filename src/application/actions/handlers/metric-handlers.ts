@@ -9,13 +9,12 @@ import {
 } from '@/application/validation/validate-entity-refs.ts';
 import { isNumericType, isTemporalType } from '@/domain/logical-type.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
+import type { Dataset } from '@/domain/dataset/dataset.ts';
 import { MAX_TIME_COMPARISON_OFFSET } from '@/domain/metric/metric-modifier.ts';
 import type { MetricModifier } from '@/domain/metric/metric-modifier.ts';
-import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
-import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
@@ -25,28 +24,18 @@ export const MAX_METRIC_NAME_LENGTH = 80;
 const NUMERIC_ONLY_AGGREGATES = new Set(['sum', 'avg', 'median', 'stddev']);
 
 // Validates modifier references against the metric's dataset.
-const validateModifier = (
-  workspace: Workspace,
-  datasetId: EntityId,
-  modifier: MetricModifier,
-): Result<void, DomainError> => {
+const validateModifier = (dataset: Dataset, modifier: MetricModifier): Result<void, DomainError> => {
   if (modifier.kind === 'none' || modifier.kind === 'percentOfTotal') {
     return ok(undefined);
   }
 
-  const dataset = resolveDataset(workspace, datasetId);
-
-  if (!dataset.ok) {
-    return dataset;
-  }
-
   if (modifier.kind === 'runningTotal') {
-    const column = resolveColumn(dataset.value, modifier.orderBy);
+    const column = resolveColumn(dataset, modifier.orderBy);
 
     return column.ok ? ok(undefined) : column;
   }
 
-  const column = resolveColumn(dataset.value, modifier.dateColumnId);
+  const column = resolveColumn(dataset, modifier.dateColumnId);
 
   if (!column.ok) {
     return column;
@@ -146,7 +135,7 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
   }
 
   if (payload.modifier !== undefined) {
-    const modifier = validateModifier(workspace, dataset.value.id, payload.modifier);
+    const modifier = validateModifier(dataset.value, payload.modifier);
 
     if (!modifier.ok) {
       return modifier;
@@ -250,7 +239,7 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
   }
 
   if (payload.modifier !== undefined) {
-    const modifier = validateModifier(workspace, existing.value.datasetId, payload.modifier);
+    const modifier = validateModifier(dataset.value, payload.modifier);
 
     if (!modifier.ok) {
       return modifier;

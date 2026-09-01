@@ -323,6 +323,15 @@ describe('handleUpdateMetric', () => {
     expect(failureCode(updateMetric(workspaceWithDataset(), { metricId: 'missing' }))).toBe('UNSUPPORTED_OPERATION');
   });
 
+  test('reports DATASET_NOT_FOUND without changing a stale metric', () => {
+    const { workspace, metricId } = workspaceWithMetric();
+    const stale = { ...workspace, datasets: {} };
+    const result = updateMetric(stale, { metricId, name: 'Changed' });
+
+    expect(failureCode(result)).toBe('DATASET_NOT_FOUND');
+    expect(stale.metrics[metricId]?.name).toBe('Share');
+  });
+
   test('rejects a name that is blank once trimmed', () => {
     const { workspace, metricId } = workspaceWithMetric();
 
