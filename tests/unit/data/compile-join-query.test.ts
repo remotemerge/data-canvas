@@ -39,7 +39,9 @@ describe('join compilation', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).toContain('FROM "dataset_orders"');
     expect(result.value.sql).not.toContain('JOIN');
     expect(result.value.sql).not.toContain('"t0"');
@@ -50,7 +52,9 @@ describe('join compilation', () => {
     const result = compileAnalysisQuery(revenueByRegion, context(ordersToCustomers));
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).toBe(
       'SELECT "t1"."region", SUM("t0"."revenue") AS "m0" FROM "dataset_orders" AS "t0" ' +
         'INNER JOIN "dataset_customers" AS "t1" ON "t0"."customer_id" = "t1"."id" ' +
@@ -81,7 +85,9 @@ describe('join compilation', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).toContain('FROM "dataset_customers" AS "t0"');
     expect(result.value.sql).toContain('LEFT JOIN "dataset_orders" AS "t1"');
   });
@@ -99,7 +105,9 @@ describe('join compilation', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).toContain('("t0"."revenue" > ?)');
     expect(result.value.sql).toContain('("t1"."region" = ?)');
     expect(result.value.parameters).toEqual([100, 'Europe']);
@@ -137,7 +145,9 @@ describe('join compilation', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).toContain('FROM "dataset_orders" AS "t0"');
     expect(result.value.sql).toContain('INNER JOIN "dataset_customers" AS "t1" ON "t0"."customer_id" = "t1"."id"');
     expect(result.value.sql).toContain('LEFT JOIN "dataset_products" AS "t2" ON "t1"."id" = "t2"."id"');
@@ -163,7 +173,9 @@ describe('join compilation', () => {
     const result = compileAnalysisQuery(revenueByRegion, context());
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('NO_JOIN_PATH');
   });
 
@@ -180,7 +192,9 @@ describe('join compilation', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.resultColumns.map((column) => column.key)).toEqual(ORDERS_COLUMNS.map((column) => column.id));
   });
 });
@@ -190,7 +204,9 @@ describe('join injection boundaries', () => {
     const result = compileAnalysisQuery(revenueByRegion, context(ordersToCustomers));
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
 
     // Aliases are compiler-generated, never derived from dataset or column names.
     const aliases = [...result.value.sql.matchAll(/AS "(t\d+)"/gu)].map(([, alias]) => alias);
@@ -206,7 +222,9 @@ describe('join injection boundaries', () => {
     const hostile = '"; DROP TABLE data; --';
     const poisoned = context(ordersToCustomers);
     const customers = poisoned.datasets[1];
-    if (customers === undefined) throw new Error('fixture missing customers');
+    if (customers === undefined) {
+      throw new Error('fixture missing customers');
+    }
 
     const result = compileAnalysisQuery(revenueByRegion, {
       ...poisoned,
@@ -236,7 +254,9 @@ describe('join injection boundaries', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).not.toContain(hostile);
     expect(result.value.parameters).toContain(hostile);
   });

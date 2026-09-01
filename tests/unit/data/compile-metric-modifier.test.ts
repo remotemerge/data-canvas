@@ -13,14 +13,18 @@ describe('metric modifier compilation', () => {
     const result = compileMetricModifier(undefined, AGGREGATE, resolve);
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.sql).toBe(AGGREGATE);
+    if (result.ok) {
+      expect(result.value.sql).toBe(AGGREGATE);
+    }
   });
 
   test("'none' is the same as absent, so an explicit default costs nothing", () => {
     const result = compileMetricModifier({ kind: 'none' }, AGGREGATE, resolve);
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.sql).toBe(AGGREGATE);
+    if (result.ok) {
+      expect(result.value.sql).toBe(AGGREGATE);
+    }
   });
 
   test('percentOfTotal divides by the grand total over an empty window', () => {
@@ -49,7 +53,9 @@ describe('metric modifier compilation', () => {
     const result = compileMetricModifier({ kind: 'runningTotal', orderBy: 'col_missing' }, AGGREGATE, resolve);
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
   });
 
   test('timeComparison is not compilable in isolation, since it rewrites the whole statement', () => {
@@ -95,14 +101,18 @@ describe('time comparison spine', () => {
     });
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.parameters).toEqual(['quarter', 4]);
+    if (result.ok) {
+      expect(result.value.parameters).toEqual(['quarter', 4]);
+    }
   });
 
   test('percentChange divides through NULLIF, which a gap-filled zero makes routine', () => {
     const result = spine();
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.sql).toContain('NULLIF');
+    if (result.ok) {
+      expect(result.value.sql).toContain('NULLIF');
+    }
   });
 
   test('each output shape produces a different comparison column', () => {
@@ -114,7 +124,9 @@ describe('time comparison spine', () => {
     });
 
     expect(absolute.ok && difference.ok).toBe(true);
-    if (absolute.ok && difference.ok) expect(absolute.value.sql).not.toBe(difference.value.sql);
+    if (absolute.ok && difference.ok) {
+      expect(absolute.value.sql).not.toBe(difference.value.sql);
+    }
   });
 
   test('filter parameters bind between the unit and the offset, matching their place in the statement', () => {
@@ -137,12 +149,32 @@ describe('time comparison spine', () => {
     }
   });
 
+  // The interval and truncation unit come from an allowlist, so an unknown unit has no SQL to emit.
+  test('a unit outside the temporal scale is refused', () => {
+    const result = spine({
+      modifier: {
+        kind: 'timeComparison',
+        dateColumnId: 'col_date',
+        unit: 'minute' as never,
+        offset: 1,
+        as: 'absolute',
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
   test('a comparison against a column that does not exist is refused', () => {
     const result = spine({
       modifier: { kind: 'timeComparison', dateColumnId: 'col_missing', unit: 'month', offset: 1, as: 'absolute' },
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    if (!result.ok) {
+      expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+    }
   });
 });

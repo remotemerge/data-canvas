@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createQueryScheduler } from '@/data/duckdb/query-scheduler.ts';
+import { createQueryScheduler, QueryAbortedError } from '@/data/duckdb/query-scheduler.ts';
 
 const deferred = <T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } =>
   Promise.withResolvers<T>();
@@ -106,7 +106,9 @@ describe('query scheduler', () => {
         await gate.promise;
 
         // The engine surfaces cancellation as a throw; the scheduler must classify it as stale.
-        if (signal.aborted) throw new Error('aborted');
+        if (signal.aborted) {
+          throw new Error('aborted');
+        }
 
         return 'x';
       },
@@ -175,7 +177,9 @@ describe('query scheduler', () => {
       async (signal) => {
         await gate.promise;
 
-        if (signal.aborted) throw new Error('aborted');
+        if (signal.aborted) {
+          throw new Error('aborted');
+        }
 
         return 'x';
       },
@@ -189,6 +193,14 @@ describe('query scheduler', () => {
     gate.resolve('x');
 
     expect(await pending).toEqual({ stale: true });
+  });
+
+  test('abortAll on an idle scheduler is a no-op', () => {
+    const scheduler = createQueryScheduler();
+
+    expect(() => {
+      scheduler.abortAll();
+    }).not.toThrow();
   });
 
   test('queries run one at a time rather than concurrently', async () => {
@@ -215,5 +227,15 @@ describe('query scheduler', () => {
 
     // One connection serializes work; the scheduler must discard stale work.
     expect(peak).toBe(1);
+  });
+});
+
+describe('QueryAbortedError', () => {
+  // Callers classify cancellation by name, so the name must not drift with a bundler rename.
+  test('carries a stable name and message', () => {
+    expect(new QueryAbortedError()).toMatchObject({
+      name: 'QueryAbortedError',
+      message: 'The query was aborted before it completed.',
+    });
   });
 });

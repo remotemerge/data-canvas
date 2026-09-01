@@ -48,7 +48,9 @@ describe('no unbounded query is ever emitted', () => {
       const compiled = compileAnalysisQuery(variant.query, context);
 
       expect(compiled.ok).toBe(true);
-      if (!compiled.ok) return;
+      if (!compiled.ok) {
+        return;
+      }
 
       const limit = emittedLimit(compiled.value.sql);
 
@@ -64,7 +66,9 @@ describe('no unbounded query is ever emitted', () => {
       const compiled = compileAnalysisQuery(planned.query, context);
 
       expect(compiled.ok).toBe(true);
-      if (!compiled.ok) continue;
+      if (!compiled.ok) {
+        continue;
+      }
       expect(emittedLimit(compiled.value.sql) as number).toBeLessThanOrEqual(MAX_QUERY_LIMIT);
     }
   });
@@ -78,7 +82,9 @@ describe('plotted points stay within budget', () => {
       const plan = planSampling({ query: baseQuery, kind, estimatedRows: 10_000_000, budget: MAX_CHART_POINTS });
 
       // The compiler's limit bounds every reshaping strategy.
-      if (plan.query.limit !== undefined) expect(plan.query.limit).toBeLessThanOrEqual(MAX_CHART_POINTS);
+      if (plan.query.limit !== undefined) {
+        expect(plan.query.limit).toBeLessThanOrEqual(MAX_CHART_POINTS);
+      }
     }
   });
 

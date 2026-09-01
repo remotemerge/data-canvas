@@ -4,6 +4,7 @@ import type { PlannerContext } from '@/data/compiler/query-planner.ts';
 import { orderJoinTargets } from '@/data/compiler/join-ordering.ts';
 import { isFullWidthProjection, prunedProjection, referencedColumnIds } from '@/data/compiler/projection-pruning.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import type { DerivedColumn } from '@/domain/dataset/derived-column.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { CUSTOMERS_COLUMNS, ORDERS_COLUMNS, PRODUCTS_COLUMNS } from '../application/action-fixtures.ts';
@@ -99,6 +100,48 @@ describe('projection pruning', () => {
   test('never prunes a query that already names its columns', () => {
     expect(prunedProjection(revenueByRegion, referencedColumnIds(revenueByRegion))).toBeUndefined();
   });
+
+  // A distribution names its columns outside the dimension and measure channels.
+  test('collects both the value and category columns of a distribution query', () => {
+    expect(
+      referencedColumnIds({
+        datasetId: 'ds_orders' as EntityId,
+        dimensions: [],
+        binnedDimensions: [],
+        measures: [],
+        distribution: {
+          columnId: 'col_order_revenue' as EntityId,
+          categoryColumnId: 'col_customer_region' as EntityId,
+        },
+        filters: [],
+      }),
+    ).toEqual(['col_order_revenue' as EntityId, 'col_customer_region' as EntityId]);
+  });
+
+  // The derived ID stays because it is what the query names; its inputs are added so the join
+  // resolver can reach the physical columns behind it.
+  test('follows a derived reference to the physical columns it reads', () => {
+    const margin: DerivedColumn = {
+      id: 'col_margin' as EntityId,
+      datasetId: 'ds_orders' as EntityId,
+      name: 'Margin',
+      expression: {
+        kind: 'arithmetic',
+        op: 'sub',
+        left: { kind: 'column', columnId: 'col_order_revenue' as EntityId },
+        right: { kind: 'column', columnId: 'col_order_id' as EntityId },
+      },
+      logicalType: 'number',
+      typeVerified: true,
+      createdBy: 'human',
+    };
+    const ids = referencedColumnIds(
+      { datasetId: 'ds_orders' as EntityId, dimensions: ['col_margin' as EntityId], measures: [], filters: [] },
+      { col_margin: margin },
+    );
+
+    expect(ids).toEqual(['col_margin' as EntityId, 'col_order_revenue' as EntityId, 'col_order_id' as EntityId]);
+  });
 });
 
 describe('join ordering', () => {
@@ -191,5 +234,55 @@ describe('planQuery', () => {
 
     expect(withoutStatistics.joinOrder).toBeUndefined();
     expect(withoutStatistics.applied).not.toContain('join-ordering');
+  });
+
+  test('emits a join order hint when the estimates put the smaller relation first', () => {
+    const ordersToProducts: Relationship = {
+      id: 'rel_2' as EntityId,
+      leftDatasetId: 'ds_orders' as EntityId,
+      rightDatasetId: 'ds_products' as EntityId,
+      on: [{ leftColumnId: 'col_order_id' as EntityId, rightColumnId: 'col_product_order' as EntityId }],
+      kind: 'one_to_many',
+      join: 'left',
+      createdBy: 'human',
+    };
+    const planned = planQuery(
+      {
+        ...revenueByRegion,
+        dimensions: ['col_customer_region' as EntityId, 'col_product_label' as EntityId],
+      },
+      {
+        ...context(ordersToCustomers, ordersToProducts),
+        cardinalities: [
+          { datasetId: 'ds_customers' as EntityId, rowCount: 1_000 },
+          { datasetId: 'ds_products' as EntityId, rowCount: 10 },
+        ],
+      },
+    );
+
+    expect(planned.applied).toContain('join-ordering');
+    expect(planned.joinOrder).toEqual(['ds_products' as EntityId, 'ds_customers' as EntityId]);
+  });
+
+  // A bare projection with a filter both simplifies and narrows, so one pass can record two changes.
+  test('records simplification and pruning together on a bare filtered projection', () => {
+    const planned = planQuery(
+      {
+        datasetId: 'ds_orders' as EntityId,
+        dimensions: [],
+        measures: [],
+        filters: [
+          {
+            kind: 'and',
+            operands: [{ kind: 'comparison', columnId: 'col_customer_region' as EntityId, operator: 'eq', value: 'W' }],
+          },
+        ],
+      },
+      context(ordersToCustomers),
+    );
+
+    expect(planned.applied).toContain('filter-simplification');
+    expect(planned.applied).toContain('projection-pruning');
+    expect(planned.query.dimensions).toEqual(['col_customer_region' as EntityId]);
   });
 });

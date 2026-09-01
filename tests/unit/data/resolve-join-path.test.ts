@@ -27,7 +27,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_orders'], CHAIN);
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.steps).toHaveLength(0);
     expect(result.value.datasetIds).toEqual(['ds_orders']);
   });
@@ -36,7 +38,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_customers'], CHAIN);
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.steps).toHaveLength(1);
     expect(result.value.steps[0]?.relationship.id).toBe('rel_1');
     expect(result.value.datasetIds).toEqual(['ds_orders', 'ds_customers']);
@@ -46,7 +50,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_products'], CHAIN);
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     // Each step must join from a dataset already in the chain.
     expect(result.value.steps.map((step) => step.toDatasetId)).toEqual(['ds_customers', 'ds_products']);
     expect(result.value.steps[0]?.fromDatasetId).toBe('ds_orders');
@@ -58,7 +64,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_customers', ['ds_orders'], [relate('rel_1', 'ds_orders', 'ds_customers')]);
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.steps[0]?.fromDatasetId).toBe('ds_customers');
     expect(result.value.steps[0]?.toDatasetId).toBe('ds_orders');
   });
@@ -67,7 +75,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_customers', 'ds_products'], CHAIN);
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.datasetIds).toEqual(['ds_orders', 'ds_customers', 'ds_products']);
     expect(result.value.steps).toHaveLength(2);
   });
@@ -76,7 +86,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_products'], [relate('rel_1', 'ds_orders', 'ds_customers')]);
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('NO_JOIN_PATH');
     expect(result.error.message).toContain('ds_products');
     // The message must help correct the request.
@@ -87,7 +99,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_products'], CHAIN, ['rel_1']);
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('NO_JOIN_PATH');
   });
 
@@ -95,7 +109,9 @@ describe('resolveJoinPath', () => {
     const result = resolveJoinPath('ds_orders', ['ds_customers'], CHAIN, ['rel_missing']);
 
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok) {
+      return;
+    }
     expect(result.error.code).toBe('NO_JOIN_PATH');
     expect(result.error.message).toContain('rel_missing');
   });

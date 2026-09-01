@@ -66,6 +66,10 @@ describe('convertArrowValue', () => {
     expect(convertArrowValue(new BigInt64Array([42n]))).toBe(42);
   });
 
+  test('converts a 4-byte Int32 typed array', () => {
+    expect(convertArrowValue(new Int32Array([7]))).toBe(7);
+  });
+
   test('drops non-integer typed arrays, which have no scalar meaning', () => {
     expect(convertArrowValue(new Uint8Array([1, 2, 3]))).toBeNull();
   });
