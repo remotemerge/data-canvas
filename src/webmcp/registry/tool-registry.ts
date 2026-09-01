@@ -1,3 +1,4 @@
+import type { ErrorObject } from 'ajv';
 import type { ModelContext } from '@mcp-b/webmcp-types';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-types.ts';
@@ -13,14 +14,37 @@ export const createToolDefinitions = (deps: ToolDependencies): DataCanvasTool[] 
   ...createWriteTools(deps),
 ];
 
+/*
+ * Ajv keeps the useful part of a rejection in `params` rather than in `message`: which property was
+ * unknown, and which values an enum accepts. An agent that cannot read tool descriptors has to
+ * rediscover a contract from these messages, so name the offending field instead of leaving it to
+ * be guessed one probe call at a time.
+ */
+const describeValidationError = (error: ErrorObject): string => {
+  const location = error.instancePath === '' ? '/' : error.instancePath;
+  const params = error.params as { additionalProperty?: string; allowedValues?: unknown[]; allowedValue?: unknown };
+  const message = error.message ?? 'is invalid';
+
+  if (error.keyword === 'additionalProperties' && typeof params.additionalProperty === 'string') {
+    return `'${location}' has unknown property '${params.additionalProperty}'.`;
+  }
+
+  if (error.keyword === 'enum' && Array.isArray(params.allowedValues)) {
+    return `'${location}' ${message}: ${params.allowedValues.map((value) => JSON.stringify(value)).join(', ')}.`;
+  }
+
+  if (error.keyword === 'const' && 'allowedValue' in params) {
+    return `'${location}' must be equal to ${JSON.stringify(params.allowedValue)}.`;
+  }
+
+  return `'${location}' ${message}.`;
+};
+
 export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise<string> => {
   const validator = toolValidators[tool.name];
   if (!validator(input)) {
     const first = validator.errors?.[0];
-    const detail =
-      first === undefined
-        ? 'Arguments do not match this tool schema.'
-        : `'${first.instancePath === '' ? '/' : first.instancePath}' ${first.message ?? 'is invalid'}.`;
+    const detail = first === undefined ? 'Arguments do not match this tool schema.' : describeValidationError(first);
     return failure(domainError('INVALID_TOOL_ARGUMENTS', detail));
   }
 

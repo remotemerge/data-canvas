@@ -7,8 +7,9 @@ import {
   stubDataEngine,
   workspaceWithDataset,
 } from '../application/action-fixtures.ts';
-import { createToolDefinitions, createToolRegistry } from '@/webmcp/registry/tool-registry.ts';
+import { createToolDefinitions, createToolRegistry, executeTool } from '@/webmcp/registry/tool-registry.ts';
 import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
+import { TOOL_CONTRACT_VERSION } from '@/webmcp/schemas/compile-schemas.ts';
 
 const setup = () => {
   const engine = stubDataEngine();
@@ -195,5 +196,42 @@ describe('WebMCP semantic tool behavior', () => {
     ).toMatchObject({ ok: false, code: 'INVALID_TOOL_ARGUMENTS' });
     expect(harness.workspace()).toEqual(before);
     registry.dispose();
+  });
+
+  // An agent that cannot read descriptors recovers from a rejection only if the message names the field.
+  test('rejection messages name the offending property and the accepted values', async () => {
+    const { tool } = setup();
+
+    const unknownProperty = JSON.parse(
+      await executeTool(tool('analyze_data'), {
+        datasetId: 'ds_sales',
+        measures: [{ columnId: 'col_revenue', aggregate: 'sum' }],
+        groupBy: ['col_region'],
+      }),
+    ) as { error: string };
+    expect(unknownProperty.error).toContain("unknown property 'groupBy'");
+
+    const unknownNested = JSON.parse(
+      await executeTool(tool('analyze_data'), {
+        datasetId: 'ds_sales',
+        measures: [{ columnId: 'col_revenue', aggregate: 'sum', evilExtra: 1 }],
+      }),
+    ) as { error: string };
+    expect(unknownNested.error).toContain("'/measures/0' has unknown property 'evilExtra'");
+
+    const badEnum = JSON.parse(
+      await executeTool(tool('analyze_data'), {
+        datasetId: 'ds_sales',
+        measures: [{ columnId: 'col_revenue', aggregate: 'sumx' }],
+      }),
+    ) as { error: string };
+    expect(badEnum.error).toContain('/measures/0/aggregate');
+    expect(badEnum.error).toContain('"sum"');
+  });
+
+  test('get_workspace reports the contract version so a returning agent detects renames', async () => {
+    const { tool } = setup();
+    const workspace = JSON.parse(await tool('get_workspace').handler({})) as { toolContractVersion: number };
+    expect(workspace.toolContractVersion).toBe(TOOL_CONTRACT_VERSION);
   });
 });

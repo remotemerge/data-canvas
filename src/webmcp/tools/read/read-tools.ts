@@ -2,7 +2,7 @@ import type { Filter } from '@/domain/filter/filter.ts';
 import type { AnalysisQuery, MeasureSpec } from '@/domain/analysis/analysis-query.ts';
 import { relatedDatasetId } from '@/domain/relationship/relationship.ts';
 import type { ToolDependencies, DataCanvasTool } from '@/webmcp/registry/tool-types.ts';
-import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
+import { TOOL_CONTRACT_VERSION, toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { createGetColumnStatisticsTool } from '@/webmcp/tools/read/get-column-statistics.ts';
 import { createListRelationshipsTool } from '@/webmcp/tools/read/list-relationships.ts';
 import { asInput, boundedCell, failure, invalidEntity, success } from '@/webmcp/tools/tool-helpers.ts';
@@ -25,7 +25,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   {
     name: 'get_workspace',
     description:
-      'Summarize the current workspace, its revision, datasets, charts, filters, metrics, and selections without returning row values.',
+      'Summarize the current workspace, its revision, datasets, charts, filters, metrics, and selections without returning row values. Also reports toolContractVersion, which changes when tool argument shapes change.',
     schema: toolSchemas.get_workspace,
     annotations: { readOnlyHint: true },
     needsDataset: false,
@@ -34,6 +34,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const relationships = Object.values(workspace.relationships);
       return success({
         revision: workspace.revision,
+        toolContractVersion: TOOL_CONTRACT_VERSION,
         summary: `Workspace ${workspace.name} has ${Object.keys(workspace.datasets).length} datasets, ${relationships.length} relationships, and ${Object.keys(workspace.visualizations).length} visualizations.`,
         workspaceId: workspace.id,
         datasets: Object.values(workspace.datasets).map(({ id, name, importStatus, rowCount }) => ({

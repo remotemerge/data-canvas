@@ -43,6 +43,14 @@ export const toolSchemas = {
 
 export type ToolName = keyof typeof toolSchemas;
 
+/*
+ * Agent-facing argument contract version, reported by get_workspace. Descriptors are unreachable to
+ * an agent whose browser lacks navigator.modelContext, so a returning agent with cached tool shapes
+ * has no other way to notice that a property was renamed. Increment whenever a tool schema changes
+ * in a way that invalidates arguments an agent may have cached.
+ */
+export const TOOL_CONTRACT_VERSION = 1;
+
 const ajv = new Ajv({ strict: true, allErrors: true });
 
 export const toolValidators: Record<ToolName, ValidateFunction> = Object.fromEntries(
