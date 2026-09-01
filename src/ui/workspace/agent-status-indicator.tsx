@@ -10,8 +10,9 @@ export const AgentStatusIndicator = (): React.JSX.Element => {
       ? `Agent is using ${status.executingCount} tool${status.executingCount === 1 ? '' : 's'}`
       : `${status.registeredCount} agent tool${status.registeredCount === 1 ? '' : 's'} available`;
 
+  // Announced politely so a non-visual user notices the agent starting or finishing work.
   return (
-    <span className="agent-status" data-active={status.executingCount > 0}>
+    <span className="agent-status" data-active={status.executingCount > 0} role="status">
       {message}
     </span>
   );

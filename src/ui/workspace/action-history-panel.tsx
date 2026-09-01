@@ -12,9 +12,19 @@ export const ActionHistoryPanel = (): React.JSX.Element => {
 
   const entries = useMemo(() => recentHistory(history, VISIBLE_ENTRIES), [history]);
 
+  const latestEntry = entries[0];
+
   return (
     <section className="history">
       <h2 className="workspace__panel-heading">Activity</h2>
+
+      {/*
+        Workspace changes can originate from the agent while focus sits elsewhere, so the
+        newest entry is announced politely to keep non-visual users aware of agent activity.
+      */}
+      <p className="sr-only" aria-live="polite">
+        {latestEntry === undefined ? '' : `${latestEntry.actor} action: ${latestEntry.summary}`}
+      </p>
 
       {entries.length === 0 ? (
         <p className="workspace__empty">No actions yet.</p>
