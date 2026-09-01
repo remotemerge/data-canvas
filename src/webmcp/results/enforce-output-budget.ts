@@ -31,6 +31,8 @@ const serializedLength = (value: object): number => JSON.stringify(value).length
 // Trims an oversized payload while preserving its shape.
 const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
+  // Set when the projection is narrowed, then appended to the summary once row trimming settles.
+  let columnNotice: string | undefined;
   for (const [key, value] of Object.entries(parsed)) {
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
       result[key] = typeof value === 'string' ? value.slice(0, 1200) : value;
@@ -75,6 +77,14 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
     if (keptColumns.length < originalColumns.length) {
       result[`${columnCountKey}Returned`] = keptColumns.length;
       result[`${columnCountKey}Total`] ??= originalColumns.length;
+
+      /*
+       * State the dropped columns in the summary. An agent reading only that line would otherwise
+       * treat a narrowed projection as the full one it requested. Applying it before the row-trim
+       * loop keeps the longer summary inside the budget the loop enforces.
+       */
+      columnNotice = `Returned ${keptColumns.length} of ${originalColumns.length} requested columns.`;
+      result['summary'] = typeof result['summary'] === 'string' ? `${result['summary']} ${columnNotice}` : columnNotice;
     }
   }
 
@@ -106,7 +116,8 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
       result[`${key}Returned`] = kept.length;
       result[`${key}Total`] = originalTotal;
       if (key === 'rows' && typeof originalTotal === 'number') {
-        result['summary'] = `Returned ${kept.length} of ${originalTotal} rows.`;
+        result['summary'] =
+          `Returned ${kept.length} of ${originalTotal} rows.${columnNotice === undefined ? '' : ` ${columnNotice}`}`;
       }
     }
   }

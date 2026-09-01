@@ -83,6 +83,30 @@ test('wide tabular output narrows columns before sacrificing complete rows', () 
   expect(parsed.rows?.every((row) => Array.isArray(row) && row.length === 1)).toBe(true);
 });
 
+// An agent that reads only the summary would otherwise treat a narrowed projection as complete.
+test('a narrowed projection is stated in the summary, not only in the counters', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 5,
+      summary: 'Returned 100 of 10194 rows.',
+      columns: Array.from({ length: 6 }, (_, index) => column(index)),
+      rows: Array.from({ length: 100 }, (_, index) => [index, `value ${index}`, index * 2]),
+    }),
+  );
+  const parsed = JSON.parse(output) as { summary?: string; columnsReturned?: number; columnsTotal?: number };
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  expect(parsed.columnsReturned).toBeLessThan(parsed.columnsTotal ?? 0);
+  expect(parsed.summary).toContain(`Returned ${parsed.columnsReturned} of ${parsed.columnsTotal} requested columns`);
+});
+
+test('output that fits the budget keeps its summary untouched', () => {
+  const payload = JSON.stringify({ ok: true, revision: 1, summary: 'Returned 5 of 10194 rows.', rows: [[1], [2]] });
+
+  expect(enforceOutputBudget(payload)).toBe(payload);
+});
+
 test('a payload whose scalars alone exceed the budget still parses', () => {
   const output = enforceOutputBudget(
     JSON.stringify({ ok: false, code: 'UNSUPPORTED_OPERATION', error: 'y'.repeat(4000), rows: [1, 2, 3] }),
