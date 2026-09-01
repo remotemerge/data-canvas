@@ -12,6 +12,8 @@ export type SamplingStrategy =
   | { kind: 'exact' }
   // Highest-ranked categories plus an aggregate `Other` bucket.
   | { kind: 'topN'; retained: number; otherBucket: true }
+  // Leading buckets of a binned dimension, kept in axis order without an `Other` row.
+  | { kind: 'binTruncation'; retained: number }
   // A temporal dimension widened to a coarser unit until it fits.
   | { kind: 'temporalWiden'; from: TemporalUnit; to: TemporalUnit }
   // Uniform row sample for scatter-style queries.
@@ -147,6 +149,19 @@ export const planSampling = ({
     return {
       query,
       disclosure: { strategy: { kind: 'tablesample', rate }, rate, estimatedRows },
+    };
+  }
+
+  /*
+   * An `Other` bucket only means something for categorical groups. Folding the tail of a binned
+   * dimension into one row would place a synthetic category on a continuous or temporal axis and
+   * describe the chart as top-N categories, so bounded binned results are truncated in axis order
+   * instead. `binCount` bounds keep this path rare.
+   */
+  if ((query.binnedDimensions ?? []).length > 0) {
+    return {
+      query: { ...query, limit: deliverable },
+      disclosure: { strategy: { kind: 'binTruncation', retained: deliverable }, rate, estimatedRows },
     };
   }
 

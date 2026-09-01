@@ -7,6 +7,7 @@ import { boundChartRows, MAX_CHART_POINTS, readableChartPoints } from '@/applica
 import { propagateSelection } from '@/application/selection/propagate-selection.ts';
 import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import { maxBinCardinality } from '@/domain/analysis/bin-strategy.ts';
 import type { FilterExpression } from '@/domain/filter/filter.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
@@ -47,17 +48,35 @@ export const resolveVisualizationQuery = (visualization: Visualization, workspac
   };
 };
 
-// Estimates grouped result size before running the chart query.
+/*
+ * Estimates grouped result size before running the chart query.
+ *
+ * Binned dimensions bucket their column, so the strategy caps their group count regardless of how many
+ * distinct values the column holds. Counting distinct raw values instead would treat a 20-bucket
+ * histogram over a high-cardinality column as an oversized categorical result and mislabel it as
+ * top-N sampled. Only temporal bins lack a static bound and still need a measured count.
+ */
 const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery): Promise<number | undefined> => {
-  const grouped = [...query.dimensions, ...(query.binnedDimensions ?? []).map((bin) => bin.columnId)];
+  const binned = (query.binnedDimensions ?? []).map((bin) => ({ bin, bound: maxBinCardinality(bin.strategy) }));
 
-  if (grouped.length === 0) return undefined;
+  if (query.dimensions.length === 0 && binned.length === 0) return undefined;
+
+  // Columns whose group count must come from the engine.
+  const measured = [
+    ...query.dimensions,
+    ...binned.flatMap((entry) => (entry.bound === undefined ? [entry.bin.columnId] : [])),
+  ];
+
+  // Product of the statically bounded bins; a chart with only bounded bins needs no engine round trip.
+  const staticBound = binned.reduce<number>((product, entry) => product * (entry.bound ?? 1), 1);
+
+  if (measured.length === 0) return staticBound;
 
   const estimate = await engine.executeAnalysis({
     datasetId: query.datasetId,
     ...(query.relationshipIds === undefined ? {} : { relationshipIds: query.relationshipIds }),
     dimensions: [],
-    measures: grouped.map((columnId) => ({ columnId, aggregate: 'count_distinct' as const })),
+    measures: measured.map((columnId) => ({ columnId, aggregate: 'count_distinct' as const })),
     filters: query.filters,
     limit: 1,
   });
@@ -69,7 +88,7 @@ const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery):
   if (row === undefined) return undefined;
 
   // Multiplying distinct counts overestimates safely; it can trigger sampling, but never under-sample.
-  return row.reduce<number>((product, value) => product * Math.max(Number(value) || 0, 1), 1);
+  return row.reduce<number>((product, value) => product * Math.max(Number(value) || 0, 1), staticBound);
 };
 
 const resolveBinRanges = async (

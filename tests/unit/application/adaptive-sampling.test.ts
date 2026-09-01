@@ -8,6 +8,8 @@ import {
 import { describeSampling, foldOtherBucket, isAdditiveAggregate } from '@/application/queries/sampling-disclosure.ts';
 import { MAX_QUERY_LIMIT } from '@/data/compiler/compile-analysis-query.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
+import { MAX_BIN_COUNT, maxBinCardinality } from '@/domain/analysis/bin-strategy.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 const columnId = (name: string) => `col_${name}` as EntityId;
@@ -27,7 +29,39 @@ const temporalQuery = (): AnalysisQuery => ({
   filters: [],
 });
 
+const binnedQuery = (strategy: BinStrategy): AnalysisQuery => ({
+  datasetId: 'ds_1' as EntityId,
+  dimensions: [],
+  binnedDimensions: [{ columnId: columnId('sales'), strategy }],
+  measures: [{ aggregate: 'count', alias: 'count' }],
+  filters: [],
+});
+
+describe('bin cardinality bounds', () => {
+  // Bucket counts follow the strategy, so a chart's group count cannot depend on column cardinality.
+  test('each non-temporal strategy bounds its own group count', () => {
+    expect(maxBinCardinality({ kind: 'equalWidth', binCount: 20 })).toBe(20);
+    expect(maxBinCardinality({ kind: 'quantile', quantiles: 4 })).toBe(4);
+    // Each break opens a bucket, plus the trailing bucket above the last break.
+    expect(maxBinCardinality({ kind: 'explicit', breaks: [10, 20, 30] })).toBe(4);
+    expect(maxBinCardinality({ kind: 'equalWidthOf', width: 5 })).toBe(MAX_BIN_COUNT);
+  });
+
+  test('a temporal bucket count depends on the data, so it has no static bound', () => {
+    expect(maxBinCardinality({ kind: 'temporal', unit: 'day' })).toBeUndefined();
+  });
+});
+
 describe('adaptive sampling policy', () => {
+  // A 20-bucket histogram returns 20 rows regardless of how many distinct values the column holds.
+  test('leaves a bounded histogram exact', () => {
+    const query = binnedQuery({ kind: 'equalWidth', binCount: 20 });
+    const plan = planSampling({ query, kind: 'histogram', estimatedRows: 20, budget: 5_000 });
+
+    expect(plan.disclosure).toBeNull();
+    expect(plan.query).toEqual(query);
+  });
+
   test('leaves a result within the budget exact', () => {
     const plan = planSampling({ query: groupedQuery(), kind: 'bar', estimatedRows: 40, budget: 100 });
 
@@ -158,6 +192,25 @@ describe('adaptive sampling policy', () => {
     expect(widenTemporalUnit('year', 100, 10)).toBe('year');
   });
 
+  /*
+   * A histogram groups by bucket, so a categorical `Other` row would put a synthetic category on a
+   * continuous axis and describe the chart as top-N categories. The bucket bound normally keeps this
+   * path unreachable; the guard covers the case where an estimate still exceeds the budget.
+   */
+  test('never folds an Other bucket into a binned distribution', () => {
+    const plan = planSampling({
+      query: binnedQuery({ kind: 'equalWidth', binCount: 20 }),
+      kind: 'histogram',
+      estimatedRows: 500_000,
+      budget: 100,
+    });
+
+    expect(plan.disclosure?.strategy.kind).toBe('binTruncation');
+    expect(plan.totalQuery).toBeUndefined();
+    expect(describeSampling(plan.disclosure!).label).not.toContain('Other');
+    expect(describeSampling(plan.disclosure!).explanation).not.toContain('categories');
+  });
+
   test('samples rows for a row-level scatter query', () => {
     const scatter: AnalysisQuery = {
       datasetId: 'ds_1' as EntityId,
@@ -178,6 +231,7 @@ describe('sampling disclosure', () => {
     const strategies = [
       { kind: 'exact' as const },
       { kind: 'topN' as const, retained: 99, otherBucket: true as const },
+      { kind: 'binTruncation' as const, retained: 99 },
       { kind: 'temporalWiden' as const, from: 'day' as const, to: 'month' as const },
       { kind: 'reservoir' as const, rate: 0.005 },
       { kind: 'tablesample' as const, rate: 0.01 },

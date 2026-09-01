@@ -30,6 +30,12 @@ export const describeSampling = (disclosure: SamplingDisclosure): DisclosureText
         explanation: `This chart shows the ${strategy.retained.toLocaleString()} largest categories individually; every remaining category is aggregated into a single "Other" bucket, so summable measures still add up to the full total. Every row was read, so each value shown is exact. Measures that cannot be summed across groups — averages, medians, and distinct counts — are left blank in the "Other" row rather than estimated.`,
       };
 
+    case 'binTruncation':
+      return {
+        label: `First ${strategy.retained.toLocaleString()} buckets`,
+        explanation: `This distribution produces more buckets than the plotted-point budget allows, so it shows the first ${strategy.retained.toLocaleString()} buckets along the axis. Every row was read, so each bucket's count is exact, but buckets beyond the last one shown are omitted. Reduce the bucket count to see the whole range.`,
+      };
+
     case 'temporalWiden':
       return {
         label: `${temporalUnitLabel[strategy.to]} buckets`,
