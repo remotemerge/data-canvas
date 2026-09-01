@@ -142,6 +142,21 @@ describe('handleUpdateVisualization', () => {
     );
   });
 
+  /*
+   * An update re-validates the resulting binding, so a chart cannot be edited into a state the same
+   * rules would have refused at creation.
+   */
+  test('rejects an update whose binding the chart kind does not accept', () => {
+    const { workspace, visualizationId } = workspaceWithChart();
+
+    // A line chart needs a temporal or ordered numeric x, which a category column is not.
+    expect(
+      failureCode(
+        updateVisualization(workspace, { visualizationId, binding: { x: 'col_region', y: ['col_revenue'] } }),
+      ),
+    ).toBe('INCOMPATIBLE_COLUMN');
+  });
+
   test('rejects a title longer than the title budget', () => {
     const { workspace, visualizationId } = workspaceWithChart();
 

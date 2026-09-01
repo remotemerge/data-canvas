@@ -137,6 +137,15 @@ describe('handleSetSelection', () => {
 });
 
 describe('handleExtendSelection', () => {
+  // Extending resolves its dataset first, so an unknown ID is refused rather than creating a selection.
+  test('reports DATASET_NOT_FOUND for an unknown dataset', () => {
+    expect(
+      failureCode(
+        extendSelection(workspaceWithDataset(), { datasetId: 'missing', mode: 'keys', keys: ['a'], origin: 'chart' }),
+      ),
+    ).toBe('DATASET_NOT_FOUND');
+  });
+
   test('falls back to setting the selection when the dataset has none', () => {
     const extended = extendSelection(workspaceWithDataset(), {
       datasetId: 'ds_sales',

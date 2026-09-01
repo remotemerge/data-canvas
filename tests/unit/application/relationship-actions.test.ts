@@ -434,6 +434,16 @@ describe('relationship handlers called directly', () => {
 
     expect(result.ok).toBe(true);
   });
+
+  // The dataset is resolved before the engine is asked to drop a relation that may not exist.
+  test('removing a dataset the workspace does not hold is refused', async () => {
+    const result = await handleRemoveDataset(workspaceWithJoinableDatasets(), { datasetId: 'ds_missing' }, handlerDeps);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('DATASET_NOT_FOUND');
+    }
+  });
 });
 
 const leftDataset = () => ({
@@ -510,6 +520,17 @@ describe('suggestRelationships', () => {
     );
 
     expect(suggestions[0]?.reason).toContain('column named');
+  });
+
+  /*
+   * Boolean is outside the numeric, temporal, and text key classes, so it compares as its own type. Two
+   * booleans stay compatible with each other, while a boolean against a text column is not proposed.
+   */
+  test('boolean columns are compared as their own key class', () => {
+    expect(
+      withColumns([column('left_flag', 'flag', 'boolean')], [column('right_flag', 'flag', 'boolean')]).length,
+    ).toBeGreaterThan(0);
+    expect(withColumns([column('left_flag', 'flag', 'boolean')], [column('right_flag', 'flag', 'string')])).toEqual([]);
   });
 
   // A dataset still importing has no settled schema, so joining against it would be a guess.
