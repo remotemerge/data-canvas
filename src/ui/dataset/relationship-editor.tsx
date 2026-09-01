@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { suggestRelationships } from '@/application/relationships/suggest-relationships.ts';
+import { suggestionDatasetNames, suggestRelationships } from '@/application/relationships/suggest-relationships.ts';
 import { validateRelationship } from '@/application/validation/validate-relationship.ts';
 import { isNumericType, isTemporalType, isTextType } from '@/domain/logical-type.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
@@ -187,24 +187,29 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
                 Check the suggested keys before creating a relationship.
               </p>
               <ul>
-                {suggestions.map((suggestion) => (
-                  <li key={`${suggestion.leftColumnId}-${suggestion.rightColumnId}`}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLeftDatasetId(suggestion.leftDatasetId);
-                        setRightDatasetId(suggestion.rightDatasetId);
-                        setLeftColumnId(suggestion.leftColumnId);
-                        setRightColumnId(suggestion.rightColumnId);
-                        setKind(suggestion.kind);
-                      }}
-                    >
-                      {/* Imported column names render as text. */}
-                      {suggestion.leftColumnName} → {suggestion.rightColumnName}
-                    </button>
-                    <span className="relationship-editor__reason">{suggestion.reason}</span>
-                  </li>
-                ))}
+                {suggestions.map((suggestion) => {
+                  const sides = suggestionDatasetNames(workspace, suggestion);
+
+                  return (
+                    <li key={`${suggestion.leftColumnId}-${suggestion.rightColumnId}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLeftDatasetId(suggestion.leftDatasetId);
+                          setRightDatasetId(suggestion.rightDatasetId);
+                          setLeftColumnId(suggestion.leftColumnId);
+                          setRightColumnId(suggestion.rightColumnId);
+                          setKind(suggestion.kind);
+                        }}
+                      >
+                        {/* Imported dataset and column names render as text. Both sides are named so
+                            identically named imports stay distinguishable. */}
+                        {sides.left}.{suggestion.leftColumnName} → {sides.right}.{suggestion.rightColumnName}
+                      </button>
+                      <span className="relationship-editor__reason">{suggestion.reason}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
