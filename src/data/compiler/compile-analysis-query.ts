@@ -202,6 +202,8 @@ export const compileAnalysisQuery = (
   // Dimension parameters come first because their placeholders appear in SELECT.
   const dimensionParameters: unknown[] = [];
   const derivedContext = { resolve, derivedColumns };
+  // Window-function bins computed per row in a subquery, then grouped by the outer query.
+  const quantileBins: { sql: string; alias: string; parameters: unknown[] }[] = [];
 
   for (const columnId of query.dimensions) {
     const derived = derivedColumns[columnId];
@@ -234,11 +236,22 @@ export const compileAnalysisQuery = (
     const compiled = compileBinStrategy(bin.strategy, resolved.sql, bin.range);
     if (!compiled.ok) return compiled;
 
-    select.push(compiled.value.sql);
-    dimensionParameters.push(...compiled.value.parameters);
+    /*
+     * A quantile bin compiles to `NTILE(...) OVER (...)`. SQL forbids a window function in GROUP BY
+     * and forbids mixing one with an aggregate over the same level, so the bucket is computed per row
+     * in a subquery and the outer query groups by the resulting column.
+     */
+    if (bin.strategy.kind === 'quantile') {
+      const alias = `bin${quantileBins.length}`;
 
-    // Quantile bins use a window function, which cannot appear in GROUP BY.
-    if (bin.strategy.kind !== 'quantile') groupBySelectPosition();
+      quantileBins.push({ sql: compiled.value.sql, alias, parameters: compiled.value.parameters });
+      select.push(quoteIdentifier(alias));
+      groupBySelectPosition();
+    } else {
+      select.push(compiled.value.sql);
+      dimensionParameters.push(...compiled.value.parameters);
+      groupBySelectPosition();
+    }
 
     resultColumns.push({
       key: resolved.column.id,
@@ -381,9 +394,6 @@ export const compileAnalysisQuery = (
     });
   }
 
-  // Bind dimension parameters before WHERE values because SELECT is emitted first.
-  const parameters: unknown[] = [...dimensionParameters, ...whereParameters];
-
   const orderBy: string[] = [];
   for (const sort of query.orderBy ?? []) {
     if (sort.columnId !== undefined) {
@@ -402,9 +412,28 @@ export const compileAnalysisQuery = (
   const requestedLimit = query.limit ?? DEFAULT_QUERY_LIMIT;
   const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), MAX_QUERY_LIMIT);
   const offset = Math.max(Math.trunc(query.offset ?? 0), 0);
+
+  /*
+   * A quantile bin needs its window function evaluated per row before the outer query aggregates it.
+   * The subquery applies the filters so the buckets are computed over the filtered rows only, and the
+   * outer query reads the bucket by alias. Parameter order follows the emitted text: the subquery's
+   * bin and filter placeholders bind before the outer SELECT's remaining dimension placeholders.
+   */
+  const source =
+    quantileBins.length === 0
+      ? { sql: from.value.sql, parameters: [...dimensionParameters, ...whereParameters], where }
+      : {
+          sql: `(SELECT *, ${quantileBins
+            .map((bin) => `${bin.sql} AS ${quoteIdentifier(bin.alias)}`)
+            .join(', ')} FROM ${from.value.sql}${where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`})`,
+          parameters: [...quantileBins.flatMap((bin) => bin.parameters), ...whereParameters, ...dimensionParameters],
+          // Filters are applied inside the subquery, so the outer query must not repeat them.
+          where: [] as string[],
+        };
+
   const sql = [
-    `SELECT ${select.join(', ')} FROM ${from.value.sql}`,
-    where.length === 0 ? '' : `WHERE ${where.join(' AND ')}`,
+    `SELECT ${select.join(', ')} FROM ${source.sql}`,
+    source.where.length === 0 ? '' : `WHERE ${source.where.join(' AND ')}`,
     groupBy.length > 0 && (query.measures.length > 0 || query.distribution !== undefined)
       ? `GROUP BY ${groupBy.join(', ')}`
       : '',
@@ -417,7 +446,7 @@ export const compileAnalysisQuery = (
 
   return ok({
     sql,
-    parameters,
+    parameters: source.parameters,
     resultColumns,
     datasetIds: plan.value.datasetIds,
     joined: plan.value.steps.length > 0,
