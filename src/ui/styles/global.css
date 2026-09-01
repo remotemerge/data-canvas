@@ -713,8 +713,8 @@ textarea:focus-visible,
   flex: 1;
   min-height: 0;
   margin-bottom: 0;
-  /* The floor applies per track, so a chart spanning four of them stays legible as rows are added. */
-  grid-auto-rows: minmax(3.5rem, 1fr);
+  /* The minimum rows must be tall enough so multiple charts remain legible. */
+  grid-auto-rows: minmax(14rem, 1fr);
 }
 
 /* Grid rows share the region, so each item tracks the row height instead of its content height. */

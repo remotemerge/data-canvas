@@ -1,5 +1,6 @@
 import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 import { createToolDefinitions, executeTool } from '@/webmcp/registry/tool-registry.ts';
+import { setToolStatus } from '@/webmcp/registry/tool-status.ts';
 import { workspaceStore } from '@/state/workspace-store.ts';
 import { getPerformanceRecords } from '@/shared/perf/performance-marks.ts';
 import { getRecordedRequests, installNetworkRecorder } from '@/app/bootstrap/network-recorder.ts';
@@ -18,10 +19,21 @@ declare global {
   }
 }
 
+const hasReadyDataset = (): boolean =>
+  Object.values(workspaceStore.getState().workspace.datasets).some((dataset) => dataset.importStatus === 'ready');
+
 export const installTestHooks = (deps: ToolDependencies): void => {
   if (!import.meta.env.DEV) return;
   installNetworkRecorder();
   const tools = createToolDefinitions(deps);
+  const availableTools = (): string[] =>
+    tools.filter((tool) => !tool.needsDataset || hasReadyDataset()).map((tool) => tool.name);
+  const updateStatus = (): void => {
+    const names = availableTools();
+    setToolStatus({ available: names.length > 0, registeredCount: names.length });
+  };
+  updateStatus();
+  workspaceStore.subscribe(() => updateStatus());
   // eslint-disable-next-line no-underscore-dangle -- required by the browser verification API.
   window.__dataCanvas = {
     normalizedState: () => structuredClone(workspaceStore.getState().workspace),
@@ -29,7 +41,7 @@ export const installTestHooks = (deps: ToolDependencies): void => {
     history: () => structuredClone(workspaceStore.getState().history),
     networkLog: () => getRecordedRequests(),
     perf: () => getPerformanceRecords(),
-    tools: () => tools.map((tool) => tool.name),
+    tools: () => availableTools(),
     executeTool: async (name, input) => {
       const tool = tools.find((candidate) => candidate.name === name);
       if (tool === undefined) throw new Error(`Unknown Data Canvas tool: ${name}`);
