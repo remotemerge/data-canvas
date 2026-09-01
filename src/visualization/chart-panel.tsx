@@ -1,5 +1,6 @@
 import { LuTrash2 } from 'react-icons/lu';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { executeVisualizationQuery, type ChartResult } from '@/application/queries/visualization-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -15,6 +16,33 @@ import { Button } from '@/ui/components/ui/button.tsx';
 
 // ECharts is a large dependency that only chart kinds need, so it loads on first chart render.
 const EChart = lazy(() => import('@/visualization/echart-view.tsx'));
+
+class ChartErrorBoundary extends Component<
+  { children: ReactNode; onError: (error: unknown, errorInfo: ErrorInfo) => void },
+  { failed: boolean }
+> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: unknown, errorInfo: ErrorInfo): void {
+    this.props.onError(error, errorInfo);
+  }
+
+  override render(): ReactNode {
+    if (this.state.failed) {
+      return (
+        <div className="chart-panel__error" role="alert">
+          This chart could not be rendered. Remove it or change its configuration.
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // Width bucket used to choose temporal granularity.
 const PLOT_WIDTH_QUANTUM = 200;
@@ -127,9 +155,19 @@ export const ChartPanel = ({
         ) : visualization.kind === 'table' ? (
           <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />
         ) : (
-          <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
-            <EChart visualization={visualization} result={result} onError={onError} />
-          </Suspense>
+          <ChartErrorBoundary
+            key={`${visualization.id}:${workspace.revision}`}
+            onError={() => {
+              onError({
+                code: 'UNSUPPORTED_OPERATION',
+                message: 'A chart failed to render. Its workspace card remains available for recovery.',
+              });
+            }}
+          >
+            <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
+              <EChart visualization={visualization} result={result} onError={onError} />
+            </Suspense>
+          </ChartErrorBoundary>
         )}
       </div>
     </article>
