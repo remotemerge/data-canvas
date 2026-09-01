@@ -93,9 +93,25 @@ describe('weighted eviction', () => {
     expect(cache.get({ ...windowedKey, datasetRevision: 2, limit: 5 })).toBe('expensive');
     expect(cache.get({ ...windowedKey, limit: 20 })).toBeUndefined();
   });
+
+  test('non-finite costs cannot prevent deterministic eviction', () => {
+    const cache = createQueryCache<string>(1, 100);
+    cache.set({ ...windowedKey, limit: 20 }, 'invalid-cost', { size: Number.NaN, computeMs: Number.NaN });
+    cache.set({ ...windowedKey, datasetRevision: 2, limit: 5 }, 'valid-cost', { size: 1, computeMs: 5_000 });
+
+    expect(cache.get({ ...windowedKey, datasetRevision: 2, limit: 5 })).toBe('valid-cost');
+    expect(cache.get({ ...windowedKey, limit: 20 })).toBeUndefined();
+  });
 });
 
 describe('query cache', () => {
+  test('a negative capacity behaves as an empty cache', () => {
+    const cache = createQueryCache<string>(-1);
+    cache.set(key(1), 'one');
+
+    expect(cache.get(key(1))).toBeUndefined();
+  });
+
   test('keys entries by revision and refreshes LRU order', () => {
     const cache = createQueryCache<string>(2);
     cache.set(key(1), 'one');
