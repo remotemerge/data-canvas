@@ -14,7 +14,9 @@ export const referencedColumnIds = (
   const seen = new Set<EntityId>();
 
   const visit = (columnId: EntityId): void => {
-    if (seen.has(columnId)) return;
+    if (seen.has(columnId)) {
+      return;
+    }
 
     const derived = derivedColumns[columnId];
 
@@ -26,18 +28,38 @@ export const referencedColumnIds = (
 
     // Keep the derived ID because it is the ID present in the query.
     seen.add(columnId);
-    for (const inner of expressionColumnIds(derived.expression)) visit(inner);
+    for (const inner of expressionColumnIds(derived.expression)) {
+      visit(inner);
+    }
   };
 
-  for (const columnId of query.dimensions) visit(columnId);
-  for (const bin of query.binnedDimensions ?? []) visit(bin.columnId);
-  for (const measure of query.measures) if (measure.columnId !== undefined) visit(measure.columnId);
+  for (const columnId of query.dimensions) {
+    visit(columnId);
+  }
+  for (const bin of query.binnedDimensions ?? []) {
+    visit(bin.columnId);
+  }
+  for (const measure of query.measures) {
+    if (measure.columnId !== undefined) {
+      visit(measure.columnId);
+    }
+  }
   if (query.distribution !== undefined) {
     visit(query.distribution.columnId);
-    if (query.distribution.categoryColumnId !== undefined) visit(query.distribution.categoryColumnId);
+    if (query.distribution.categoryColumnId !== undefined) {
+      visit(query.distribution.categoryColumnId);
+    }
   }
-  for (const sort of query.orderBy ?? []) if (sort.columnId !== undefined) visit(sort.columnId);
-  for (const filter of query.filters) for (const columnId of filterColumnIds(filter)) visit(columnId);
+  for (const sort of query.orderBy ?? []) {
+    if (sort.columnId !== undefined) {
+      visit(sort.columnId);
+    }
+  }
+  for (const filter of query.filters) {
+    for (const columnId of filterColumnIds(filter)) {
+      visit(columnId);
+    }
+  }
 
   return [...seen];
 };
@@ -54,8 +76,12 @@ export const prunedProjection = (
   query: AnalysisQuery,
   requiredColumnIds: readonly EntityId[],
 ): EntityId[] | undefined => {
-  if (!isFullWidthProjection(query)) return undefined;
-  if (requiredColumnIds.length === 0) return undefined;
+  if (!isFullWidthProjection(query)) {
+    return undefined;
+  }
+  if (requiredColumnIds.length === 0) {
+    return undefined;
+  }
 
   return [...requiredColumnIds];
 };
