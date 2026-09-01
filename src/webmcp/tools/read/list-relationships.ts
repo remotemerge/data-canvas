@@ -23,6 +23,8 @@ export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasT
       return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
     }
 
+    const datasetName = (id: string): string => workspace.datasets[id]?.name ?? id;
+
     const relationships = Object.values(workspace.relationships).filter(
       (relationship) =>
         datasetId === undefined ||
@@ -45,10 +47,13 @@ export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasT
     return success({
       revision: workspace.revision,
       summary: `${relationships.length} relationships defined${input.includeSuggestions === true ? `, ${suggestions.length} suggested` : ''}.`,
+      // Names accompany the identifiers so identically sourced datasets stay distinguishable.
       relationships: relationships.map((relationship) => ({
         id: relationship.id,
         leftDatasetId: relationship.leftDatasetId,
+        leftDatasetName: datasetName(relationship.leftDatasetId),
         rightDatasetId: relationship.rightDatasetId,
+        rightDatasetName: datasetName(relationship.rightDatasetId),
         on: relationship.on,
         kind: relationship.kind,
         join: relationship.join,
