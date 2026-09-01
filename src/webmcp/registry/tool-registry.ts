@@ -13,6 +13,19 @@ export const createToolDefinitions = (deps: ToolDependencies): DataCanvasTool[] 
   ...createWriteTools(deps),
 ];
 
+export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise<string> => {
+  const validator = toolValidators[tool.name];
+  if (!validator(input)) {
+    return failure(domainError('INVALID_TOOL_ARGUMENTS', 'Arguments do not match this tool schema.'));
+  }
+
+  try {
+    return enforceOutputBudget(await tool.handler(input));
+  } catch {
+    return failure(domainError('UNSUPPORTED_OPERATION', 'The tool could not complete the requested operation.'));
+  }
+};
+
 export interface ToolRegistry {
   setDatasetToolsEnabled(enabled: boolean): Promise<void>;
   dispose(): void;
@@ -38,15 +51,7 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
           executingCount += 1;
           setToolStatus({ executingCount });
           try {
-            const validator = toolValidators[tool.name];
-            if (!validator(input)) {
-              return failure(domainError('INVALID_TOOL_ARGUMENTS', 'Arguments do not match this tool schema.'));
-            }
-            return enforceOutputBudget(await tool.handler(input));
-          } catch {
-            return failure(
-              domainError('UNSUPPORTED_OPERATION', 'The tool could not complete the requested operation.'),
-            );
+            return await executeTool(tool, input);
           } finally {
             executingCount = Math.max(0, executingCount - 1);
             setToolStatus({ executingCount });

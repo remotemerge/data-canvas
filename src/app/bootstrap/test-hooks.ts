@@ -1,5 +1,5 @@
 import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
-import { createToolDefinitions } from '@/webmcp/registry/tool-registry.ts';
+import { createToolDefinitions, executeTool } from '@/webmcp/registry/tool-registry.ts';
 import { workspaceStore } from '@/state/workspace-store.ts';
 import { getPerformanceRecords } from '@/shared/perf/performance-marks.ts';
 import { getRecordedRequests, installNetworkRecorder } from '@/app/bootstrap/network-recorder.ts';
@@ -33,7 +33,7 @@ export const installTestHooks = (deps: ToolDependencies): void => {
     executeTool: async (name, input) => {
       const tool = tools.find((candidate) => candidate.name === name);
       if (tool === undefined) throw new Error(`Unknown Data Canvas tool: ${name}`);
-      return tool.handler(input);
+      return executeTool(tool, input);
     },
   };
 };
