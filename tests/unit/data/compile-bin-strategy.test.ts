@@ -45,6 +45,16 @@ describe('bin strategy compilation', () => {
     }
   });
 
+  // Both range-dependent strategies need the column's bounds; neither may guess them.
+  test('equalWidthOf without a range is refused', () => {
+    const result = compileBinStrategy({ kind: 'equalWidthOf', width: 10 }, REFERENCE);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
   test('equalWidthOf rejects a width that would exceed the bucket cap over this range', () => {
     const withinCap = compileBinStrategy({ kind: 'equalWidthOf', width: 10 }, REFERENCE, { min: 0, max: 100 });
 

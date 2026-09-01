@@ -181,6 +181,31 @@ describe('derived expression compilation', () => {
     ).toBe('UNSUPPORTED_OPERATION');
   });
 
+  /*
+   * Each operand compiles independently, so a failure on either side must abort before the operator is
+   * emitted. Compiling only the left would otherwise produce a fragment with a missing right-hand side.
+   */
+  test('an unknown column on either side of an arithmetic operator fails', () => {
+    const missing: DerivedExpression = { kind: 'column', columnId: 'col_missing' };
+
+    expect(failureCode({ kind: 'arithmetic', op: 'add', left: missing, right: REVENUE })).toBe('COLUMN_NOT_FOUND');
+    expect(failureCode({ kind: 'arithmetic', op: 'add', left: REVENUE, right: missing })).toBe('COLUMN_NOT_FOUND');
+  });
+
+  // A case arm compiles three sub-expressions, and any one of them can refuse the whole statement.
+  test('an unknown column in a case arm left, right, or result fails', () => {
+    const missing: DerivedExpression = { kind: 'column', columnId: 'col_missing' };
+    const literal: DerivedExpression = { kind: 'literal', value: 1 };
+
+    for (const arm of [
+      { left: missing, operator: 'gt', right: literal, result: literal },
+      { left: REVENUE, operator: 'gt', right: missing, result: literal },
+      { left: REVENUE, operator: 'gt', right: literal, result: missing },
+    ] as const) {
+      expect(failureCode({ kind: 'case', when: [arm], otherwise: literal })).toBe('COLUMN_NOT_FOUND');
+    }
+  });
+
   test('an unknown column in the else branch fails the whole case', () => {
     expect(
       failureCode({

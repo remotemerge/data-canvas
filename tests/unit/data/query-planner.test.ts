@@ -118,6 +118,25 @@ describe('projection pruning', () => {
     ).toEqual(['col_order_revenue' as EntityId, 'col_customer_region' as EntityId]);
   });
 
+  /*
+   * A sort column must be readable by the query even when no other clause names it, or the compiled
+   * statement would order by a column its projection never reached.
+   */
+  test('collects a sort column and ignores a sort naming only a measure alias', () => {
+    expect(
+      referencedColumnIds({
+        datasetId: 'ds_orders' as EntityId,
+        dimensions: [],
+        measures: [],
+        filters: [],
+        orderBy: [
+          { columnId: 'col_order_placed' as EntityId, direction: 'asc' },
+          { measureAlias: 'total', direction: 'desc' },
+        ],
+      }),
+    ).toEqual(['col_order_placed' as EntityId]);
+  });
+
   // The derived ID stays because it is what the query names; its inputs are added so the join
   // resolver can reach the physical columns behind it.
   test('follows a derived reference to the physical columns it reads', () => {
