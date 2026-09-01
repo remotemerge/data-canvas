@@ -176,7 +176,7 @@ export const compileDerivedExpression = (
         return err(domainError('UNSUPPORTED_OPERATION', 'That date part is not supported.', { part: expression.part }));
       }
 
-      return ok({ sql: `date_part(?, ${resolved.sql})`, parameters: [part] });
+      return ok({ sql: `date_part('${part}', ${resolved.sql})`, parameters: [] });
     }
 
     case 'bin': {

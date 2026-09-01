@@ -54,14 +54,13 @@ describe('derived expression compilation', () => {
     }
   });
 
-  test('a date part binds the field name rather than interpolating it', () => {
+  test('a date part maps the field name to DuckDB date_part', () => {
     const result = compile({ kind: 'datePart', part: 'dayOfWeek', columnId: 'col_date' });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.sql).toBe('date_part(?, "order_date")');
-      // The domain spelling maps to DuckDB's, so the engine vocabulary stays out of the domain.
-      expect(result.value.parameters).toEqual(['dow']);
+      expect(result.value.sql).toBe('date_part(\'dow\', "order_date")');
+      expect(result.value.parameters).toEqual([]);
     }
   });
 
