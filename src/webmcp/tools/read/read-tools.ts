@@ -57,13 +57,23 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         })),
         metrics: Object.values(workspace.metrics),
         selections: Object.values(workspace.selections),
-        filters: Object.values(workspace.filters).map(({ id, datasetId, columnId, operator, enabled }) => ({
-          id,
-          datasetId,
-          columnId,
-          operator,
-          enabled,
-        })),
+        filters: Object.values(workspace.filters).map(
+          ({ id, datasetId, columnId, operator, value, enabled, origin }) => ({
+            id,
+            datasetId,
+            columnId,
+            operator,
+            ...(value === undefined
+              ? {}
+              : {
+                  value: Array.isArray(value)
+                    ? value.map((item) => boundedCell(item as Parameters<typeof boundedCell>[0]))
+                    : boundedCell(value as Parameters<typeof boundedCell>[0]),
+                }),
+            enabled,
+            origin,
+          }),
+        ),
       });
     },
   },
@@ -168,9 +178,22 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const workspace = deps.getWorkspace();
       const dataset = workspace.datasets[datasetId];
       if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
-      const dimensions = (input.dimensions as string[] | undefined) ?? [];
+      const dimensionInputs =
+        (input.dimensions as
+          | (string | { columnId: string; timeGrain: 'day' | 'week' | 'month' | 'quarter' | 'year' })[]
+          | undefined) ?? [];
+      const dimensions = dimensionInputs.flatMap((dimension) => (typeof dimension === 'string' ? [dimension] : []));
+      const binnedDimensions = dimensionInputs.flatMap((dimension) =>
+        typeof dimension === 'string'
+          ? []
+          : [{ columnId: dimension.columnId, strategy: { kind: 'temporal' as const, unit: dimension.timeGrain } }],
+      );
       const measures = input.measures as MeasureSpec[];
-      const columnIds = [...dimensions, ...measures.flatMap((measure) => (measure.columnId ? [measure.columnId] : []))];
+      const columnIds = [
+        ...dimensions,
+        ...binnedDimensions.map((dimension) => dimension.columnId),
+        ...measures.flatMap((measure) => (measure.columnId ? [measure.columnId] : [])),
+      ];
 
       // Let the compiler report unreachable columns with NO_JOIN_PATH.
       const known = new Set(
@@ -184,6 +207,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         datasetId,
         ...(relationshipIds === undefined ? {} : { relationshipIds }),
         dimensions,
+        ...(binnedDimensions.length === 0 ? {} : { binnedDimensions }),
         measures,
         filters: analysisFiltersFor(deps, dataset.id),
         limit: Math.min((input.limit as number | undefined) ?? 50, 200),

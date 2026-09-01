@@ -13,7 +13,20 @@ export const analyzeDataSchema = {
     },
     dimensions: {
       type: 'array',
-      items: { type: 'string', minLength: 1, maxLength: 100 },
+      items: {
+        anyOf: [
+          { type: 'string', minLength: 1, maxLength: 100 },
+          {
+            type: 'object',
+            properties: {
+              columnId: { type: 'string', minLength: 1, maxLength: 100 },
+              timeGrain: { type: 'string', enum: ['day', 'week', 'month', 'quarter', 'year'] },
+            },
+            required: ['columnId', 'timeGrain'],
+            additionalProperties: false,
+          },
+        ],
+      },
       maxItems: 3,
       uniqueItems: true,
     },
