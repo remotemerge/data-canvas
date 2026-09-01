@@ -29,6 +29,17 @@ export const resolveAnnotationAnchor = (
     );
     return exists ? { annotation, coordinates: [anchor.x, anchor.y] } : null;
   }
+  if (anchor.kind === 'category') {
+    // Pins to a category value along the x-axis — the natural fit for bar charts.
+    const dimensionIndex =
+      visualization.query.dimensions.length > 0
+        ? 0
+        : result.columns.findIndex((column) => column.name !== anchor.value && column.key !== 'm0');
+    if (dimensionIndex < 0) return null;
+    const found = result.rows.some((row) => row[dimensionIndex] === anchor.value);
+    return found ? { annotation, coordinates: [anchor.value] } : null;
+  }
+  // Fall through for 'range' kind.
   const dimensionId = visualization.binding.x;
   const index = visualization.query.dimensions.indexOf(dimensionId ?? '');
   if (index < 0) return null;

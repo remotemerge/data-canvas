@@ -4,7 +4,8 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 export type AnnotationAnchor =
   | { kind: 'data'; dimension: EntityId; value: unknown }
   | { kind: 'point'; x: unknown; y: unknown }
-  | { kind: 'range'; from: unknown; to: unknown };
+  | { kind: 'range'; from: unknown; to: unknown }
+  | { kind: 'category'; value: unknown };
 
 export interface Annotation {
   id: EntityId;
