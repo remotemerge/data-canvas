@@ -89,8 +89,13 @@ export const WorkspacePage = (): React.JSX.Element => {
         <div className="workspace__identity">
           {narrow ? (
             <Sheet>
-              <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open datasets" />}>
+              <SheetTrigger
+                render={
+                  <Button variant="ghost" size="icon" className="workspace__panel-trigger" aria-label="Open datasets" />
+                }
+              >
                 <LuDatabase size={16} aria-hidden="true" />
+                <span className="workspace__panel-trigger__label">Data</span>
               </SheetTrigger>
               <SheetContent side="left">
                 <SheetTitle>Dataset explorer</SheetTitle>
@@ -114,8 +119,18 @@ export const WorkspacePage = (): React.JSX.Element => {
           <SettingsSheet onError={setActionError} showHistoryControls={compact} />
           {narrow ? (
             <Sheet>
-              <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open inspector" />}>
+              <SheetTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="workspace__panel-trigger"
+                    aria-label="Open inspector"
+                  />
+                }
+              >
                 <LuPanelRight size={16} aria-hidden="true" />
+                <span className="workspace__panel-trigger__label">Inspector</span>
               </SheetTrigger>
               <SheetContent side="right">
                 <SheetTitle>Inspector</SheetTitle>
