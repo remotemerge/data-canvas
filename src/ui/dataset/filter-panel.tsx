@@ -30,6 +30,12 @@ export const FilterPanel = ({
         <ul className="filter-list">
           {filters.map((filter) => {
             const column = dataset.columns.find((candidate) => candidate.id === filter.columnId);
+            // Several filters can be listed at once, so each Remove needs its own accessible name.
+            const description = `${column?.name ?? 'Unknown column'} ${filter.operator.replaceAll('_', ' ')}${
+              filter.value === undefined
+                ? ''
+                : ` ${Array.isArray(filter.value) ? filter.value.join(', ') : String(filter.value)}`
+            }`;
             return (
               <li key={filter.id}>
                 <label>
@@ -46,14 +52,12 @@ export const FilterPanel = ({
                       }).then((result) => onError(result.ok ? null : result.error))
                     }
                   />
-                  {column?.name ?? 'Unknown column'} {filter.operator.replaceAll('_', ' ')}
-                  {filter.value === undefined
-                    ? ''
-                    : ` ${Array.isArray(filter.value) ? filter.value.join(', ') : String(filter.value)}`}
+                  {description}
                   <Provenance entityId={filter.id} createdBy={filter.createdBy} />
                 </label>
                 <button
                   type="button"
+                  aria-label={`Remove filter ${description}`}
                   onClick={() =>
                     void removeFilter({ filterId: filter.id }).then((result) =>
                       onError(result.ok ? null : result.error),
