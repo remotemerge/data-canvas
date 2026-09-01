@@ -317,6 +317,27 @@ describe('chart kind series builders', () => {
   test('an empty heatmap uses zero bounds rather than an infinite range', () => {
     expect(buildHeatmapSeries([])).toMatchObject({ xCategories: [], yCategories: [], min: 0, max: 0 });
   });
+
+  /*
+   * A heatmap is a grid, so each axis value must map to one index however many cells repeat it.
+   * Appending a category per row instead would give the same label several columns and misplace cells.
+   */
+  test('a repeated axis value reuses its existing category index', () => {
+    const result = buildHeatmapSeries([
+      ['West', 'Jan', 1],
+      ['West', 'Feb', 2],
+      ['East', 'Jan', 3],
+    ]);
+
+    expect(result.xCategories).toEqual(['West', 'East']);
+    expect(result.yCategories).toEqual(['Jan', 'Feb']);
+    // Cells carry `[x, y, value]` indexes into those two category lists.
+    expect((result.series[0] as { data: number[][] }).data).toEqual([
+      [0, 0, 1],
+      [0, 1, 2],
+      [1, 0, 3],
+    ]);
+  });
 });
 
 const boxplotResult: ChartResult = {
