@@ -1,5 +1,26 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { createEmptyWorkspace } from '@/domain/workspace/workspace.ts';
+import {
+  selectActiveDataset,
+  selectActiveDatasetId,
+  selectDatasets,
+  selectFilters,
+  selectFiltersForDataset,
+  selectHasVisualizations,
+  selectHistory,
+  selectLayoutColumns,
+  selectRevision,
+  selectTableSortForDataset,
+  selectVisualizations,
+  selectWorkspaceName,
+} from '@/state/selectors/workspace-selectors.ts';
+import type { WorkspaceState } from '@/state/workspace-store.ts';
+import {
+  createHarness,
+  visualization as makeVisualization,
+  workspaceWithDataset,
+} from '../application/action-fixtures.ts';
 
 // Guards against selectors that allocate new references on each read.
 
@@ -23,8 +44,11 @@ const selectorBodies = (source: string): string[] => {
     while (index < source.length && depth > 0) {
       const character = source[index];
 
-      if (character === '(') depth += 1;
-      else if (character === ')') depth -= 1;
+      if (character === '(') {
+        depth += 1;
+      } else if (character === ')') {
+        depth -= 1;
+      }
 
       index += 1;
     }
@@ -72,5 +96,100 @@ describe('workspace selector stability', () => {
     const source = 'const a = useWorkspace((state) => state.workspace);\nconst b = list.filter((x) => x);';
 
     expect(selectorBodies(source)).toEqual([' state.workspace']);
+  });
+});
+
+const state = (): WorkspaceState => createHarness(workspaceWithDataset()).store.getState();
+
+describe('workspace selectors', () => {
+  test('reads the workspace name', () => {
+    const current = state();
+
+    expect(selectWorkspaceName(current)).toBe(current.workspace.name);
+  });
+
+  test('reads the workspace revision', () => {
+    expect(selectRevision(state())).toBe(0);
+  });
+
+  /*
+   * Returning the stored container rather than a copy is what keeps `useWorkspace` from rerendering
+   * on every store read, so identity is the behavior under test.
+   */
+  test('returns the stored collections by reference', () => {
+    const current = state();
+
+    expect(selectDatasets(current)).toBe(current.workspace.datasets);
+    expect(selectVisualizations(current)).toBe(current.workspace.visualizations);
+    expect(selectFilters(current)).toBe(current.workspace.filters);
+    expect(selectHistory(current)).toBe(current.history);
+  });
+
+  test('reads the layout column count', () => {
+    const current = state();
+
+    expect(selectLayoutColumns(current)).toBe(current.workspace.layout.columns);
+  });
+
+  test('reports no visualizations for an empty canvas', () => {
+    expect(selectHasVisualizations(state())).toBe(false);
+  });
+
+  test('reports visualizations once the canvas holds a chart', () => {
+    const workspace = workspaceWithDataset();
+    const chart = makeVisualization('viz_1', 'ds_sales');
+    const current = createHarness({ ...workspace, visualizations: { [chart.id]: chart } }).store.getState();
+
+    expect(selectHasVisualizations(current)).toBe(true);
+  });
+
+  test('reports no active dataset before one is chosen', () => {
+    expect(selectActiveDatasetId(state())).toBeUndefined();
+    expect(selectActiveDataset(state())).toBeUndefined();
+  });
+
+  test('resolves the active dataset from its id', () => {
+    const current = state();
+    const active = { ...current, workspace: { ...current.workspace, activeDatasetId: 'ds_sales' } };
+
+    expect(selectActiveDatasetId(active)).toBe('ds_sales');
+    expect(selectActiveDataset(active)?.id).toBe('ds_sales');
+  });
+
+  test('an empty workspace has no active dataset', () => {
+    expect(selectActiveDataset(createHarness(createEmptyWorkspace()).store.getState())).toBeUndefined();
+  });
+
+  test('a dataset with no filters yields an empty list', () => {
+    expect(selectFiltersForDataset(state(), 'ds_sales')).toEqual([]);
+  });
+
+  test('a dataset with a filter yields that filter', () => {
+    const workspace = workspaceWithDataset();
+    const current = createHarness({
+      ...workspace,
+      filters: {
+        filter_region: {
+          id: 'filter_region',
+          datasetId: 'ds_sales',
+          columnId: 'col_region',
+          operator: 'eq',
+          value: 'West',
+          enabled: true,
+          origin: 'human',
+          createdBy: 'human',
+        },
+      },
+    }).store.getState();
+
+    expect(selectFiltersForDataset(current, 'ds_sales').map((filter) => filter.id)).toEqual(['filter_region']);
+  });
+
+  test('a dataset with no stored sort yields an empty list', () => {
+    expect(selectTableSortForDataset(state(), 'ds_sales')).toEqual([]);
+  });
+
+  test('an unknown dataset yields an empty sort rather than undefined', () => {
+    expect(selectTableSortForDataset(state(), 'missing')).toEqual([]);
   });
 });
