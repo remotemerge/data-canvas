@@ -10,6 +10,12 @@ export const RELATIONSHIP_KINDS: readonly RelationshipKind[] = ['one_to_one', 'o
 
 export const JOIN_KINDS: readonly JoinKind[] = ['inner', 'left'] as const;
 
+// Join names carrying their own article, so summaries read correctly for either kind.
+export const JOIN_KIND_PHRASE: Readonly<Record<JoinKind, string>> = {
+  inner: 'an inner join',
+  left: 'a left join',
+};
+
 // Maximum columns in a composite join key.
 export const MAX_RELATIONSHIP_KEY_COLUMNS = 4;
 

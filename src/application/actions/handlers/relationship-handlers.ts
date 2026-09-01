@@ -12,7 +12,7 @@ import {
   validateRelationship,
 } from '@/application/validation/validate-relationship.ts';
 import type { KeyQualityMeasurement } from '@/application/validation/validate-relationship.ts';
-import { relatedDatasetId } from '@/domain/relationship/relationship.ts';
+import { JOIN_KIND_PHRASE, relatedDatasetId } from '@/domain/relationship/relationship.ts';
 import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
@@ -62,7 +62,7 @@ export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = 
       relationships: { ...workspace.relationships, [relationship.id]: relationship },
     },
     changedEntityIds: [relationship.id],
-    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} key column${keys.length === 1 ? '' : 's'} using a ${relationship.join} join.${warning === undefined ? '' : ` ${warning}`}`,
+    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} key column${keys.length === 1 ? '' : 's'} using ${JOIN_KIND_PHRASE[relationship.join]}.${warning === undefined ? '' : ` ${warning}`}`,
   });
 };
 

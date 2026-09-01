@@ -41,6 +41,31 @@ describe('relationship.create', () => {
     expect(result.value.summary).toContain('customers');
   });
 
+  // The summary is user-facing copy, so each join kind needs the article that reads correctly.
+  test('names each join kind with the correct article', async () => {
+    const cases = [
+      { join: 'inner', phrase: 'using an inner join' },
+      { join: 'left', phrase: 'using a left join' },
+    ] as const;
+
+    const summaries = await Promise.all(
+      cases.map(async ({ join }) => {
+        const harness = harnessWithJoinableDatasets();
+        const result = await harness.dispatcher.execute(
+          { type: 'relationship.create', payload: { ...ORDERS_TO_CUSTOMERS, join } },
+          { actor: 'human' },
+        );
+
+        return result.ok ? result.value.summary : null;
+      }),
+    );
+
+    for (const [index, { phrase }] of cases.entries()) {
+      expect(summaries[index]).toContain(phrase);
+      expect(summaries[index]).not.toContain('a inner join');
+    }
+  });
+
   test('records the actor that created it', async () => {
     const harness = harnessWithJoinableDatasets();
     const result = await harness.dispatcher.execute(
