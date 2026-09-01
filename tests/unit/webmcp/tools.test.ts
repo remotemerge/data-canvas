@@ -1,34 +1,83 @@
 import { describe, expect, test } from 'bun:test';
 import type { ModelContext } from '@mcp-b/webmcp-types';
-import { createUndoRedo } from '@/application/history/undo-redo.ts';
+import type { ActionContext, ApplicationAction } from '@/application/actions/action-types.ts';
 import {
-  createHarness,
-  stubColumnStatistics,
-  stubDataEngine,
+  visualization as makeVisualization,
   workspaceWithDataset,
+  workspaceWithJoinableDatasets,
 } from '../application/action-fixtures.ts';
+import type { Relationship } from '@/domain/relationship/relationship.ts';
+import type { Workspace } from '@/domain/workspace/workspace.ts';
+import { domainError } from '@/shared/errors/domain-error.ts';
+import { err, ok } from '@/shared/result/result.ts';
 import { createToolDefinitions, createToolRegistry, executeTool } from '@/webmcp/registry/tool-registry.ts';
-import type { ToolDependencies } from '@/webmcp/registry/tool-types.ts';
+import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-types.ts';
 import { TOOL_CONTRACT_VERSION } from '@/webmcp/schemas/compile-schemas.ts';
+import { createWriteTools } from '@/webmcp/tools/write/write-tools.ts';
+import { webmcpFixture } from './webmcp-fixtures.ts';
 
-const setup = () => {
-  const engine = stubDataEngine();
-  const harness = createHarness(workspaceWithDataset(), engine);
-  const deps: ToolDependencies = {
-    dispatcher: harness.dispatcher,
-    history: createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store }),
-    getWorkspace: harness.workspace,
-    fetchTableWindow: (request) => engine.fetchTableWindow(request),
-    executeAnalysis: (query) => engine.executeAnalysis(query),
-    fetchColumnStatistics: stubColumnStatistics(engine, harness.workspace),
+const setup = () => webmcpFixture();
+
+// Adds a chart bound to the sales dataset so update and remove tools have a target.
+const withVisualization = (workspace: Workspace, id = 'viz_1'): Workspace => {
+  const chart = makeVisualization(id, 'ds_sales');
+
+  return {
+    ...workspace,
+    visualizations: { ...workspace.visualizations, [chart.id]: chart },
+    layout: { ...workspace.layout, items: [{ visualizationId: chart.id, x: 0, y: 0, width: 6, height: 4 }] },
   };
-  const tools = createToolDefinitions(deps);
-  const tool = (name: string) => {
+};
+
+const analysisResult = (rows: readonly (string | number | boolean | null)[][] = [], warning?: string) => ({
+  rows,
+  columns: [
+    { key: 'col_region', name: 'Region', logicalType: 'category' as const },
+    { key: 'm0', name: 'sum', logicalType: 'number' as const },
+  ],
+  ...(warning === undefined ? {} : { warning }),
+});
+
+/*
+ * Write tools are exercised against a recording dispatcher so the assertions describe the action a
+ * tool builds, independent of whether the domain would accept it.
+ */
+const recordingWriteTools = (
+  deps: ToolDependencies,
+): {
+  actions: ApplicationAction[];
+  invoke: (name: string, input: unknown) => Promise<void>;
+  last: () => ApplicationAction;
+} => {
+  const actions: ApplicationAction[] = [];
+  const dispatcher: ToolDependencies['dispatcher'] = {
+    execute: async (action: ApplicationAction, _context: ActionContext) => {
+      actions.push(action);
+      return ok({ actionId: 'action_1', revision: 0, changedEntityIds: ['entity_1'], summary: 'accepted' });
+    },
+  };
+  const tools = createWriteTools({ ...deps, dispatcher });
+  const tool = (name: string): DataCanvasTool => {
     const found = tools.find((candidate) => candidate.name === name);
-    if (!found) throw new Error(`Missing tool ${name}`);
+    if (found === undefined) {
+      throw new Error(`Missing write tool '${name}'.`);
+    }
     return found;
   };
-  return { harness, deps, tool };
+
+  return {
+    actions,
+    invoke: async (name, input) => {
+      await tool(name).handler(input);
+    },
+    last: () => {
+      const action = actions.at(-1);
+      if (action === undefined) {
+        throw new Error('Expected a dispatched action.');
+      }
+      return action;
+    },
+  };
 };
 
 describe('WebMCP tool surface exclusions', () => {
@@ -127,6 +176,56 @@ describe('WebMCP semantic tool behavior', () => {
     };
     expect(workspace.filters).toHaveLength(1);
     expect(workspace.filters[0]).toMatchObject({ value: ['Europe', 'Asia'], origin: 'agent' });
+  });
+
+  // A populated workspace exercises the mapping of every collection, not only the empty-list path.
+  test('get_workspace lists the datasets, relationships, and visualizations the workspace holds', async () => {
+    const base = workspaceWithJoinableDatasets();
+    const chart = makeVisualization('viz_orders', 'ds_orders');
+    const relation: Relationship = {
+      id: 'rel_orders_customers',
+      leftDatasetId: 'ds_orders',
+      rightDatasetId: 'ds_customers',
+      on: [{ leftColumnId: 'col_order_customer', rightColumnId: 'col_customer_id' }],
+      kind: 'many_to_one',
+      join: 'inner',
+      createdBy: 'human',
+    };
+    const { tool } = webmcpFixture({
+      ...base,
+      visualizations: { [chart.id]: chart },
+      relationships: { [relation.id]: relation },
+      metrics: {
+        metric_orders: {
+          id: 'metric_orders',
+          datasetId: 'ds_orders',
+          name: 'Revenue',
+          aggregate: 'sum',
+          columnId: 'col_order_revenue',
+          filters: [],
+          createdBy: 'human',
+        },
+      },
+      selections: {
+        selection_orders: {
+          id: 'selection_orders',
+          datasetId: 'ds_orders',
+          mode: 'keys',
+          keys: ['order-1'],
+          origin: 'table',
+        },
+      },
+    });
+
+    const workspace = JSON.parse(await tool('get_workspace').handler({})) as {
+      datasets: { id: string }[];
+      relationships: { id: string }[];
+      visualizations: { id: string }[];
+    };
+
+    expect(workspace.datasets.map((dataset) => dataset.id)).toEqual(['ds_orders', 'ds_customers', 'ds_products']);
+    expect(workspace.relationships.map((item) => item.id)).toEqual(['rel_orders_customers']);
+    expect(workspace.visualizations.map((item) => item.id)).toEqual(['viz_orders']);
   });
 
   test('analyze_data converts a temporal dimension into the domain bin strategy', async () => {
@@ -228,7 +327,9 @@ describe('WebMCP semantic tool behavior', () => {
     await registry.setReadyDatasetCount(1);
     const before = structuredClone(harness.workspace());
     const execute = executions.get('apply_filter');
-    if (!execute) throw new Error('apply_filter was not registered');
+    if (!execute) {
+      throw new Error('apply_filter was not registered');
+    }
     expect(
       JSON.parse(
         String(await execute({ datasetId: 'ds_sales', columnId: 'col_region', operator: 'eq', unknown: true })),
@@ -273,5 +374,520 @@ describe('WebMCP semantic tool behavior', () => {
     const { tool } = setup();
     const workspace = JSON.parse(await tool('get_workspace').handler({})) as { toolContractVersion: number };
     expect(workspace.toolContractVersion).toBe(TOOL_CONTRACT_VERSION);
+  });
+
+  test('the contract version is a number an agent can compare', () => {
+    expect(TOOL_CONTRACT_VERSION).toBeNumber();
+  });
+});
+
+const RELATED_ORDERS: Relationship = {
+  id: 'rel_orders_customers',
+  leftDatasetId: 'ds_orders',
+  rightDatasetId: 'ds_customers',
+  on: [{ leftColumnId: 'col_order_customer', rightColumnId: 'col_customer_id' }],
+  kind: 'many_to_one',
+  join: 'inner',
+  createdBy: 'human',
+};
+
+// A relationship whose right side was removed, which the listing must still describe.
+const ORPHAN_RELATIONSHIP: Relationship = {
+  id: 'rel_orphan',
+  leftDatasetId: 'ds_orders',
+  rightDatasetId: 'ds_missing',
+  on: [{ leftColumnId: 'col_order_customer', rightColumnId: 'col_customer_id' }],
+  kind: 'many_to_one',
+  join: 'left',
+  createdBy: 'human',
+};
+
+const ENABLED_FILTER = {
+  id: 'filter_enabled',
+  datasetId: 'ds_orders',
+  columnId: 'col_order_revenue',
+  operator: 'gt' as const,
+  value: 10,
+  enabled: true,
+  origin: 'human' as const,
+  createdBy: 'human' as const,
+};
+
+const DISABLED_FILTER = { ...ENABLED_FILTER, id: 'filter_disabled', enabled: false };
+
+const relatedSetup = () => {
+  const workspace: Workspace = {
+    ...workspaceWithJoinableDatasets(),
+    relationships: { [RELATED_ORDERS.id]: RELATED_ORDERS, [ORPHAN_RELATIONSHIP.id]: ORPHAN_RELATIONSHIP },
+    filters: { [ENABLED_FILTER.id]: ENABLED_FILTER, [DISABLED_FILTER.id]: DISABLED_FILTER },
+  };
+  const fixture = webmcpFixture(workspace);
+  const parsed = async (name: string, input: unknown): Promise<Record<string, unknown>> =>
+    JSON.parse(await executeTool(fixture.tool(name), input)) as Record<string, unknown>;
+
+  return { ...fixture, parsed };
+};
+
+describe('get_column_statistics', () => {
+  const withProfile = () => {
+    const fixture = relatedSetup();
+    fixture.deps.fetchColumnStatistics = async () =>
+      ok({
+        columnId: 'col_order_revenue',
+        name: 'Revenue',
+        logicalType: 'number',
+        rowCount: 10,
+        nullCount: 1,
+        distinctCount: 3,
+        distinctCountCapped: true,
+        min: 1,
+        max: 9,
+        mean: 4,
+        median: 4,
+        stddev: 2,
+        topValues: [{ value: '<unsafe>', count: 2 }],
+      });
+    return fixture;
+  };
+
+  test('returns the numeric profile the engine reported', async () => {
+    const { parsed } = withProfile();
+
+    expect(
+      await parsed('get_column_statistics', {
+        datasetId: 'ds_orders',
+        columnId: 'col_order_revenue',
+        topValueLimit: 3,
+      }),
+    ).toMatchObject({ ok: true, distinctCountCapped: true, min: 1, max: 9, mean: 4, median: 4, stddev: 2 });
+  });
+
+  // Top values come from imported data, so they travel as plain text rather than as markup.
+  test('carries dataset-derived top values through verbatim', async () => {
+    const { parsed } = withProfile();
+    const stats = await parsed('get_column_statistics', {
+      datasetId: 'ds_orders',
+      columnId: 'col_order_revenue',
+      topValueLimit: 3,
+    });
+
+    expect(stats['topValues']).toEqual([{ value: '<unsafe>', count: 2 }]);
+  });
+
+  test('refuses an unknown dataset', async () => {
+    const { parsed } = relatedSetup();
+
+    expect((await parsed('get_column_statistics', { datasetId: 'missing', columnId: 'col_order_revenue' }))['ok']).toBe(
+      false,
+    );
+  });
+
+  test('refuses a column the dataset does not have', async () => {
+    const { parsed } = relatedSetup();
+
+    expect((await parsed('get_column_statistics', { datasetId: 'ds_orders', columnId: 'missing' }))['ok']).toBe(false);
+  });
+
+  test('reports failure when the engine cannot profile the column', async () => {
+    const fixture = relatedSetup();
+    fixture.deps.fetchColumnStatistics = async () => err(domainError('ENGINE_UNAVAILABLE', 'offline'));
+
+    expect(
+      (await fixture.parsed('get_column_statistics', { datasetId: 'ds_orders', columnId: 'col_order_revenue' }))['ok'],
+    ).toBe(false);
+  });
+});
+
+describe('list_relationships', () => {
+  test('summarizes every relationship in the workspace', async () => {
+    const { parsed } = relatedSetup();
+
+    expect((await parsed('list_relationships', {}))['summary']).toContain('2 relationships');
+  });
+
+  test('lists both relationships touching the requested dataset', async () => {
+    const { parsed } = relatedSetup();
+
+    expect((await parsed('list_relationships', { datasetId: 'ds_orders' }))['relationships']).toHaveLength(2);
+  });
+
+  test('includes join suggestions when the agent asks for them', async () => {
+    const { parsed } = relatedSetup();
+
+    expect(await parsed('list_relationships', { includeSuggestions: true })).toHaveProperty('suggestions');
+  });
+
+  test('refuses an unknown dataset filter', async () => {
+    const { parsed } = relatedSetup();
+
+    expect((await parsed('list_relationships', { datasetId: 'missing' }))['ok']).toBe(false);
+  });
+});
+
+describe('get_dataset_schema', () => {
+  test('returns only the requested column page', async () => {
+    const { parsed } = relatedSetup();
+    const schema = await parsed('get_dataset_schema', { datasetId: 'ds_orders', offset: 0, limit: 1 });
+
+    expect(schema['columnsReturned']).toBe(1);
+  });
+
+  test('lists the related datasets when asked, so an agent finds joinable columns', async () => {
+    const { parsed } = relatedSetup();
+    const schema = await parsed('get_dataset_schema', {
+      datasetId: 'ds_orders',
+      offset: 0,
+      limit: 1,
+      includeRelated: true,
+    });
+
+    expect(schema['related']).toHaveLength(1);
+  });
+});
+
+describe('preview_data', () => {
+  const withRevenueWindow = () => {
+    const fixture = relatedSetup();
+    fixture.deps.fetchTableWindow = async () =>
+      ok({
+        rows: [[12]],
+        columnIds: ['col_order_revenue'],
+        columns: [],
+        totalRowCount: 1,
+        offset: 0,
+        stale: false,
+      });
+    return fixture;
+  };
+
+  test('returns the projection the agent requested', async () => {
+    const { parsed } = withRevenueWindow();
+    const preview = await parsed('preview_data', {
+      datasetId: 'ds_orders',
+      columnIds: ['col_order_revenue'],
+      limit: 2,
+    });
+
+    expect(preview['columnIds']).toEqual(['col_order_revenue']);
+  });
+
+  test('returns every engine column when no projection is requested', async () => {
+    const fixture = webmcpFixture();
+    fixture.deps.fetchTableWindow = async () =>
+      ok({
+        rows: [[12]],
+        columnIds: ['col_revenue'],
+        columns: [],
+        totalRowCount: 1,
+        offset: 0,
+        stale: false,
+      });
+
+    const output = JSON.parse(await fixture.tool('preview_data').handler({ datasetId: 'ds_sales' })) as Record<
+      string,
+      unknown
+    >;
+
+    expect(output['columnIds']).toEqual(['col_revenue']);
+    expect(output['rows']).toEqual([[12]]);
+  });
+});
+
+describe('analyze_data', () => {
+  test('pushes the enabled workspace filters into the engine query', async () => {
+    const fixture = relatedSetup();
+    let observed: readonly unknown[] | undefined;
+    fixture.deps.executeAnalysis = async (query) => {
+      observed = query.filters;
+      return ok(analysisResult([['West', 12]]));
+    };
+
+    await fixture.parsed('analyze_data', {
+      datasetId: 'ds_orders',
+      dimensions: ['col_order_customer'],
+      measures: [{ columnId: 'col_order_revenue', aggregate: 'sum' }],
+      relationshipIds: [RELATED_ORDERS.id],
+      limit: 200,
+    });
+
+    // The disabled filter is left out, so a paused filter does not silently narrow an analysis.
+    expect(observed).toEqual([{ kind: 'comparison', columnId: 'col_order_revenue', operator: 'gt', value: 10 }]);
+  });
+
+  test('reports an engine sampling warning in the summary', async () => {
+    const fixture = relatedSetup();
+    fixture.deps.executeAnalysis = async () => ok(analysisResult([['West', 12]], 'The result was sampled.'));
+
+    const analysis = await fixture.parsed('analyze_data', {
+      datasetId: 'ds_orders',
+      dimensions: ['col_order_customer'],
+      measures: [{ columnId: 'col_order_revenue', aggregate: 'sum' }],
+      relationshipIds: [RELATED_ORDERS.id],
+      limit: 200,
+    });
+
+    expect(analysis['summary']).toContain('sampled');
+  });
+
+  test('refuses an unknown dimension column', async () => {
+    const { parsed } = relatedSetup();
+
+    expect(
+      (await parsed('analyze_data', { datasetId: 'ds_orders', dimensions: ['missing'], measures: [] }))['ok'],
+    ).toBe(false);
+  });
+});
+
+describe('WebMCP write-tool query construction', () => {
+  test('a histogram binds its x column as a binned dimension', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('create_visualization', {
+      datasetId: 'ds_sales',
+      title: 'Histogram',
+      kind: 'histogram',
+      xColumnId: 'col_revenue',
+      binX: { kind: 'equalWidth', binCount: 2 },
+    });
+
+    expect(last()).toMatchObject({
+      type: 'visualization.create',
+      payload: { query: { binnedDimensions: [{ columnId: 'col_revenue' }] } },
+    });
+  });
+
+  test('a box plot becomes a distribution query over its category column', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('create_visualization', {
+      datasetId: 'ds_sales',
+      title: 'Box plot',
+      kind: 'boxplot',
+      xColumnId: 'col_region',
+      yColumnIds: ['col_revenue'],
+    });
+
+    expect(last()).toMatchObject({
+      type: 'visualization.create',
+      payload: { query: { distribution: { columnId: 'col_revenue', categoryColumnId: 'col_region' } } },
+    });
+  });
+
+  test('binning both the axis and the series produces two binned dimensions', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('create_visualization', {
+      datasetId: 'ds_sales',
+      title: 'Binned chart',
+      kind: 'bar',
+      xColumnId: 'col_revenue',
+      groupByColumnId: 'col_units',
+      binX: { kind: 'equalWidth', binCount: 2 },
+      binSeries: { kind: 'equalWidth', binCount: 2 },
+      aggregate: 'avg',
+      yColumnIds: ['col_revenue'],
+    });
+
+    expect(last()).toMatchObject({
+      type: 'visualization.create',
+      payload: {
+        query: {
+          binnedDimensions: [{ columnId: 'col_revenue' }, { columnId: 'col_units' }],
+          measures: [{ aggregate: 'avg' }],
+        },
+      },
+    });
+  });
+
+  test('a chart with no measure column counts rows', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('create_visualization', { datasetId: 'ds_sales', title: 'Count', kind: 'bar' });
+
+    expect(last()).toMatchObject({ payload: { query: { measures: [{ aggregate: 'count' }] } } });
+  });
+
+  // Existence is the dispatcher's decision, so a title-only update forwards the id it was given.
+  test('a title-only update forwards the visualization id without rebuilding the query', async () => {
+    const { invoke, last } = recordingWriteTools(webmcpFixture(withVisualization(workspaceWithDataset())).deps);
+
+    await invoke('update_visualization', { visualizationId: 'missing', title: 'Renamed' });
+
+    expect(last()).toMatchObject({
+      type: 'visualization.update',
+      payload: { visualizationId: 'missing', title: 'Renamed' },
+    });
+  });
+
+  test('a full update rebuilds the query, the kind, and the link mode together', async () => {
+    const { invoke, last } = recordingWriteTools(webmcpFixture(withVisualization(workspaceWithDataset())).deps);
+
+    await invoke('update_visualization', {
+      visualizationId: 'viz_1',
+      title: 'Updated',
+      kind: 'bar',
+      xColumnId: 'col_region',
+      yColumnIds: ['col_revenue'],
+      groupByColumnId: 'col_notes',
+      binX: { kind: 'equalWidth', binCount: 2 },
+      binSeries: { kind: 'equalWidth', binCount: 2 },
+      linkMode: 'none',
+      aggregate: 'sum',
+    });
+
+    expect(last()).toMatchObject({
+      type: 'visualization.update',
+      payload: { kind: 'bar', query: { measures: [{ aggregate: 'sum' }] }, linkMode: 'none' },
+    });
+  });
+
+  test('remove_visualization dispatches the removal for the named chart', async () => {
+    const { invoke, last } = recordingWriteTools(webmcpFixture(withVisualization(workspaceWithDataset())).deps);
+
+    await invoke('remove_visualization', { visualizationId: 'viz_1' });
+
+    expect(last()).toMatchObject({ type: 'visualization.remove', payload: { visualizationId: 'viz_1' } });
+  });
+
+  test('a comparison filter carries its value', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('apply_filter', { datasetId: 'ds_sales', columnId: 'col_region', operator: 'eq', value: 'West' });
+
+    expect(last()).toMatchObject({
+      type: 'filter.apply',
+      payload: { datasetId: 'ds_sales', columnId: 'col_region', operator: 'eq', value: 'West' },
+    });
+  });
+
+  test('a null-check filter omits the value rather than sending an empty one', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('apply_filter', { datasetId: 'ds_sales', columnId: 'col_region', operator: 'is_null' });
+
+    expect(last()).toMatchObject({ type: 'filter.apply', payload: { operator: 'is_null' } });
+    expect((last() as unknown as { payload: Record<string, unknown> }).payload['value']).toBeUndefined();
+  });
+
+  test('clear_filters without a dataset clears the whole workspace', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('clear_filters', {});
+
+    expect(last()).toMatchObject({ type: 'filters.clear' });
+    expect((last() as unknown as { payload: Record<string, unknown> }).payload['datasetId']).toBeUndefined();
+  });
+
+  test('clear_filters scoped to a dataset forwards that dataset', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('clear_filters', { datasetId: 'ds_sales' });
+
+    expect(last()).toMatchObject({ type: 'filters.clear', payload: { datasetId: 'ds_sales' } });
+  });
+
+  // A highlight uses the same predicate payload a human click produces, not an agent-only shape.
+  test('a highlight replaces the current selection by default', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('highlight_selection', { datasetId: 'ds_sales', columnId: 'col_region', values: ['West'] });
+
+    expect(last()).toMatchObject({
+      type: 'selection.set',
+      payload: {
+        datasetId: 'ds_sales',
+        mode: 'predicate',
+        predicate: { kind: 'comparison', columnId: 'col_region', operator: 'in', value: ['West'] },
+        origin: 'agent',
+      },
+    });
+  });
+
+  test('an additive highlight extends the selection instead of replacing it', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('highlight_selection', {
+      datasetId: 'ds_sales',
+      columnId: 'col_region',
+      values: ['East'],
+      additive: true,
+    });
+
+    expect(last()).toMatchObject({
+      type: 'selection.extend',
+      payload: { predicate: { columnId: 'col_region', operator: 'in', value: ['East'] } },
+    });
+  });
+
+  test('a count metric needs no measure column', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('create_metric', { datasetId: 'ds_sales', name: 'Count', aggregate: 'count' });
+
+    expect(last()).toMatchObject({ type: 'metric.create', payload: { name: 'Count', aggregate: 'count' } });
+  });
+
+  test('an aggregate metric carries its column, filters, and modifier', async () => {
+    const { invoke, last } = recordingWriteTools(setup().deps);
+
+    await invoke('create_metric', {
+      datasetId: 'ds_sales',
+      name: 'Revenue',
+      aggregate: 'sum',
+      columnId: 'col_revenue',
+      filterIds: ['filter_1'],
+      modifier: { kind: 'percentOfTotal' },
+    });
+
+    expect(last()).toMatchObject({
+      type: 'metric.create',
+      payload: {
+        columnId: 'col_revenue',
+        // The tool renames `filterIds` to the domain payload's `filters`.
+        filters: ['filter_1'],
+        modifier: { kind: 'percentOfTotal' },
+      },
+    });
+  });
+
+  test('an annotation carries its anchor to the chart it belongs to', async () => {
+    const { invoke, last } = recordingWriteTools(webmcpFixture(withVisualization(workspaceWithDataset())).deps);
+
+    await invoke('add_annotation', {
+      visualizationId: 'viz_1',
+      text: 'Note',
+      anchor: { kind: 'point', x: 'West', y: 1 },
+    });
+
+    expect(last()).toMatchObject({
+      type: 'annotation.add',
+      payload: { visualizationId: 'viz_1', text: 'Note', anchor: { kind: 'point', x: 'West', y: 1 } },
+    });
+  });
+});
+
+describe('WebMCP history tools', () => {
+  test('undo reports failure when no history dependency is wired', async () => {
+    const fixture = webmcpFixture();
+    const { history: _history, ...withoutHistory } = fixture.deps;
+    const tools = createToolDefinitions(withoutHistory);
+    const undo = tools.find((candidate) => candidate.name === 'undo');
+    if (undo === undefined) {
+      throw new Error('undo was not registered');
+    }
+
+    expect(JSON.parse(await undo.handler({}))).toMatchObject({ ok: false });
+  });
+
+  test('redo reports failure when no history dependency is wired', async () => {
+    const fixture = webmcpFixture();
+    const { history: _history, ...withoutHistory } = fixture.deps;
+    const tools = createToolDefinitions(withoutHistory);
+    const redo = tools.find((candidate) => candidate.name === 'redo');
+    if (redo === undefined) {
+      throw new Error('redo was not registered');
+    }
+
+    expect(JSON.parse(await redo.handler({}))).toMatchObject({ ok: false });
   });
 });

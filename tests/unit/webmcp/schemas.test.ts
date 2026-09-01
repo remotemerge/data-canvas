@@ -107,12 +107,22 @@ const validInputs: Record<keyof typeof toolSchemas, { minimal: object; canonical
 };
 
 const walkBounds = (schema: unknown): void => {
-  if (typeof schema !== 'object' || schema === null) return;
+  if (typeof schema !== 'object' || schema === null) {
+    return;
+  }
   const node = schema as Record<string, unknown>;
-  if (node['type'] === 'object') expect(node['additionalProperties']).toBe(false);
-  if (node['type'] === 'array') expect(typeof node['maxItems']).toBe('number');
-  if (node['type'] === 'string' && node['enum'] === undefined) expect(typeof node['maxLength']).toBe('number');
-  for (const value of Object.values(node)) walkBounds(value);
+  if (node['type'] === 'object') {
+    expect(node['additionalProperties']).toBe(false);
+  }
+  if (node['type'] === 'array') {
+    expect(typeof node['maxItems']).toBe('number');
+  }
+  if (node['type'] === 'string' && node['enum'] === undefined) {
+    expect(typeof node['maxLength']).toBe('number');
+  }
+  for (const value of Object.values(node)) {
+    walkBounds(value);
+  }
 };
 
 describe('WebMCP canonical schemas', () => {
@@ -150,7 +160,9 @@ test('analyze_data accepts bounded temporal dimensions', () => {
 
 test('tool names and prohibited control fields stay out of the contract', () => {
   const serialized = JSON.stringify(toolSchemas);
-  for (const name of Object.keys(toolSchemas)) expect(name.length).toBeLessThanOrEqual(30);
+  for (const name of Object.keys(toolSchemas)) {
+    expect(name.length).toBeLessThanOrEqual(30);
+  }
   for (const prohibited of ['sql', 'javascript', 'url', 'selector', 'echarts', 'zustand']) {
     expect(serialized.toLowerCase()).not.toContain(`"${prohibited}"`);
   }

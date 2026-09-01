@@ -19,11 +19,15 @@ const stripGeneratedIds = (value: unknown): unknown => {
       (/^(flt|viz|sel|rel|mtr|ann)_[\w-]+$/u.test(item) ||
         /^col_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(item))
     ) {
-      if (!ids.has(item)) ids.set(item, `generated_${next++}`);
+      if (!ids.has(item)) {
+        ids.set(item, `generated_${next++}`);
+      }
       return ids.get(item);
     }
-    if (Array.isArray(item)) return item.map(visit);
-    if (typeof item === 'object' && item !== null)
+    if (Array.isArray(item)) {
+      return item.map(visit);
+    }
+    if (typeof item === 'object' && item !== null) {
       return Object.fromEntries(
         Object.entries(item).map(([key, nested]) => [
           visit(key),
@@ -34,6 +38,7 @@ const stripGeneratedIds = (value: unknown): unknown => {
               : visit(nested),
         ]),
       );
+    }
     return item;
   };
   return visit(value);

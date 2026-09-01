@@ -180,6 +180,71 @@ test('a payload whose scalars alone exceed the budget still parses', () => {
   expect(JSON.parse(output)).toMatchObject({ ok: false, code: 'UNSUPPORTED_OPERATION', truncated: true });
 });
 
+test('a within-budget payload carrying only the preserve hint comes back without it', () => {
+  expect(enforceOutputBudget(JSON.stringify({ ok: true, [PRESERVE_COLUMNS_KEY]: true }))).toBe('{"ok":true}');
+});
+
+test('a wide preview reports how many of its columns survived trimming', () => {
+  const columns = Array.from({ length: 8 }, (_unused, index) => ({
+    id: `column_${index}`,
+    name: `Column ${index}`,
+    logicalType: 'string',
+  }));
+  const parsed = JSON.parse(
+    enforceOutputBudget(
+      JSON.stringify({
+        ok: true,
+        columns,
+        columnIds: columns.map((item) => item.id),
+        rows: Array.from({ length: 20 }, () => Array.from({ length: columns.length }, () => 'x'.repeat(100))),
+        columnsTotal: columns.length,
+        summary: 'wide preview',
+      }),
+    ),
+  ) as { truncated?: boolean; columnsReturned?: number };
+
+  expect(parsed.truncated).toBe(true);
+  expect(parsed.columnsReturned).toBeLessThan(columns.length);
+});
+
+// The hint is stripped by reparsing, so output that cannot be reparsed is returned untouched.
+test('a within-budget payload carrying an unparsable preserve hint is returned unchanged', () => {
+  const malformed = `{"${PRESERVE_COLUMNS_KEY}":`;
+
+  expect(enforceOutputBudget(malformed)).toBe(malformed);
+});
+
+// Trimming the lists is not enough here, so the fallback keeps only the fields an agent branches on.
+test('a scalar-only fallback keeps the outcome, revision, and code inside the budget', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 4,
+      code: 'DONE',
+      summary: 's'.repeat(1200),
+      error: 'e'.repeat(1200),
+    }),
+  );
+
+  expect(output).toHaveLength(MAX_TOOL_OUTPUT_LENGTH);
+  expect(output).toContain('"ok":true');
+  expect(output).toContain('"revision":4');
+  expect(output).toContain('"code":"DONE"');
+});
+
+// Output that is not even valid JSON still has to come back as a parsable tool result.
+test('unparsable oversized output degrades to a truncation error', () => {
+  expect(JSON.parse(enforceOutputBudget('x'.repeat(MAX_TOOL_OUTPUT_LENGTH + 1)))).toMatchObject({
+    ok: false,
+    truncated: true,
+  });
+});
+
+// The budget is part of the agent contract, so a change to it is a deliberate decision.
+test('the output budget stays at its documented size', () => {
+  expect(MAX_TOOL_OUTPUT_LENGTH).toBe(1500);
+});
+
 test('preview_data with columnIds narrows columns and preserves rows and rowsTotal', () => {
   const output = enforceOutputBudget(
     JSON.stringify({
