@@ -78,10 +78,6 @@ const parseRecords = (text: string): JsonRecord[] => {
       records.push(parsedLine);
     }
 
-    if (records.length === 0) {
-      throw new JsonShapeError();
-    }
-
     return records;
   }
 };
