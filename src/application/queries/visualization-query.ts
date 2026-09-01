@@ -11,7 +11,7 @@ import type { FilterExpression } from '@/domain/filter/filter.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
-import { ok } from '@/shared/result/result.ts';
+import { err, ok } from '@/shared/result/result.ts';
 import { measureAsync, recordRowsReturned } from '@/shared/perf/performance-marks.ts';
 import type { Result } from '@/shared/result/result.ts';
 
@@ -72,6 +72,50 @@ const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery):
   return row.reduce<number>((product, value) => product * Math.max(Number(value) || 0, 1), 1);
 };
 
+const resolveBinRanges = async (
+  engine: DataEnginePort,
+  query: AnalysisQuery,
+): Promise<Result<AnalysisQuery, DomainError>> => {
+  const unresolved = (query.binnedDimensions ?? []).filter(
+    (bin) => bin.range === undefined && (bin.strategy.kind === 'equalWidth' || bin.strategy.kind === 'equalWidthOf'),
+  );
+
+  if (unresolved.length === 0) return ok(query);
+
+  const rangeResult = await engine.executeAnalysis({
+    datasetId: query.datasetId,
+    ...(query.relationshipIds === undefined ? {} : { relationshipIds: query.relationshipIds }),
+    dimensions: [],
+    measures: unresolved.flatMap((bin) => [
+      { columnId: bin.columnId, aggregate: 'min' as const },
+      { columnId: bin.columnId, aggregate: 'max' as const },
+    ]),
+    filters: query.filters,
+    limit: 1,
+  });
+
+  if (!rangeResult.ok) return err(rangeResult.error);
+
+  const row = rangeResult.value.rows[0] ?? [];
+  return ok({
+    ...query,
+    binnedDimensions: (query.binnedDimensions ?? []).map((bin) => {
+      const index = unresolved.indexOf(bin);
+      if (index < 0) return bin;
+
+      const min = Number(row[index * 2]);
+      const max = Number(row[index * 2 + 1]);
+      return {
+        ...bin,
+        range: {
+          min: Number.isFinite(min) ? min : 0,
+          max: Number.isFinite(max) ? max : 0,
+        },
+      };
+    }),
+  });
+};
+
 export const executeVisualizationQuery = async (
   visualization: Visualization,
   workspace: Workspace,
@@ -80,7 +124,9 @@ export const executeVisualizationQuery = async (
   // Optional rendered width used to choose a legible temporal bucket.
   plotWidth?: number,
 ): Promise<Result<ChartResult, DomainError>> => {
-  const resolved = resolveVisualizationQuery(visualization, workspace);
+  const resolvedResult = await resolveBinRanges(engine, resolveVisualizationQuery(visualization, workspace));
+  if (!resolvedResult.ok) return resolvedResult;
+  const resolved = resolvedResult.value;
 
   // Scope supersession to this visualization so one chart's filter does not cancel another's query.
   const scheduling = { key: `visualization:${visualization.id}`, ...(signal === undefined ? {} : { signal }) };
