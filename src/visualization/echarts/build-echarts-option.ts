@@ -124,9 +124,19 @@ export const buildEChartsOption = (
     axisLine: { show: false },
     splitLine: { lineStyle: { color: theme.grid } },
   };
-  // Margins outside labels; reserve extra space for an axis name.
-  const axisNameHeight = temporalAxisName(result) === undefined ? 0 : 24;
-  const gridSpacing = { top: 16, right: 16, bottom: 12 + axisNameHeight, left: 12, containLabel: true };
+  /*
+   * Margins outside labels. `outerBoundsMode: 'same'` replaces the deprecated `containLabel`: the
+   * grid stays inside the rect these margins define. `outerBoundsContain: 'all'` also reserves room
+   * for the axis name that widened temporal buckets add, which `containLabel` measured only labels for.
+   */
+  const gridSpacing = {
+    top: 16,
+    right: 16,
+    bottom: 12,
+    left: 12,
+    outerBoundsMode: 'same',
+    outerBoundsContain: 'all',
+  } as const;
   if (visualization.kind === 'donut') {
     const marks = buildAnnotationMarks(annotations, visualization, result);
     // A donut legend names slices, so it follows the user's legend preference.
