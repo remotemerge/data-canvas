@@ -14,11 +14,21 @@ export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvas
   needsDataset: true,
   handler: async (raw) => {
     const input = asInput(raw);
+    // Normalize camelCase kind values that round-1 contracts accepted.
+    const kindRaw = input.kind as string;
+    const kind: RelationshipKind =
+      kindRaw === 'oneToOne'
+        ? 'one_to_one'
+        : kindRaw === 'oneToMany'
+          ? 'one_to_many'
+          : kindRaw === 'manyToOne'
+            ? 'many_to_one'
+            : (kindRaw as RelationshipKind);
     const payload: CreateRelationshipInput = {
       leftDatasetId: input.leftDatasetId as string,
       rightDatasetId: input.rightDatasetId as string,
       on: input.on as RelationshipKeyPair[],
-      kind: input.kind as RelationshipKind,
+      kind,
       join: input.join as JoinKind,
     };
 

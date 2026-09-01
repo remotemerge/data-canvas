@@ -20,7 +20,7 @@ export const createRelationshipSchema = {
       minItems: 1,
       maxItems: 4,
     },
-    kind: { type: 'string', enum: ['one_to_one', 'one_to_many', 'many_to_one'] },
+    kind: { type: 'string', enum: ['one_to_one', 'one_to_many', 'many_to_one', 'oneToOne', 'oneToMany', 'manyToOne'] },
     join: { type: 'string', enum: ['inner', 'left'] },
     expectedRevision: { type: 'integer', minimum: 0 },
   },
