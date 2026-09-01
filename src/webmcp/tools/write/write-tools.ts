@@ -26,7 +26,9 @@ const dispatch = async (
   extra: (changedIds: string[]) => Record<string, unknown> = () => ({}),
 ): Promise<string> => {
   const result = await deps.dispatcher.execute(action, { actor: 'agent', expectedRevision });
-  if (!result.ok) return failure(result.error);
+  if (!result.ok) {
+    return failure(result.error);
+  }
   return success({
     revision: result.value.revision,
     summary: result.value.summary,

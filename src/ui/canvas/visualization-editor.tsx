@@ -34,8 +34,11 @@ const groupByDataset = (columns: readonly ScopedColumn[]): { dataset: Dataset; c
   for (const scoped of columns) {
     const existing = groups.find((group) => group.dataset.id === scoped.dataset.id);
 
-    if (existing === undefined) groups.push({ dataset: scoped.dataset, columns: [scoped.column] });
-    else existing.columns.push(scoped.column);
+    if (existing === undefined) {
+      groups.push({ dataset: scoped.dataset, columns: [scoped.column] });
+    } else {
+      existing.columns.push(scoped.column);
+    }
   }
 
   return groups;
@@ -108,7 +111,9 @@ export const VisualizationEditor = ({
 
   const validationMeasure = y === '' ? numericColumns[0]?.column.id : y;
   const dimensionColumns = scopedColumns.filter((scoped) => {
-    if (dataset === undefined || kind === 'kpi' || validationMeasure === undefined) return false;
+    if (dataset === undefined || kind === 'kpi' || validationMeasure === undefined) {
+      return false;
+    }
 
     return validateVisualization(dataset, kind, { x: scoped.column.id, y: [validationMeasure] }, related).ok;
   });
@@ -135,7 +140,9 @@ export const VisualizationEditor = ({
   const titled = title.trim() !== '';
 
   const save = async (): Promise<void> => {
-    if (dataset === undefined || validation === null || !validation.ok || !titled) return;
+    if (dataset === undefined || validation === null || !validation.ok || !titled) {
+      return;
+    }
 
     // Mirrors the builder's query shapes so an edited chart matches an equivalent new one.
     const query =

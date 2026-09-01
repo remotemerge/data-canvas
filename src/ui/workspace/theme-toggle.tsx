@@ -6,7 +6,9 @@ type Theme = 'light' | 'dark';
 
 const initialTheme = (): Theme => {
   const saved = localStorage.getItem('data-canvas-theme');
-  if (saved === 'light' || saved === 'dark') return saved;
+  if (saved === 'light' || saved === 'dark') {
+    return saved;
+  }
   return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 };
 

@@ -55,9 +55,15 @@ export const MetricEditor = ({
   );
 
   const buildModifier = (): MetricModifier | null => {
-    if (kind === 'none') return { kind: 'none' };
-    if (kind === 'percentOfTotal') return { kind: 'percentOfTotal' };
-    if (kind === 'runningTotal') return orderBy === '' ? null : { kind: 'runningTotal', orderBy };
+    if (kind === 'none') {
+      return { kind: 'none' };
+    }
+    if (kind === 'percentOfTotal') {
+      return { kind: 'percentOfTotal' };
+    }
+    if (kind === 'runningTotal') {
+      return orderBy === '' ? null : { kind: 'runningTotal', orderBy };
+    }
 
     return dateColumnId === '' ? null : { kind: 'timeComparison', dateColumnId, unit, offset, as: output };
   };
@@ -65,7 +71,9 @@ export const MetricEditor = ({
   const modifier = buildModifier();
 
   const save = (): void => {
-    if (modifier === null) return;
+    if (modifier === null) {
+      return;
+    }
 
     // Percent change is a ratio; difference is a level, so format follows the modifier.
     const percent = modifier.kind === 'timeComparison' && modifier.as === 'percentChange';

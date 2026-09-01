@@ -28,12 +28,16 @@ export const SelectionSummary = ({ onError }: { onError: (error: DomainError) =>
   const datasets = useWorkspace((state) => state.workspace.datasets);
   const active = Object.values(selections);
 
-  if (active.length === 0) return null;
+  if (active.length === 0) {
+    return null;
+  }
 
   const clear = async (datasetId: string): Promise<void> => {
     const outcome = await actions.clearSelection({ datasetId });
 
-    if (!outcome.ok) onError(outcome.error);
+    if (!outcome.ok) {
+      onError(outcome.error);
+    }
   };
 
   return (

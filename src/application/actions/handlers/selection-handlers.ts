@@ -18,7 +18,9 @@ export const MAX_SELECTION_KEYS = 10_000;
 export const handleSetSelection: ActionHandler<SetSelectionInput> = (workspace, payload) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   if (payload.mode === 'keys') {
     if (payload.keys === undefined || payload.keys.length === 0) {
@@ -68,11 +70,15 @@ export const handleSetSelection: ActionHandler<SetSelectionInput> = (workspace, 
 export const handleExtendSelection: ActionHandler<ExtendSelectionInput> = (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const existing = Object.values(workspace.selections).find((selection) => selection.datasetId === dataset.value.id);
 
-  if (existing === undefined) return handleSetSelection(workspace, payload, deps);
+  if (existing === undefined) {
+    return handleSetSelection(workspace, payload, deps);
+  }
 
   // Key and predicate modes cannot be combined without changing the selection's meaning.
   if (existing.mode !== payload.mode) {
@@ -147,7 +153,9 @@ export const handleClearSelection: ActionHandler<ClearSelectionInput> = (workspa
 
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const cleared = Object.values(workspace.selections)
     .filter((selection) => selection.datasetId === dataset.value.id)

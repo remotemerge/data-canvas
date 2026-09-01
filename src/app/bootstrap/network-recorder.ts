@@ -8,7 +8,9 @@ export interface RecordedRequest {
 const requests: RecordedRequest[] = [];
 
 const hashBody = async (body: unknown): Promise<string | undefined> => {
-  if (body === undefined || body === null) return undefined;
+  if (body === undefined || body === null) {
+    return undefined;
+  }
   const bytes = new TextEncoder().encode(typeof body === 'string' ? body : String(body));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -18,7 +20,9 @@ const record = (request: Omit<RecordedRequest, 'bodyHash'>, body?: unknown): voi
   const entry: RecordedRequest = { ...request };
   requests.push(entry);
   void hashBody(body).then((bodyHash) => {
-    if (bodyHash !== undefined) entry.bodyHash = bodyHash;
+    if (bodyHash !== undefined) {
+      entry.bodyHash = bodyHash;
+    }
   });
 };
 
@@ -55,7 +59,9 @@ export const installNetworkRecorder = (): (() => void) => {
   XMLHttpRequest.prototype.open = patchedOpen as typeof XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.send = function (body): void {
     const details = xhrDetails.get(this);
-    if (details !== undefined) record({ transport: 'xhr', ...details }, body);
+    if (details !== undefined) {
+      record({ transport: 'xhr', ...details }, body);
+    }
     originalSend.call(this, body);
   };
 

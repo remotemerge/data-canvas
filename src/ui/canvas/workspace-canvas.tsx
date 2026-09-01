@@ -18,14 +18,18 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
   const layoutById = useMemo(() => new Map(layout.items.map((item) => [item.visualizationId, item])), [layout.items]);
 
   const resize = async (visualizationId: string, amount: number) => {
-    if (!layoutById.has(visualizationId)) return;
+    if (!layoutById.has(visualizationId)) {
+      return;
+    }
     const items = layout.items.map((item) =>
       item.visualizationId === visualizationId
         ? { ...item, width: Math.max(3, Math.min(layout.columns, item.width + amount)) }
         : item,
     );
     const result = await actions.updateLayout({ items });
-    if (!result.ok) onError(result.error);
+    if (!result.ok) {
+      onError(result.error);
+    }
   };
 
   return (

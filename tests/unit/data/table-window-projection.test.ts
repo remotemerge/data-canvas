@@ -62,7 +62,9 @@ describe('table window refetch key', () => {
     const outcome = await createMargin();
 
     expect(outcome.ok).toBe(true);
-    if (!outcome.ok) return;
+    if (!outcome.ok) {
+      return;
+    }
 
     const updated = outcome.value.workspace.datasets[datasetId] as Dataset;
 

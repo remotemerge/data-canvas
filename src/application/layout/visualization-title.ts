@@ -28,16 +28,22 @@ export const suggestVisualizationTitle = ({ kind, measureName, dimensionName, ag
     measureName === undefined ? undefined : prefix === undefined ? measureName : `${prefix} ${measureName}`;
 
   // A histogram computes its own count, so the title names only its binned column.
-  if (kind === 'histogram') return dimensionName === undefined ? '' : `Distribution of ${dimensionName}`;
+  if (kind === 'histogram') {
+    return dimensionName === undefined ? '' : `Distribution of ${dimensionName}`;
+  }
 
   // A box plot describes one column's spread, optionally split by a category.
   if (kind === 'boxplot') {
-    if (measureName === undefined) return '';
+    if (measureName === undefined) {
+      return '';
+    }
 
     return dimensionName === undefined ? `Spread of ${measureName}` : `Spread of ${measureName} by ${dimensionName}`;
   }
 
-  if (measure === undefined) return dimensionName === undefined ? '' : `Rows by ${dimensionName}`;
+  if (measure === undefined) {
+    return dimensionName === undefined ? '' : `Rows by ${dimensionName}`;
+  }
 
   return dimensionName === undefined ? measure : `${measure} by ${dimensionName}`;
 };

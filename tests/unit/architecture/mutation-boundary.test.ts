@@ -49,7 +49,9 @@ describe('store mutation boundary', () => {
     // Keep exemptions limited to current state writers.
     const sources = await Promise.all(MUTATION_ALLOWLIST.map((file) => Bun.file(file).text()));
 
-    for (const source of sources) expect(source.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(source.length).toBeGreaterThan(0);
+    }
 
     const dispatcher = await Bun.file('src/application/actions/dispatcher.ts').text();
 

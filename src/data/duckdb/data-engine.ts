@@ -187,7 +187,9 @@ const MAX_TOP_VALUES = 20;
 const MAX_STATISTIC_STRING_LENGTH = 200;
 
 export const describeQueryFanOut = (anchorRows: number, joinedRows: number): string | undefined => {
-  if (anchorRows <= 0 || joinedRows <= anchorRows * FAN_OUT_QUERY_TOLERANCE) return undefined;
+  if (anchorRows <= 0 || joinedRows <= anchorRows * FAN_OUT_QUERY_TOLERANCE) {
+    return undefined;
+  }
 
   return `This join produced about ${(joinedRows / anchorRows).toFixed(2)} rows per source row, so aggregate totals may be inflated by duplicate key matches.`;
 };
@@ -203,11 +205,15 @@ const executeCompiled = async (
   compiled: CompiledQuery,
   signal?: AbortSignal,
 ): Promise<ArrowRowSource> => {
-  if (signal?.aborted) throw new QueryAbortedError();
+  if (signal?.aborted) {
+    throw new QueryAbortedError();
+  }
 
   const statement = await connection.prepare(compiled.sql);
   try {
-    if (signal?.aborted) throw new QueryAbortedError();
+    if (signal?.aborted) {
+      throw new QueryAbortedError();
+    }
 
     return (await statement.query(...compiled.parameters)) as unknown as ArrowRowSource;
   } finally {
@@ -243,8 +249,12 @@ const readFileBytes = async (file: File, onProgress?: (progress: ImportProgress)
     // eslint-disable-next-line no-await-in-loop -- stream reads are sequential.
     const { done, value } = await reader.read();
 
-    if (done) break;
-    if (value === undefined) continue;
+    if (done) {
+      break;
+    }
+    if (value === undefined) {
+      continue;
+    }
 
     chunks.push(value);
     bytesRead += value.byteLength;
@@ -351,11 +361,15 @@ export const createDataEngine = (): DataEngine => {
   ): Promise<Result<ImportedRelation, DomainError>> => {
     const connectionResult = requireConnection();
 
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     const validated = validateImportFile(file);
 
-    if (!validated.ok) return validated;
+    if (!validated.ok) {
+      return validated;
+    }
 
     const connection = connectionResult.value;
     const relationName = createRelationName(datasetId);
@@ -425,7 +439,9 @@ export const createDataEngine = (): DataEngine => {
       context,
     );
 
-    if (!joined.ok || !anchor.ok) return undefined;
+    if (!joined.ok || !anchor.ok) {
+      return undefined;
+    }
 
     try {
       const joinedRows = readScalarCount(await executeCompiled(connection, joined.value));
@@ -448,7 +464,9 @@ export const createDataEngine = (): DataEngine => {
     options?: AnalysisExecutionOptions,
   ): Promise<Result<AnalysisResult, DomainError>> => {
     const connectionResult = requireConnection();
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
     const relation = relations.get(query.datasetId);
     if (relation === undefined) {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
@@ -458,7 +476,9 @@ export const createDataEngine = (): DataEngine => {
       ...queryContext(),
       ...(planned.joinOrder === undefined ? {} : { joinOrder: planned.joinOrder }),
     });
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
 
     const run = async (signal?: AbortSignal): Promise<AnalysisResult> => {
       const table = await executeCompiled(connectionResult.value, compiled.value, signal);
@@ -491,10 +511,14 @@ export const createDataEngine = (): DataEngine => {
       })
       .catch(() => null);
 
-    if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
+    if (scheduled === null) {
+      return err(engineFailure('QUERY_FAILED'));
+    }
 
     // Superseded analysis is normal interaction; callers keep the previous result.
-    if (scheduled.stale) return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+    if (scheduled.stale) {
+      return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+    }
 
     return ok(scheduled.value);
   };
@@ -502,7 +526,9 @@ export const createDataEngine = (): DataEngine => {
   // Measures duplicate join keys in a bounded sample.
   const measureKeyQuality = async (request: KeyQualityRequest): Promise<Result<KeyQualityResult, DomainError>> => {
     const connectionResult = requireConnection();
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     const relation = relations.get(request.datasetId);
     if (relation === undefined) {
@@ -548,7 +574,9 @@ export const createDataEngine = (): DataEngine => {
     }
 
     const connectionResult = requireConnection();
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     await dropRelation(connectionResult.value, relation.relationName);
     statisticsCache.invalidateDataset(
@@ -564,7 +592,9 @@ export const createDataEngine = (): DataEngine => {
   const fetchTableWindow = async (request: TableWindowRequest): Promise<Result<TableWindow, DomainError>> => {
     const connectionResult = requireConnection();
 
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     const relation = relations.get(request.datasetId);
 
@@ -602,7 +632,9 @@ export const createDataEngine = (): DataEngine => {
       },
       queryContext(),
     );
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
     const countKey = {
       datasetId: request.datasetId,
       datasetRevision: relation.revision,
@@ -626,7 +658,9 @@ export const createDataEngine = (): DataEngine => {
               },
               queryDataset(request.datasetId, relation),
             );
-            if (!count.ok) throw new Error('Count compilation failed');
+            if (!count.ok) {
+              throw new Error('Count compilation failed');
+            }
             totalRowCount = readScalarCount(await executeCompiled(connectionResult.value, count.value));
             countCache.set(countKey, totalRowCount);
           }
@@ -646,7 +680,9 @@ export const createDataEngine = (): DataEngine => {
       )
       .catch(() => null);
 
-    if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
+    if (scheduled === null) {
+      return err(engineFailure('QUERY_FAILED'));
+    }
 
     const columnIds = projectedColumns.map((column) => column.id);
 
@@ -673,7 +709,9 @@ export const createDataEngine = (): DataEngine => {
     if (relation !== undefined && request.filters.length === 0) {
       const cached = statisticsCache.columnStatistics(request.columnId, relation.revision);
 
-      if (cached?.min !== undefined && cached.max !== undefined) return ok({ min: cached.min, max: cached.max });
+      if (cached?.min !== undefined && cached.max !== undefined) {
+        return ok({ min: cached.min, max: cached.max });
+      }
     }
 
     const result = await executeAnalysis({
@@ -687,7 +725,9 @@ export const createDataEngine = (): DataEngine => {
       limit: 1,
     });
 
-    if (!result.ok) return result;
+    if (!result.ok) {
+      return result;
+    }
 
     const [row] = result.value.rows;
     const min = Number(row?.[0] ?? 0);
@@ -770,7 +810,9 @@ export const createDataEngine = (): DataEngine => {
       limit: 1,
     });
 
-    if (!summary.ok) return summary;
+    if (!summary.ok) {
+      return summary;
+    }
 
     const [row] = summary.value.rows;
     const rowCount = Number(row?.[0] ?? 0);
@@ -779,7 +821,9 @@ export const createDataEngine = (): DataEngine => {
     // Convert temporal extrema to ISO strings for the data-engine port.
     const temporalBound = (value: unknown): string => {
       const date = new Date(typeof value === 'number' ? value : Number(value));
-      if (Number.isNaN(date.getTime())) return String(value ?? '');
+      if (Number.isNaN(date.getTime())) {
+        return String(value ?? '');
+      }
       return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
     };
 
@@ -842,7 +886,9 @@ export const createDataEngine = (): DataEngine => {
       orderBy: [{ measureAlias: 'count', direction: 'desc' }],
       limit: limit + 1,
     });
-    if (!result.ok) return result;
+    if (!result.ok) {
+      return result;
+    }
     return ok({
       values: result.value.rows.slice(0, limit).map((row) => ({ value: row[0] ?? null, count: Number(row[1] ?? 0) })),
       truncated: result.value.rows.length > limit,
@@ -850,7 +896,9 @@ export const createDataEngine = (): DataEngine => {
   };
 
   const initialize = (): Promise<Result<void, DomainError>> => {
-    if (handle !== null) return Promise.resolve(ok(undefined));
+    if (handle !== null) {
+      return Promise.resolve(ok(undefined));
+    }
 
     // Share initialization so the tab owns one worker and Wasm heap.
     initializing ??= openDuckDB()
@@ -884,7 +932,9 @@ export const createDataEngine = (): DataEngine => {
     handle = null;
     initializing = null;
 
-    if (opened !== null) await closeDuckDB(opened);
+    if (opened !== null) {
+      await closeDuckDB(opened);
+    }
   };
 
   return {
@@ -900,7 +950,9 @@ export const createDataEngine = (): DataEngine => {
     dispose,
     setRelationships: (relationships) => {
       relationshipGraph.clear();
-      for (const relationship of Object.values(relationships)) relationshipGraph.set(relationship.id, relationship);
+      for (const relationship of Object.values(relationships)) {
+        relationshipGraph.set(relationship.id, relationship);
+      }
     },
     setDerivedColumns: (columns) => {
       derivedColumnDefinitions = columns;

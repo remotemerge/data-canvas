@@ -47,7 +47,9 @@ export const useTableWindow = (
         sort,
         signal: controller.signal,
       }).then((result) => {
-        if (controller.signal.aborted || (result.ok && result.value.stale)) return;
+        if (controller.signal.aborted || (result.ok && result.value.stale)) {
+          return;
+        }
         setWindowState((current) =>
           result.ok
             ? { window: result.value, loading: false, error: null }

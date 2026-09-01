@@ -18,8 +18,12 @@ export const createColumnTypeResolver = (
 ): ColumnTypeResolver => {
   const types = new Map<EntityId, LogicalType>();
 
-  for (const column of columns) types.set(column.id, column.logicalType);
-  for (const column of derived) types.set(column.id, column.logicalType);
+  for (const column of columns) {
+    types.set(column.id, column.logicalType);
+  }
+  for (const column of derived) {
+    types.set(column.id, column.logicalType);
+  }
 
   return (columnId) => types.get(columnId);
 };
@@ -30,9 +34,15 @@ const unknownColumn = (columnId: EntityId): DomainError =>
   });
 
 const literalType = (value: number | string | boolean | null): LogicalType => {
-  if (value === null) return 'unknown';
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
+  if (value === null) {
+    return 'unknown';
+  }
+  if (typeof value === 'number') {
+    return 'number';
+  }
+  if (typeof value === 'boolean') {
+    return 'boolean';
+  }
 
   return 'string';
 };
@@ -59,10 +69,18 @@ const arithmeticType = (operator: string, left: LogicalType, right: LogicalType)
 
 // Returns whether two logical types can be compared in a `CASE` expression.
 const comparable = (left: LogicalType, right: LogicalType): boolean => {
-  if (left === 'unknown' || right === 'unknown') return true;
-  if (isNumericType(left) && isNumericType(right)) return true;
-  if (isTextType(left) && isTextType(right)) return true;
-  if (isTemporalType(left) && isTemporalType(right)) return true;
+  if (left === 'unknown' || right === 'unknown') {
+    return true;
+  }
+  if (isNumericType(left) && isNumericType(right)) {
+    return true;
+  }
+  if (isTextType(left) && isTextType(right)) {
+    return true;
+  }
+  if (isTemporalType(left) && isTemporalType(right)) {
+    return true;
+  }
 
   return left === 'boolean' && right === 'boolean';
 };
@@ -87,11 +105,15 @@ export const inferExpressionType = (
     case 'arithmetic': {
       const left = inferExpressionType(expression.left, resolve);
 
-      if (!left.ok) return left;
+      if (!left.ok) {
+        return left;
+      }
 
       const right = inferExpressionType(expression.right, resolve);
 
-      if (!right.ok) return right;
+      if (!right.ok) {
+        return right;
+      }
 
       return arithmeticType(expression.op, left.value, right.value);
     }
@@ -106,11 +128,15 @@ export const inferExpressionType = (
       for (const arm of expression.when) {
         const left = inferExpressionType(arm.left, resolve);
 
-        if (!left.ok) return left;
+        if (!left.ok) {
+          return left;
+        }
 
         const right = inferExpressionType(arm.right, resolve);
 
-        if (!right.ok) return right;
+        if (!right.ok) {
+          return right;
+        }
 
         if (!comparable(left.value, right.value)) {
           return err(
@@ -124,14 +150,18 @@ export const inferExpressionType = (
 
         const armResult = inferExpressionType(arm.result, resolve);
 
-        if (!armResult.ok) return armResult;
+        if (!armResult.ok) {
+          return armResult;
+        }
 
         branches.push(armResult.value);
       }
 
       const otherwise = inferExpressionType(expression.otherwise, resolve);
 
-      if (!otherwise.ok) return otherwise;
+      if (!otherwise.ok) {
+        return otherwise;
+      }
 
       branches.push(otherwise.value);
 
@@ -152,7 +182,9 @@ export const inferExpressionType = (
     case 'datePart': {
       const type = resolve(expression.columnId);
 
-      if (type === undefined) return err(unknownColumn(expression.columnId));
+      if (type === undefined) {
+        return err(unknownColumn(expression.columnId));
+      }
 
       if (!isTemporalType(type)) {
         return err(
@@ -170,7 +202,9 @@ export const inferExpressionType = (
     case 'bin': {
       const type = resolve(expression.columnId);
 
-      if (type === undefined) return err(unknownColumn(expression.columnId));
+      if (type === undefined) {
+        return err(unknownColumn(expression.columnId));
+      }
 
       const temporal = expression.strategy.kind === 'temporal';
 

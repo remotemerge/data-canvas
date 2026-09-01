@@ -17,7 +17,9 @@ export type DeltaTone = 'positive' | 'negative' | 'neutral';
 export const deltaTone = (value: number, format?: MetricFormat): DeltaTone => {
   const direction = format?.direction ?? 'neutral';
 
-  if (direction === 'neutral' || value === 0 || !Number.isFinite(value)) return 'neutral';
+  if (direction === 'neutral' || value === 0 || !Number.isFinite(value)) {
+    return 'neutral';
+  }
 
   const improving = direction === 'increaseIsGood' ? value > 0 : value < 0;
 
@@ -25,9 +27,15 @@ export const deltaTone = (value: number, format?: MetricFormat): DeltaTone => {
 };
 
 export const formatValue = (value: unknown): string => {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'number') return formatNumber(value);
-  if (value instanceof Date) return new Intl.DateTimeFormat().format(value);
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'number') {
+    return formatNumber(value);
+  }
+  if (value instanceof Date) {
+    return new Intl.DateTimeFormat().format(value);
+  }
   return String(value);
 };
 

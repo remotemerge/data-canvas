@@ -99,7 +99,9 @@ const validateNodes = (expression: DerivedExpression): Result<void, DomainError>
     case 'bin': {
       const strategy = validateBinStrategy(expression.strategy);
 
-      if (!strategy.ok) return strategy;
+      if (!strategy.ok) {
+        return strategy;
+      }
       break;
     }
 
@@ -111,7 +113,9 @@ const validateNodes = (expression: DerivedExpression): Result<void, DomainError>
   for (const child of childExpressions(expression)) {
     const result = validateNodes(child);
 
-    if (!result.ok) return result;
+    if (!result.ok) {
+      return result;
+    }
   }
 
   return ok(undefined);
@@ -126,15 +130,21 @@ const findsCycle = (
   const visiting = new Set<EntityId>();
 
   const visit = (columnId: EntityId, definition: DerivedExpression | undefined): boolean => {
-    if (visiting.has(columnId)) return true;
-    if (definition === undefined) return false;
+    if (visiting.has(columnId)) {
+      return true;
+    }
+    if (definition === undefined) {
+      return false;
+    }
 
     visiting.add(columnId);
 
     for (const referenced of expressionColumnIds(definition)) {
       const next = referenced === candidateId ? expression : existing[referenced]?.expression;
 
-      if (next !== undefined && visit(referenced, next)) return true;
+      if (next !== undefined && visit(referenced, next)) {
+        return true;
+      }
     }
 
     visiting.delete(columnId);
@@ -177,11 +187,15 @@ export const validateDerivedColumn = (
 
   const structure = validateStructure(candidate.expression);
 
-  if (!structure.ok) return structure;
+  if (!structure.ok) {
+    return structure;
+  }
 
   const nodes = validateNodes(candidate.expression);
 
-  if (!nodes.ok) return nodes;
+  if (!nodes.ok) {
+    return nodes;
+  }
 
   const candidateId = candidate.id ?? '';
 
@@ -215,7 +229,9 @@ export const validateDerivedColumn = (
   const resolve = createColumnTypeResolver(dataset.columns, sameDataset);
   const inferred = inferExpressionType(candidate.expression, resolve);
 
-  if (!inferred.ok) return inferred;
+  if (!inferred.ok) {
+    return inferred;
+  }
 
   return ok({ name, logicalType: inferred.value });
 };

@@ -42,9 +42,15 @@ export interface ValidatedRelationship {
 
 // Maps logical types to the compatibility classes used for join keys.
 const joinTypeClass = (type: LogicalType): string => {
-  if (isNumericType(type)) return 'number';
-  if (isTemporalType(type)) return 'temporal';
-  if (isTextType(type)) return 'text';
+  if (isNumericType(type)) {
+    return 'number';
+  }
+  if (isTemporalType(type)) {
+    return 'temporal';
+  }
+  if (isTextType(type)) {
+    return 'text';
+  }
 
   return type;
 };
@@ -71,8 +77,12 @@ export const wouldCreateCycle = (
     for (const relationship of relationships) {
       const neighbour = relatedDatasetId(relationship, current);
 
-      if (neighbour === undefined || visited.has(neighbour)) continue;
-      if (neighbour === rightDatasetId) return true;
+      if (neighbour === undefined || visited.has(neighbour)) {
+        continue;
+      }
+      if (neighbour === rightDatasetId) {
+        return true;
+      }
 
       visited.add(neighbour);
       queue.push(neighbour);
@@ -100,10 +110,14 @@ export const validateRelationship = (
   }
 
   const leftDataset = resolveDataset(workspace, candidate.leftDatasetId);
-  if (!leftDataset.ok) return leftDataset;
+  if (!leftDataset.ok) {
+    return leftDataset;
+  }
 
   const rightDataset = resolveDataset(workspace, candidate.rightDatasetId);
-  if (!rightDataset.ok) return rightDataset;
+  if (!rightDataset.ok) {
+    return rightDataset;
+  }
 
   for (const dataset of [leftDataset.value, rightDataset.value]) {
     if (dataset.importStatus !== 'ready') {
@@ -158,7 +172,9 @@ export const validateRelationship = (
       );
     }
 
-    if (joinTypeClass(left.logicalType) !== joinTypeClass(right.logicalType)) return err(incompatible(left, right));
+    if (joinTypeClass(left.logicalType) !== joinTypeClass(right.logicalType)) {
+      return err(incompatible(left, right));
+    }
 
     keys.push({ left, right });
   }
@@ -201,9 +217,15 @@ export interface KeyQualityMeasurement {
 
 // Converts sampled key quality into a warning for relationships that require unique keys.
 export const describeFanOutRisk = (kind: RelationshipKind, measurement: KeyQualityMeasurement): string | undefined => {
-  if (!RIGHT_KEY_MUST_BE_UNIQUE.includes(kind)) return undefined;
-  if (measurement.distinctKeys === 0) return undefined;
-  if (measurement.rowsPerKey <= FAN_OUT_RATIO_THRESHOLD) return undefined;
+  if (!RIGHT_KEY_MUST_BE_UNIQUE.includes(kind)) {
+    return undefined;
+  }
+  if (measurement.distinctKeys === 0) {
+    return undefined;
+  }
+  if (measurement.rowsPerKey <= FAN_OUT_RATIO_THRESHOLD) {
+    return undefined;
+  }
 
   return `Declared '${kind}', but the right key has about ${measurement.rowsPerKey.toFixed(2)} rows per value across ${measurement.sampledRows.toLocaleString()} sampled rows. Joined results may fan out and inflate sums.`;
 };

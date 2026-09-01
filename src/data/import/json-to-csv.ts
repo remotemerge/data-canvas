@@ -26,23 +26,31 @@ const isRecord = (value: unknown): value is JsonRecord =>
 const parseRecords = (text: string): JsonRecord[] => {
   const trimmed = text.trim();
 
-  if (trimmed.length === 0) throw new JsonShapeError();
+  if (trimmed.length === 0) {
+    throw new JsonShapeError();
+  }
 
   try {
     const parsed: unknown = JSON.parse(trimmed);
 
     if (Array.isArray(parsed)) {
-      if (!parsed.every(isRecord)) throw new JsonShapeError();
+      if (!parsed.every(isRecord)) {
+        throw new JsonShapeError();
+      }
 
       return parsed;
     }
 
     // Treat a single object as a one-row relation.
-    if (isRecord(parsed)) return [parsed];
+    if (isRecord(parsed)) {
+      return [parsed];
+    }
 
     throw new JsonShapeError();
   } catch (error) {
-    if (error instanceof JsonShapeError) throw error;
+    if (error instanceof JsonShapeError) {
+      throw error;
+    }
 
     // If the whole document is not JSON, try newline-delimited records.
     const records: JsonRecord[] = [];
@@ -51,7 +59,9 @@ const parseRecords = (text: string): JsonRecord[] => {
       const candidate = line.trim();
 
       // Ignore blank lines between NDJSON records.
-      if (candidate.length === 0) continue;
+      if (candidate.length === 0) {
+        continue;
+      }
 
       let parsedLine: unknown;
 
@@ -61,12 +71,16 @@ const parseRecords = (text: string): JsonRecord[] => {
         throw new JsonShapeError();
       }
 
-      if (!isRecord(parsedLine)) throw new JsonShapeError();
+      if (!isRecord(parsedLine)) {
+        throw new JsonShapeError();
+      }
 
       records.push(parsedLine);
     }
 
-    if (records.length === 0) throw new JsonShapeError();
+    if (records.length === 0) {
+      throw new JsonShapeError();
+    }
 
     return records;
   }
@@ -81,7 +95,9 @@ const collectColumns = (records: readonly JsonRecord[]): string[] => {
       columns.add(key);
 
       // Bound output before converting it to an in-memory CSV.
-      if (columns.size > MAX_COLUMN_COUNT) throw new JsonShapeError();
+      if (columns.size > MAX_COLUMN_COUNT) {
+        throw new JsonShapeError();
+      }
     }
   }
 
@@ -91,7 +107,9 @@ const collectColumns = (records: readonly JsonRecord[]): string[] => {
 // Encodes one JSON value as a quoted CSV field.
 const csvField = (value: unknown): string => {
   // Empty fields become NULL when DuckDB reads the CSV.
-  if (value === null || value === undefined) return '';
+  if (value === null || value === undefined) {
+    return '';
+  }
 
   const text =
     typeof value === 'object' ? JSON.stringify(value) : typeof value === 'bigint' ? value.toString() : String(value);
@@ -104,7 +122,9 @@ export const jsonToCsvBytes = (text: string): Uint8Array => {
   const records = parseRecords(text);
   const columns = collectColumns(records);
 
-  if (columns.length === 0) throw new JsonShapeError();
+  if (columns.length === 0) {
+    throw new JsonShapeError();
+  }
 
   const lines: string[] = [columns.map(csvField).join(',')];
 

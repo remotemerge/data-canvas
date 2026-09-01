@@ -147,7 +147,9 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
   let queue: Promise<unknown> = Promise.resolve();
 
   const run = async (action: ApplicationAction, context: ActionContext): Promise<Result<ActionResult, DomainError>> => {
-    if (isAborted(context)) return err(abortedError());
+    if (isAborted(context)) {
+      return err(abortedError());
+    }
 
     const workspace = deps.store.getState().workspace;
 
@@ -164,10 +166,14 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     const outcome = await runHandler(workspace, action, { dataEngine: deps.dataEngine, actor: context.actor });
 
-    if (!outcome.ok) return outcome;
+    if (!outcome.ok) {
+      return outcome;
+    }
 
     // Handlers may await the engine. Check cancellation again before committing their result.
-    if (isAborted(context)) return err(abortedError());
+    if (isAborted(context)) {
+      return err(abortedError());
+    }
 
     const actionId = createEntityId(ID_PREFIX.action);
     const revision = workspace.revision + 1;

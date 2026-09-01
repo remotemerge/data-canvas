@@ -20,7 +20,9 @@ export const reachableDatasets = (workspace: Workspace, anchorId: EntityId): Dat
       for (const relationship of relationships) {
         const neighbour = relatedDatasetId(relationship, datasetId);
 
-        if (neighbour === undefined || visited.has(neighbour)) continue;
+        if (neighbour === undefined || visited.has(neighbour)) {
+          continue;
+        }
 
         visited.add(neighbour);
 

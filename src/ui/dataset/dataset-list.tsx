@@ -17,7 +17,9 @@ export const DatasetList = ({ onError }: { onError: (error: DomainError) => void
 
   const select = async (dataset: Dataset): Promise<void> => {
     const result = await actions.setActiveDataset({ datasetId: dataset.id });
-    if (!result.ok) onError(result.error);
+    if (!result.ok) {
+      onError(result.error);
+    }
   };
 
   const remove = async (dataset: Dataset, cascade: boolean): Promise<void> => {
@@ -38,7 +40,9 @@ export const DatasetList = ({ onError }: { onError: (error: DomainError) => void
     onError(result.error);
   };
 
-  if (datasetList.length === 0) return <p className="workspace__empty">No datasets yet.</p>;
+  if (datasetList.length === 0) {
+    return <p className="workspace__empty">No datasets yet.</p>;
+  }
 
   return (
     <ul className="dataset-list">

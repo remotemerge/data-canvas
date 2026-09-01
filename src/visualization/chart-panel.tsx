@@ -55,12 +55,16 @@ const usePlotWidth = (ref: React.RefObject<HTMLDivElement | null>): number | und
   useEffect(() => {
     const element = ref.current;
 
-    if (element === null) return;
+    if (element === null) {
+      return;
+    }
 
     const observer = new ResizeObserver((entries) => {
       const measured = entries[0]?.contentRect.width ?? 0;
 
-      if (measured <= 0) return;
+      if (measured <= 0) {
+        return;
+      }
 
       const quantised = Math.max(Math.round(measured / PLOT_WIDTH_QUANTUM) * PLOT_WIDTH_QUANTUM, PLOT_WIDTH_QUANTUM);
 
@@ -99,13 +103,19 @@ export const ChartPanel = ({
     // Keep the previous result visible while the next query runs.
     setLoading(true);
     void executeVisualizationQuery(visualization, workspace, undefined, controller.signal, plotWidth).then((next) => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        return;
+      }
       // Ignore superseded results so they cannot blank the chart.
-      if (next.ok && next.value.stale === true) return;
+      if (next.ok && next.value.stale === true) {
+        return;
+      }
       if (next.ok) {
         setResult(next.value);
         setError(null);
-      } else setError(next.error);
+      } else {
+        setError(next.error);
+      }
       setLoading(false);
     });
     return () => {
@@ -116,7 +126,9 @@ export const ChartPanel = ({
 
   const remove = async () => {
     const outcome = await actions.removeVisualization({ visualizationId: visualization.id });
-    if (!outcome.ok) onError(outcome.error);
+    if (!outcome.ok) {
+      onError(outcome.error);
+    }
   };
 
   return (

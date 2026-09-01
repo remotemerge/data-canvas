@@ -80,7 +80,9 @@ const imports = (source: string): string[] =>
 
 const sourceFiles = async (pattern: string): Promise<{ path: string; source: string }[]> => {
   const files: { path: string; source: string }[] = [];
-  for await (const path of new Bun.Glob(pattern).scan('.')) files.push({ path, source: await Bun.file(path).text() });
+  for await (const path of new Bun.Glob(pattern).scan('.')) {
+    files.push({ path, source: await Bun.file(path).text() });
+  }
   return files;
 };
 

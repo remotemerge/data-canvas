@@ -21,11 +21,15 @@ export const UndoRedoControls = ({ onError }: { onError: (error: DomainError) =>
   const canRedo = redoStack.length > 0;
   const run = async (kind: 'undo' | 'redo') => {
     const result = await actions[kind]();
-    if (!result.ok) onError(result.error);
+    if (!result.ok) {
+      onError(result.error);
+    }
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (acceptsText(event.target) || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
+      if (acceptsText(event.target) || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') {
+        return;
+      }
       event.preventDefault();
       void run(event.shiftKey ? 'redo' : 'undo');
     };

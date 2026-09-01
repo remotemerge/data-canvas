@@ -82,7 +82,9 @@ export const compileDerivedExpression = (
       // Inline derived definitions because sibling SELECT aliases are not valid in GROUP BY.
       const derived = context.derivedColumns[expression.columnId];
 
-      if (derived !== undefined) return compileDerivedExpression(derived.expression, context, depth + 1);
+      if (derived !== undefined) {
+        return compileDerivedExpression(derived.expression, context, depth + 1);
+      }
 
       const resolved = context.resolve(expression.columnId);
 
@@ -97,11 +99,15 @@ export const compileDerivedExpression = (
     case 'arithmetic': {
       const left = compileDerivedExpression(expression.left, context, depth + 1);
 
-      if (!left.ok) return left;
+      if (!left.ok) {
+        return left;
+      }
 
       const right = compileDerivedExpression(expression.right, context, depth + 1);
 
-      if (!right.ok) return right;
+      if (!right.ok) {
+        return right;
+      }
 
       const operator = ARITHMETIC_SQL[expression.op];
 
@@ -127,15 +133,21 @@ export const compileDerivedExpression = (
       for (const arm of expression.when) {
         const left = compileDerivedExpression(arm.left, context, depth + 1);
 
-        if (!left.ok) return left;
+        if (!left.ok) {
+          return left;
+        }
 
         const right = compileDerivedExpression(arm.right, context, depth + 1);
 
-        if (!right.ok) return right;
+        if (!right.ok) {
+          return right;
+        }
 
         const armResult = compileDerivedExpression(arm.result, context, depth + 1);
 
-        if (!armResult.ok) return armResult;
+        if (!armResult.ok) {
+          return armResult;
+        }
 
         const operator = COMPARISON_SQL[arm.operator];
 
@@ -157,7 +169,9 @@ export const compileDerivedExpression = (
 
       const otherwise = compileDerivedExpression(expression.otherwise, context, depth + 1);
 
-      if (!otherwise.ok) return otherwise;
+      if (!otherwise.ok) {
+        return otherwise;
+      }
 
       return ok({
         sql: `CASE ${fragments.join(' ')} ELSE ${otherwise.value.sql} END`,
@@ -168,7 +182,9 @@ export const compileDerivedExpression = (
     case 'datePart': {
       const resolved = context.resolve(expression.columnId);
 
-      if (resolved === undefined) return err(missingColumn(expression.columnId));
+      if (resolved === undefined) {
+        return err(missingColumn(expression.columnId));
+      }
 
       const part = DATE_PART_SQL[expression.part];
 
@@ -182,7 +198,9 @@ export const compileDerivedExpression = (
     case 'bin': {
       const resolved = context.resolve(expression.columnId);
 
-      if (resolved === undefined) return err(missingColumn(expression.columnId));
+      if (resolved === undefined) {
+        return err(missingColumn(expression.columnId));
+      }
 
       const bin = compileBinStrategy(expression.strategy, resolved.sql, context.rangeFor?.(expression.columnId));
 
@@ -192,7 +210,9 @@ export const compileDerivedExpression = (
     case 'cast': {
       const operand = compileDerivedExpression(expression.expr, context, depth + 1);
 
-      if (!operand.ok) return operand;
+      if (!operand.ok) {
+        return operand;
+      }
 
       const target = CAST_SQL[expression.to];
 

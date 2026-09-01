@@ -7,8 +7,9 @@ describe('compileAggregate', () => {
     const numeric = compilerDataset.columns[1];
     expect(compileAggregate('count')).toEqual({ ok: true, value: 'COUNT(*)' });
     expect(compileAggregate('count_distinct', numeric)).toEqual({ ok: true, value: 'COUNT(DISTINCT "c1")' });
-    for (const aggregate of ['sum', 'avg', 'min', 'max', 'median'] as const)
+    for (const aggregate of ['sum', 'avg', 'min', 'max', 'median'] as const) {
       expect(compileAggregate(aggregate, numeric).ok).toBe(true);
+    }
   });
 
   test('rejects numeric aggregates on text', () => {

@@ -17,11 +17,15 @@ const convertBigInt = (value: bigint): CellValue =>
 
 // Normalizes DuckDB temporal values to a `Date`, or `null` when the value is invalid.
 const toDate = (value: unknown): Date | null => {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
 
   const epochMs = typeof value === 'bigint' ? Number(value) : value;
 
-  if (typeof epochMs !== 'number' || !Number.isFinite(epochMs)) return null;
+  if (typeof epochMs !== 'number' || !Number.isFinite(epochMs)) {
+    return null;
+  }
 
   const date = new Date(epochMs);
 
@@ -46,18 +50,28 @@ const decodeHugeInt = (view: ArrayBufferView): bigint => {
 
 // Converts one Arrow cell to a JSON-safe scalar.
 export const convertArrowValue = (value: unknown): CellValue => {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined) {
+    return null;
+  }
 
   const valueType = typeof value;
 
-  if (valueType === 'boolean' || valueType === 'string') return value as boolean | string;
+  if (valueType === 'boolean' || valueType === 'string') {
+    return value as boolean | string;
+  }
 
   // NaN and infinities have no JSON representation or useful axis position.
-  if (valueType === 'number') return Number.isFinite(value) ? (value as number) : null;
+  if (valueType === 'number') {
+    return Number.isFinite(value) ? (value as number) : null;
+  }
 
-  if (valueType === 'bigint') return convertBigInt(value as bigint);
+  if (valueType === 'bigint') {
+    return convertBigInt(value as bigint);
+  }
 
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
 
   if (ArrayBuffer.isView(value)) {
     if (value.byteLength === 16) {
@@ -81,11 +95,15 @@ export const convertArrowValue = (value: unknown): CellValue => {
 // Converts a cell using its logical type, including temporal epoch values.
 export const convertArrowCell = (value: unknown, logicalType: string): CellValue => {
   if (logicalType === 'date' || logicalType === 'timestamp') {
-    if (value === null || value === undefined) return null;
+    if (value === null || value === undefined) {
+      return null;
+    }
 
     const date = toDate(value);
 
-    if (date === null) return convertArrowValue(value);
+    if (date === null) {
+      return convertArrowValue(value);
+    }
 
     return logicalType === 'date' ? toDateString(date) : date.toISOString();
   }
@@ -126,7 +144,9 @@ export const readArrowRows = (
 
 // Reads a scalar from a one-row, one-column result.
 export const readScalarCount = (table: ArrowRowSource): number => {
-  if (table.numRows === 0) return 0;
+  if (table.numRows === 0) {
+    return 0;
+  }
 
   const value = convertArrowValue(table.getChildAt(0)?.get(0));
 

@@ -61,7 +61,9 @@ const buildFromClause = (
 ): Result<{ sql: string; resolve: ColumnReferenceResolver }, DomainError> => {
   const aliases = new Map<EntityId, string>();
 
-  for (const [index, datasetId] of plan.datasetIds.entries()) aliases.set(datasetId, joinAlias(index));
+  for (const [index, datasetId] of plan.datasetIds.entries()) {
+    aliases.set(datasetId, joinAlias(index));
+  }
 
   const datasetFor = (datasetId: EntityId): QueryDataset | undefined =>
     datasets.find((candidate) => candidate.id === datasetId);
@@ -69,7 +71,9 @@ const buildFromClause = (
   const anchorId = plan.datasetIds[0] as EntityId;
   const anchor = datasetFor(anchorId);
 
-  if (anchor === undefined) return err(domainError('DATASET_NOT_FOUND', 'The query anchor dataset was not resolved.'));
+  if (anchor === undefined) {
+    return err(domainError('DATASET_NOT_FOUND', 'The query anchor dataset was not resolved.'));
+  }
 
   // Keep single-dataset queries unaliased; aliases are needed only when relations are joined.
   const unjoined = plan.steps.length === 0;
@@ -84,7 +88,9 @@ const buildFromClause = (
       const dataset = datasetFor(datasetId);
       const column = dataset?.columns.find((candidate) => candidate.id === columnId);
 
-      if (dataset !== undefined && column !== undefined) return { sql: referenceFor(dataset, column), column };
+      if (dataset !== undefined && column !== undefined) {
+        return { sql: referenceFor(dataset, column), column };
+      }
     }
 
     return undefined;
@@ -111,8 +117,12 @@ const buildFromClause = (
       const left = resolve(pair.leftColumnId);
       const right = resolve(pair.rightColumnId);
 
-      if (left === undefined) return err(missingColumn(pair.leftColumnId));
-      if (right === undefined) return err(missingColumn(pair.rightColumnId));
+      if (left === undefined) {
+        return err(missingColumn(pair.leftColumnId));
+      }
+      if (right === undefined) {
+        return err(missingColumn(pair.rightColumnId));
+      }
 
       conditions.push(`${left.sql} = ${right.sql}`);
     }
@@ -182,11 +192,15 @@ export const compileAnalysisQuery = (
 
   const plan = resolveJoinPath(anchor.id, orderedDatasetIds, relationships, query.relationshipIds);
 
-  if (!plan.ok) return plan;
+  if (!plan.ok) {
+    return plan;
+  }
 
   const from = buildFromClause(plan.value, datasets);
 
-  if (!from.ok) return from;
+  if (!from.ok) {
+    return from;
+  }
 
   const { resolve } = from.value;
 
@@ -210,7 +224,9 @@ export const compileAnalysisQuery = (
 
     if (derived !== undefined) {
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
-      if (!compiled.ok) return compiled;
+      if (!compiled.ok) {
+        return compiled;
+      }
       select.push(compiled.value.sql);
       groupBySelectPosition();
       dimensionParameters.push(...compiled.value.parameters);
@@ -219,7 +235,9 @@ export const compileAnalysisQuery = (
     }
 
     const resolved = resolve(columnId);
-    if (resolved === undefined) return err(missingColumn(columnId));
+    if (resolved === undefined) {
+      return err(missingColumn(columnId));
+    }
     select.push(resolved.sql);
     groupBySelectPosition();
     resultColumns.push({
@@ -231,10 +249,14 @@ export const compileAnalysisQuery = (
 
   for (const bin of query.binnedDimensions ?? []) {
     const resolved = resolve(bin.columnId);
-    if (resolved === undefined) return err(missingColumn(bin.columnId));
+    if (resolved === undefined) {
+      return err(missingColumn(bin.columnId));
+    }
 
     const compiled = compileBinStrategy(bin.strategy, resolved.sql, bin.range);
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
 
     /*
      * A quantile bin compiles to `NTILE(...) OVER (...)`. SQL forbids a window function in GROUP BY
@@ -268,7 +290,9 @@ export const compileAnalysisQuery = (
 
     if (derived !== undefined) {
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
-      if (!compiled.ok) return compiled;
+      if (!compiled.ok) {
+        return compiled;
+      }
       reference = compiled.value.sql;
       dimensionParameters.push(...compiled.value.parameters);
       // Preserve the derived type so aggregate validation matches physical columns.
@@ -282,21 +306,33 @@ export const compileAnalysisQuery = (
       };
     } else if (measure.columnId !== undefined) {
       const resolved = resolve(measure.columnId);
-      if (resolved === undefined) return err(missingColumn(measure.columnId));
+      if (resolved === undefined) {
+        return err(missingColumn(measure.columnId));
+      }
       reference = resolved.sql;
       column = resolved.column;
     }
 
     const aggregate = compileAggregate(measure.aggregate, column, reference);
-    if (!aggregate.ok) return aggregate;
+    if (!aggregate.ok) {
+      return aggregate;
+    }
 
-    const modified = compileMetricModifier(measure.modifier, aggregate.value, resolve);
-    if (!modified.ok) return modified;
+    // Time comparisons replace the query with a date spine below, so retain the base aggregate here.
+    const modified =
+      measure.modifier?.kind === 'timeComparison'
+        ? ok({ sql: aggregate.value, parameters: [] })
+        : compileMetricModifier(measure.modifier, aggregate.value, resolve);
+    if (!modified.ok) {
+      return modified;
+    }
 
     const alias = `m${index}`;
     select.push(`${modified.value.sql} AS ${quoteIdentifier(alias)}`);
     dimensionParameters.push(...modified.value.parameters);
-    if (measure.alias !== undefined) measureAliases.set(measure.alias, alias);
+    if (measure.alias !== undefined) {
+      measureAliases.set(measure.alias, alias);
+    }
     resultColumns.push({
       key: measure.alias ?? alias,
       name: measure.alias ?? measure.aggregate,
@@ -307,14 +343,20 @@ export const compileAnalysisQuery = (
   // Box plots return the five-number summary consumed by ECharts.
   if (query.distribution !== undefined) {
     const target = resolve(query.distribution.columnId);
-    if (target === undefined) return err(missingColumn(query.distribution.columnId));
+    if (target === undefined) {
+      return err(missingColumn(query.distribution.columnId));
+    }
 
     if (query.distribution.categoryColumnId !== undefined) {
       const category = resolve(query.distribution.categoryColumnId);
-      if (category === undefined) return err(missingColumn(query.distribution.categoryColumnId));
+      if (category === undefined) {
+        return err(missingColumn(query.distribution.categoryColumnId));
+      }
       select.unshift(category.sql);
       // The category shifts existing SELECT positions by one.
-      for (const [index, position] of groupBy.entries()) groupBy[index] = `${Number(position) + 1}`;
+      for (const [index, position] of groupBy.entries()) {
+        groupBy[index] = `${Number(position) + 1}`;
+      }
       groupBy.unshift('1');
       resultColumns.unshift({
         key: category.column.id,
@@ -342,7 +384,9 @@ export const compileAnalysisQuery = (
     // A bare projection selects only the anchor's columns.
     for (const column of anchor.columns) {
       const resolved = resolve(column.id);
-      if (resolved === undefined) return err(missingColumn(column.id));
+      if (resolved === undefined) {
+        return err(missingColumn(column.id));
+      }
       select.push(resolved.sql);
       resultColumns.push({ key: column.id, name: column.name, logicalType: column.logicalType });
     }
@@ -352,7 +396,9 @@ export const compileAnalysisQuery = (
   const where: string[] = [];
   for (const filter of query.filters) {
     const compiled = compileFilterExpression(filter, resolve);
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
     where.push(`(${compiled.value.sql})`);
     whereParameters.push(...compiled.value.parameters);
   }
@@ -363,11 +409,15 @@ export const compileAnalysisQuery = (
   if (comparison !== undefined) {
     const resolved = comparison.columnId === undefined ? undefined : resolve(comparison.columnId);
 
-    if (comparison.columnId !== undefined && resolved === undefined) return err(missingColumn(comparison.columnId));
+    if (comparison.columnId !== undefined && resolved === undefined) {
+      return err(missingColumn(comparison.columnId));
+    }
 
     const aggregate = compileAggregate(comparison.aggregate, resolved?.column, resolved?.sql);
 
-    if (!aggregate.ok) return aggregate;
+    if (!aggregate.ok) {
+      return aggregate;
+    }
 
     const spine = compileTimeSpine({
       modifier: comparison.modifier as Extract<NonNullable<typeof comparison.modifier>, { kind: 'timeComparison' }>,
@@ -379,7 +429,9 @@ export const compileAnalysisQuery = (
       limit: Math.min(Math.max(Math.trunc(query.limit ?? DEFAULT_QUERY_LIMIT), 1), MAX_QUERY_LIMIT),
     });
 
-    if (!spine.ok) return spine;
+    if (!spine.ok) {
+      return spine;
+    }
 
     return ok({
       sql: spine.value.sql,
@@ -398,7 +450,9 @@ export const compileAnalysisQuery = (
   for (const sort of query.orderBy ?? []) {
     if (sort.columnId !== undefined) {
       const resolved = resolve(sort.columnId);
-      if (resolved === undefined) return err(missingColumn(sort.columnId));
+      if (resolved === undefined) {
+        return err(missingColumn(sort.columnId));
+      }
       orderBy.push(`${resolved.sql} ${sort.direction.toUpperCase()}`);
     } else if (sort.measureAlias !== undefined && measureAliases.has(sort.measureAlias)) {
       orderBy.push(
@@ -455,8 +509,12 @@ export const compileAnalysisQuery = (
 
 // Collects column IDs named by a filter tree.
 function collectFilterColumnIds(expression: AnalysisQuery['filters'][number]): EntityId[] {
-  if (expression.kind === 'comparison') return [expression.columnId];
-  if (expression.kind === 'not') return collectFilterColumnIds(expression.operand);
+  if (expression.kind === 'comparison') {
+    return [expression.columnId];
+  }
+  if (expression.kind === 'not') {
+    return collectFilterColumnIds(expression.operand);
+  }
 
   return expression.operands.flatMap(collectFilterColumnIds);
 }

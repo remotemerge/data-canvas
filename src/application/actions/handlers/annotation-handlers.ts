@@ -13,7 +13,9 @@ export const MAX_ANNOTATION_TEXT_LENGTH = 280;
 export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace, payload, deps) => {
   const visualization = resolveVisualization(workspace, payload.visualizationId);
 
-  if (!visualization.ok) return visualization;
+  if (!visualization.ok) {
+    return visualization;
+  }
 
   const text = payload.text.trim();
 
@@ -47,7 +49,9 @@ export const handleAddAnnotation: ActionHandler<AddAnnotationInput> = (workspace
 export const handleRemoveAnnotation: ActionHandler<RemoveAnnotationInput> = (workspace, payload) => {
   const annotation = resolveAnnotation(workspace, payload.annotationId);
 
-  if (!annotation.ok) return annotation;
+  if (!annotation.ok) {
+    return annotation;
+  }
 
   return ok({
     workspace: { ...workspace, annotations: omitKeys(workspace.annotations, [annotation.value.id]) },

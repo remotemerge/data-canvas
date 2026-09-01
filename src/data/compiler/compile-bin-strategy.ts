@@ -30,12 +30,16 @@ export const compileBinStrategy = (
 ): Result<CompiledBin, DomainError> => {
   switch (strategy.kind) {
     case 'equalWidth': {
-      if (range === undefined) return err(missingRange(strategy.kind));
+      if (range === undefined) {
+        return err(missingRange(strategy.kind));
+      }
 
       const width = (range.max - range.min) / strategy.binCount;
 
       // A constant column has no range to divide; place every row in one bucket.
-      if (!(width > 0)) return ok({ sql: '?', parameters: [range.min] });
+      if (!(width > 0)) {
+        return ok({ sql: '?', parameters: [range.min] });
+      }
 
       return ok({
         sql: `(FLOOR((${reference} - ?) / ?) * ? + ?)`,
@@ -44,7 +48,9 @@ export const compileBinStrategy = (
     }
 
     case 'equalWidthOf': {
-      if (range === undefined) return err(missingRange(strategy.kind));
+      if (range === undefined) {
+        return err(missingRange(strategy.kind));
+      }
 
       const buckets = Math.ceil((range.max - range.min) / strategy.width);
 

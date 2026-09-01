@@ -39,7 +39,9 @@ export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvas
       { actor: 'agent', expectedRevision: input.expectedRevision as number },
     );
 
-    if (!result.ok) return failure(result.error);
+    if (!result.ok) {
+      return failure(result.error);
+    }
 
     return success({
       revision: result.value.revision,

@@ -48,7 +48,9 @@ export const RelationshipGraph = ({ onError }: { onError: (error: DomainError) =
 
   const remove = async (relationshipId: string): Promise<void> => {
     const result = await actions.removeRelationship({ relationshipId });
-    if (!result.ok) onError(result.error);
+    if (!result.ok) {
+      onError(result.error);
+    }
   };
 
   if (nodes.length === 0) {

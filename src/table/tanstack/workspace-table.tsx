@@ -27,7 +27,9 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
   const filters = useMemo(() => {
     const stored = Object.values(filterRecord).filter((filter) => filter.datasetId === dataset.id);
     const predicate = Object.values(selectionRecord).find((selection) => selection.datasetId === dataset.id)?.predicate;
-    if (predicate?.kind !== 'comparison') return stored;
+    if (predicate?.kind !== 'comparison') {
+      return stored;
+    }
     return [
       ...stored,
       {
@@ -119,7 +121,9 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
             <tbody style={{ height: virtualizer.getTotalSize() }}>
               {virtualRows.map((virtualRow) => {
                 const row = rows[virtualRow.index - offset];
-                if (row === undefined) return null;
+                if (row === undefined) {
+                  return null;
+                }
                 return (
                   <tr key={virtualRow.key} style={{ transform: `translateY(${virtualRow.start}px)` }}>
                     {row.getAllCells().map((cell, index) => {

@@ -189,7 +189,9 @@ export const importThroughDispatcher = async (
 
   const datasetId = started.ok ? started.value.changedEntityIds[0] : undefined;
 
-  if (datasetId === undefined) return { datasetId, result: started };
+  if (datasetId === undefined) {
+    return { datasetId, result: started };
+  }
 
   return {
     datasetId,

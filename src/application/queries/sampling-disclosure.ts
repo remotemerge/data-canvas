@@ -80,14 +80,18 @@ export const foldOtherBucket = (
     const measureIndex = index - measureStartIndex;
     const total = populationTotals[measureIndex];
 
-    if (additiveByMeasure[measureIndex] !== true || typeof total !== 'number') continue;
+    if (additiveByMeasure[measureIndex] !== true || typeof total !== 'number') {
+      continue;
+    }
 
     let retainedSum = 0;
 
     for (const row of rows) {
       const value = row[index];
 
-      if (typeof value === 'number') retainedSum += value;
+      if (typeof value === 'number') {
+        retainedSum += value;
+      }
     }
 
     // Clamp floating-point residue so `Other` cannot become a negative bar.

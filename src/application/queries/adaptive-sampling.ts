@@ -63,13 +63,17 @@ const PERIODS_PER_YEAR: Readonly<Record<TemporalUnit, number>> = {
 export const widenTemporalUnit = (from: TemporalUnit, estimatedRows: number, budget: number): TemporalUnit => {
   const startIndex = TEMPORAL_UNITS.indexOf(from);
 
-  if (startIndex < 0) return from;
+  if (startIndex < 0) {
+    return from;
+  }
 
   for (let index = startIndex + 1; index < TEMPORAL_UNITS.length; index += 1) {
     const candidate = TEMPORAL_UNITS[index] as TemporalUnit;
     const ratio = PERIODS_PER_YEAR[candidate] / PERIODS_PER_YEAR[from];
 
-    if (estimatedRows * ratio <= budget) return candidate;
+    if (estimatedRows * ratio <= budget) {
+      return candidate;
+    }
   }
 
   return from;
@@ -103,7 +107,9 @@ export const planSampling = ({
   const exact: SamplingPlan = { query, disclosure: null };
 
   // Headline values remain exact, and neither kind has an axis to widen.
-  if (requiresExactResult(kind)) return exact;
+  if (requiresExactResult(kind)) {
+    return exact;
+  }
 
   const temporalBin = (query.binnedDimensions ?? []).find((bin) => bin.strategy.kind === 'temporal');
 
@@ -131,7 +137,9 @@ export const planSampling = ({
   }
 
   // From here, every strategy loses information. Leave results that fit the performance budget exact.
-  if (estimatedRows <= budget) return exact;
+  if (estimatedRows <= budget) {
+    return exact;
+  }
 
   // Base the fraction on the compiler's maximum result size, not an uncapped display budget.
   const deliverable = Math.min(budget, MAX_QUERY_LIMIT);

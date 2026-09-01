@@ -50,7 +50,9 @@ export const DerivedColumnEditor = ({
       return dateColumn === '' ? null : { kind: 'datePart', part, columnId: dateColumn };
     }
 
-    if (left === '' || right === '') return null;
+    if (left === '' || right === '') {
+      return null;
+    }
 
     return {
       kind: 'arithmetic',
@@ -67,11 +69,15 @@ export const DerivedColumnEditor = ({
       : validateDerivedColumn(dataset, { name, expression }, derivedColumns);
 
   const submit = (): void => {
-    if (expression === null || validation === null || !validation.ok) return;
+    if (expression === null || validation === null || !validation.ok) {
+      return;
+    }
 
     void createDerivedColumn({ datasetId: dataset.id, name, expression }).then((result) => {
       onError(result.ok ? null : result.error);
-      if (result.ok) setName('');
+      if (result.ok) {
+        setName('');
+      }
     });
   };
 

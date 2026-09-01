@@ -25,7 +25,9 @@ const readyDatasetCount = (): number =>
     .length;
 
 export const installTestHooks = (deps: ToolDependencies): void => {
-  if (!import.meta.env.DEV) return;
+  if (!import.meta.env.DEV) {
+    return;
+  }
   installNetworkRecorder();
   const tools = createToolDefinitions(deps);
   const availableTools = (): string[] =>
@@ -46,7 +48,9 @@ export const installTestHooks = (deps: ToolDependencies): void => {
     tools: () => availableTools(),
     executeTool: async (name, input) => {
       const tool = tools.find((candidate) => candidate.name === name);
-      if (tool === undefined) throw new Error(`Unknown Data Canvas tool: ${name}`);
+      if (tool === undefined) {
+        throw new Error(`Unknown Data Canvas tool: ${name}`);
+      }
       return executeTool(tool, input);
     },
   };

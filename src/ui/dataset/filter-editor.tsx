@@ -26,7 +26,9 @@ const FILTER_OPERATOR_LABEL: Readonly<Record<FilterOperator, string>> = {
 };
 
 const parseValue = (raw: string, operator: FilterOperator, logicalType: string): unknown => {
-  if (NULLARY_FILTER_OPERATORS.includes(operator)) return undefined;
+  if (NULLARY_FILTER_OPERATORS.includes(operator)) {
+    return undefined;
+  }
   const entries =
     operator === 'between' || operator === 'in' || operator === 'not_in'
       ? raw.split(',').map((part) => part.trim())
@@ -82,7 +84,9 @@ export const FilterEditor = ({
       className="filter-editor"
       onSubmit={(event) => {
         event.preventDefault();
-        if (column === undefined) return;
+        if (column === undefined) {
+          return;
+        }
         const form = new FormData(event.currentTarget);
         const operator = String(form.get('operator')) as FilterOperator;
         const value = parseValue(String(form.get('value') ?? ''), operator, column.logicalType);

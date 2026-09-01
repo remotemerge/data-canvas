@@ -30,11 +30,15 @@ const validateModifier = (
   datasetId: EntityId,
   modifier: MetricModifier,
 ): Result<void, DomainError> => {
-  if (modifier.kind === 'none' || modifier.kind === 'percentOfTotal') return ok(undefined);
+  if (modifier.kind === 'none' || modifier.kind === 'percentOfTotal') {
+    return ok(undefined);
+  }
 
   const dataset = resolveDataset(workspace, datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   if (modifier.kind === 'runningTotal') {
     const column = resolveColumn(dataset.value, modifier.orderBy);
@@ -44,7 +48,9 @@ const validateModifier = (
 
   const column = resolveColumn(dataset.value, modifier.dateColumnId);
 
-  if (!column.ok) return column;
+  if (!column.ok) {
+    return column;
+  }
 
   if (!isTemporalType(column.value.logicalType)) {
     return err(
@@ -84,7 +90,9 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
 
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   if (payload.aggregate === 'count') {
     if (payload.columnId !== undefined) {
@@ -105,7 +113,9 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
 
     const column = resolveColumn(dataset.value, payload.columnId);
 
-    if (!column.ok) return column;
+    if (!column.ok) {
+      return column;
+    }
 
     if (NUMERIC_ONLY_AGGREGATES.has(payload.aggregate) && !isNumericType(column.value.logicalType)) {
       return err(
@@ -121,7 +131,9 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
   for (const filterId of payload.filters ?? []) {
     const filter = resolveFilter(workspace, filterId);
 
-    if (!filter.ok) return filter;
+    if (!filter.ok) {
+      return filter;
+    }
 
     if (filter.value.datasetId !== dataset.value.id) {
       return err(
@@ -136,7 +148,9 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
   if (payload.modifier !== undefined) {
     const modifier = validateModifier(workspace, dataset.value.id, payload.modifier);
 
-    if (!modifier.ok) return modifier;
+    if (!modifier.ok) {
+      return modifier;
+    }
   }
 
   const metric: Metric = {
@@ -167,7 +181,9 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
 export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, payload) => {
   const existing = resolveMetric(workspace, payload.metricId);
 
-  if (!existing.ok) return existing;
+  if (!existing.ok) {
+    return existing;
+  }
 
   const name = payload.name === undefined ? existing.value.name : payload.name.trim();
 
@@ -181,7 +197,9 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
 
   const dataset = resolveDataset(workspace, existing.value.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const aggregate = payload.aggregate ?? existing.value.aggregate;
   const columnId = payload.columnId ?? existing.value.columnId;
@@ -199,7 +217,9 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
 
     const column = resolveColumn(dataset.value, columnId);
 
-    if (!column.ok) return column;
+    if (!column.ok) {
+      return column;
+    }
 
     if (NUMERIC_ONLY_AGGREGATES.has(aggregate) && !isNumericType(column.value.logicalType)) {
       return err(
@@ -215,7 +235,9 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
   for (const filterId of payload.filters ?? existing.value.filters) {
     const filter = resolveFilter(workspace, filterId);
 
-    if (!filter.ok) return filter;
+    if (!filter.ok) {
+      return filter;
+    }
 
     if (filter.value.datasetId !== dataset.value.id) {
       return err(
@@ -230,7 +252,9 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
   if (payload.modifier !== undefined) {
     const modifier = validateModifier(workspace, existing.value.datasetId, payload.modifier);
 
-    if (!modifier.ok) return modifier;
+    if (!modifier.ok) {
+      return modifier;
+    }
   }
 
   const metric: Metric = {
@@ -253,7 +277,9 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
 export const handleRemoveMetric: ActionHandler<RemoveMetricInput> = (workspace, payload) => {
   const metric = resolveMetric(workspace, payload.metricId);
 
-  if (!metric.ok) return metric;
+  if (!metric.ok) {
+    return metric;
+  }
 
   return ok({
     workspace: { ...workspace, metrics: omitKeys(workspace.metrics, [metric.value.id]) },

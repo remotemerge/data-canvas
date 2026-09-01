@@ -7,8 +7,12 @@ export const asChromeHost = (host: ModelContext): ChromeModelContext => host as 
 
 export const readInputSchema = (tool: RegisteredTool): object | null => {
   const schema = tool.inputSchema;
-  if (!schema) return null;
-  if (typeof schema !== 'string') return schema;
+  if (!schema) {
+    return null;
+  }
+  if (typeof schema !== 'string') {
+    return schema;
+  }
 
   try {
     const parsed: unknown = JSON.parse(schema);

@@ -17,7 +17,9 @@ export const createGetColumnStatisticsTool = (deps: ToolDependencies): DataCanva
     const workspace = deps.getWorkspace();
     const dataset = workspace.datasets[datasetId];
 
-    if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
+    if (!dataset) {
+      return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
+    }
 
     if (!dataset.columns.some((column) => column.id === columnId)) {
       return invalidEntity('COLUMN_NOT_FOUND', `Column '${columnId}' does not exist in that dataset.`);
@@ -29,7 +31,9 @@ export const createGetColumnStatisticsTool = (deps: ToolDependencies): DataCanva
       ...(input.topValueLimit === undefined ? {} : { topValueLimit: input.topValueLimit as number }),
     });
 
-    if (!result.ok) return failure(result.error);
+    if (!result.ok) {
+      return failure(result.error);
+    }
 
     const profile = result.value;
 

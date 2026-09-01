@@ -30,10 +30,15 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
     setFailed(false);
 
     void getColumnProfile(registeredDataEngine, workspaceRef.current, dataset.id, column.id).then((result) => {
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
 
-      if (result.ok) setProfile(result.value);
-      else setFailed(true);
+      if (result.ok) {
+        setProfile(result.value);
+      } else {
+        setFailed(true);
+      }
     });
 
     return () => {
@@ -41,8 +46,12 @@ export const ColumnProfile = ({ dataset, column }: { dataset: Dataset; column: C
     };
   }, [filterRecord, dataset.id, dataset.revision, column.id]);
 
-  if (failed) return <p className="column-profile__status">Statistics are unavailable for this column.</p>;
-  if (profile === null) return <p className="column-profile__status">Profiling {column.name}…</p>;
+  if (failed) {
+    return <p className="column-profile__status">Statistics are unavailable for this column.</p>;
+  }
+  if (profile === null) {
+    return <p className="column-profile__status">Profiling {column.name}…</p>;
+  }
 
   return (
     <dl className="column-profile">

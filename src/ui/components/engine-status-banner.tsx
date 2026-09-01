@@ -5,7 +5,9 @@ export const EngineStatusBanner = (): React.JSX.Element | null => {
   const status = useEngineStatus(selectEngineStatus);
   const error = useEngineStatus(selectEngineError);
 
-  if (status === 'ready') return null;
+  if (status === 'ready') {
+    return null;
+  }
 
   if (status === 'failed') {
     return (

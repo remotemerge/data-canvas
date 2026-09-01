@@ -11,7 +11,9 @@ export interface QueryCacheKey {
 }
 
 const stableValue = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(stableValue);
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
@@ -92,7 +94,9 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
         }
       }
 
-      if (victimKey === undefined) return;
+      if (victimKey === undefined) {
+        return;
+      }
 
       entries.delete(victimKey);
     }
@@ -134,8 +138,12 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
       const offset = key.offset ?? 0;
 
       for (const entry of entries.values()) {
-        if (entry.resultSetKey !== resultSetKey) continue;
-        if (entry.offset > offset || entry.offset + entry.limit < offset + key.limit) continue;
+        if (entry.resultSetKey !== resultSetKey) {
+          continue;
+        }
+        if (entry.offset > offset || entry.offset + entry.limit < offset + key.limit) {
+          continue;
+        }
 
         entry.usedAt = clock;
         hits += 1;
@@ -148,7 +156,9 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
       return undefined;
     },
     set(key, value, cost) {
-      if (key.limit > maximumResultSize) return;
+      if (key.limit > maximumResultSize) {
+        return;
+      }
 
       clock += 1;
 

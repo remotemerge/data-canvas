@@ -13,7 +13,9 @@ import { err, ok } from '@/shared/result/result.ts';
 export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> = (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const validated = validateDerivedColumn(
     dataset.value,
@@ -21,7 +23,9 @@ export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> 
     workspace.derivedColumns,
   );
 
-  if (!validated.ok) return validated;
+  if (!validated.ok) {
+    return validated;
+  }
 
   const derived: DerivedColumn = {
     id: createEntityId(ID_PREFIX.column),
@@ -64,7 +68,9 @@ export const handleCreateDerivedColumn: ActionHandler<CreateDerivedColumnInput> 
 export const handleRemoveDerivedColumn: ActionHandler<RemoveDerivedColumnInput> = (workspace, payload) => {
   const derived = resolveDerivedColumn(workspace, payload.derivedColumnId);
 
-  if (!derived.ok) return derived;
+  if (!derived.ok) {
+    return derived;
+  }
 
   const dependents = Object.values(workspace.derivedColumns).filter(
     (candidate) =>

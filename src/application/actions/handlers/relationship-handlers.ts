@@ -24,7 +24,9 @@ import { err, ok } from '@/shared/result/result.ts';
 export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = async (workspace, payload, deps) => {
   const validated = validateRelationship(workspace, payload);
 
-  if (!validated.ok) return validated;
+  if (!validated.ok) {
+    return validated;
+  }
 
   const { leftDataset, rightDataset, keys } = validated.value;
 
@@ -131,7 +133,9 @@ const dependentCount = (dependents: DatasetDependents): number =>
 export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const dependents = collectDependents(workspace, dataset.value.id);
   const total = dependentCount(dependents);
@@ -156,7 +160,9 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
   // Drop the relation before committing metadata so a failure leaves a queryable dataset in place.
   const dropped = await deps.dataEngine.dropDataset(dataset.value.id);
 
-  if (!dropped.ok) return dropped;
+  if (!dropped.ok) {
+    return dropped;
+  }
 
   const { activeDatasetId, ...rest } = workspace;
   // Keep the canvas populated by selecting a surviving dataset when the active one is removed.

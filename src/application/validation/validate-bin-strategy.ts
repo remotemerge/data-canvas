@@ -37,7 +37,9 @@ export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainE
     }
 
     case 'equalWidthOf': {
-      if (!Number.isFinite(strategy.width)) return err(notFinite('width'));
+      if (!Number.isFinite(strategy.width)) {
+        return err(notFinite('width'));
+      }
 
       // The compiler checks the range-dependent bucket count; this check only validates the width.
       return strategy.width <= 0
@@ -62,7 +64,9 @@ export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainE
         return err(outOfRange('breaks', breaks.length, 1, MAX_EXPLICIT_BREAKS));
       }
 
-      if (breaks.some((value) => !Number.isFinite(value))) return err(notFinite('breaks'));
+      if (breaks.some((value) => !Number.isFinite(value))) {
+        return err(notFinite('breaks'));
+      }
 
       // Strict ordering makes the compiled CASE bounds unambiguous.
       for (let index = 1; index < breaks.length; index += 1) {

@@ -59,7 +59,9 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
         limit: metric.modifier?.kind === 'timeComparison' ? 200 : 1,
       })
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (!result.ok) {
           setValue(null);
           onError(result.error);

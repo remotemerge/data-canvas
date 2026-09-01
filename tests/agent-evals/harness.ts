@@ -42,7 +42,9 @@ export const runScenario = async (scenario: EvalScenario) => {
   const outputs: string[] = [];
   for (const call of scenario.transcript) {
     const tool = tools.find((candidate) => candidate.name === call.tool);
-    if (tool === undefined) throw new Error(`Unknown recorded tool '${call.tool}'.`);
+    if (tool === undefined) {
+      throw new Error(`Unknown recorded tool '${call.tool}'.`);
+    }
     // Transcript calls are ordered because each expectedRevision observes the preceding call.
     // eslint-disable-next-line no-await-in-loop
     outputs.push(await tool.handler(call.arguments));

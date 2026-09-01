@@ -66,7 +66,9 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
 
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const compatible = validateVisualization(
     dataset.value,
@@ -75,7 +77,9 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
     reachableDatasets(workspace, dataset.value.id),
   );
 
-  if (!compatible.ok) return compatible;
+  if (!compatible.ok) {
+    return compatible;
+  }
 
   const visualization: Visualization = {
     id: createEntityId(ID_PREFIX.visualization),
@@ -107,7 +111,9 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
 export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> = (workspace, payload) => {
   const existing = resolveVisualization(workspace, payload.visualizationId);
 
-  if (!existing.ok) return existing;
+  if (!existing.ok) {
+    return existing;
+  }
 
   if (payload.title !== undefined && !validateTitle(payload.title)) {
     return err(
@@ -121,7 +127,9 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
 
   const dataset = resolveDataset(workspace, existing.value.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const kind = payload.kind ?? existing.value.kind;
   const binding = payload.binding ?? existing.value.binding;
@@ -132,7 +140,9 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
     reachableDatasets(workspace, dataset.value.id),
   );
 
-  if (!compatible.ok) return compatible;
+  if (!compatible.ok) {
+    return compatible;
+  }
 
   const updated: Visualization = {
     ...existing.value,
@@ -160,7 +170,9 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
 export const handleSetVisualizationLinkMode: ActionHandler<SetVisualizationLinkModeInput> = (workspace, payload) => {
   const existing = resolveVisualization(workspace, payload.visualizationId);
 
-  if (!existing.ok) return existing;
+  if (!existing.ok) {
+    return existing;
+  }
 
   const updated: Visualization = { ...existing.value, linkMode: payload.linkMode };
 
@@ -178,7 +190,9 @@ export const handleSetVisualizationLinkMode: ActionHandler<SetVisualizationLinkM
 export const handleRemoveVisualization: ActionHandler<RemoveVisualizationInput> = (workspace, payload) => {
   const visualization = resolveVisualization(workspace, payload.visualizationId);
 
-  if (!visualization.ok) return visualization;
+  if (!visualization.ok) {
+    return visualization;
+  }
 
   const orphanedAnnotations = Object.values(workspace.annotations)
     .filter((annotation) => annotation.visualizationId === visualization.value.id)

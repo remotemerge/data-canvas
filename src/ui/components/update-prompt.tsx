@@ -10,7 +10,9 @@ export const UpdatePrompt = (): React.JSX.Element | null => {
     registerServiceWorker((apply) => setApplyUpdate(() => apply));
   }, []);
 
-  if (applyUpdate === null) return null;
+  if (applyUpdate === null) {
+    return null;
+  }
 
   return (
     <div className="update-prompt" role="status">

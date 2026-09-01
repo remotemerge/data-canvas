@@ -6,9 +6,12 @@ import { err, ok } from '@/shared/result/result.ts';
 
 export const handleSetTableSort: ActionHandler<SetTableSortInput> = (workspace, payload) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
-  if (!dataset.ok) return dataset;
-  if (payload.sort.length > 10)
+  if (!dataset.ok) {
+    return dataset;
+  }
+  if (payload.sort.length > 10) {
     return err(domainError('RESULT_LIMIT_EXCEEDED', 'A table can use at most 10 sort columns.'));
+  }
   for (const sort of payload.sort) {
     if (sort.columnId === undefined || !dataset.value.columns.some((column) => column.id === sort.columnId)) {
       return err(domainError('COLUMN_NOT_FOUND', 'The table sort references a column that does not exist.'));

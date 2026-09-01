@@ -14,20 +14,28 @@ const NO_EFFECT: PropagatedSelection = { effect: 'none' };
 
 // Resolves the selection predicate that applies to a visualization.
 export const propagateSelection = (workspace: Workspace, visualization: Visualization): PropagatedSelection => {
-  if (visualization.linkMode === 'none') return NO_EFFECT;
+  if (visualization.linkMode === 'none') {
+    return NO_EFFECT;
+  }
 
   const selections = Object.values(workspace.selections);
 
-  if (selections.length === 0) return NO_EFFECT;
+  if (selections.length === 0) {
+    return NO_EFFECT;
+  }
 
   const own = selections.find((selection) => selection.datasetId === visualization.datasetId);
   const applicable = own ?? selections.find((selection) => reaches(workspace, selection, visualization));
 
-  if (applicable === undefined) return NO_EFFECT;
+  if (applicable === undefined) {
+    return NO_EFFECT;
+  }
 
   const predicate = selectionPredicate(applicable);
 
-  if (predicate === undefined) return NO_EFFECT;
+  if (predicate === undefined) {
+    return NO_EFFECT;
+  }
 
   return { effect: visualization.linkMode, predicate };
 };

@@ -42,7 +42,9 @@ const findPath = (
   targetId: EntityId,
   relationships: readonly Relationship[],
 ): JoinStep[] | undefined => {
-  if (anchorId === targetId) return [];
+  if (anchorId === targetId) {
+    return [];
+  }
 
   const visited = new Set<EntityId>([anchorId]);
   let frontier: { datasetId: EntityId; steps: JoinStep[] }[] = [{ datasetId: anchorId, steps: [] }];
@@ -54,11 +56,15 @@ const findPath = (
       for (const relationship of relationships) {
         const neighbour = relatedDatasetId(relationship, node.datasetId);
 
-        if (neighbour === undefined || visited.has(neighbour)) continue;
+        if (neighbour === undefined || visited.has(neighbour)) {
+          continue;
+        }
 
         const steps = [...node.steps, { relationship, fromDatasetId: node.datasetId, toDatasetId: neighbour }];
 
-        if (neighbour === targetId) return steps;
+        if (neighbour === targetId) {
+          return steps;
+        }
 
         visited.add(neighbour);
         next.push({ datasetId: neighbour, steps });
@@ -99,15 +105,21 @@ export const resolveJoinPath = (
   const datasetIds: EntityId[] = [anchorId];
 
   for (const targetId of requiredDatasetIds) {
-    if (datasetIds.includes(targetId)) continue;
+    if (datasetIds.includes(targetId)) {
+      continue;
+    }
 
     const path = findPath(anchorId, targetId, available);
 
-    if (path === undefined) return err(noJoinPath(targetId));
+    if (path === undefined) {
+      return err(noJoinPath(targetId));
+    }
 
     // Append only the new tail so each dataset enters the chain once.
     for (const step of path) {
-      if (datasetIds.includes(step.toDatasetId)) continue;
+      if (datasetIds.includes(step.toDatasetId)) {
+        continue;
+      }
 
       steps.push(step);
       datasetIds.push(step.toDatasetId);
@@ -124,7 +136,9 @@ export const datasetIdsForColumns = (columnIds: readonly EntityId[], datasets: r
   for (const columnId of columnIds) {
     const owner = datasets.find((dataset) => dataset.columns.some((column) => column.id === columnId));
 
-    if (owner !== undefined && !owners.includes(owner.id)) owners.push(owner.id);
+    if (owner !== undefined && !owners.includes(owner.id)) {
+      owners.push(owner.id);
+    }
   }
 
   return owners;

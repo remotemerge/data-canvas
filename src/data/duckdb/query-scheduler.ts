@@ -53,7 +53,9 @@ export const createQueryScheduler = (): QueryScheduler => {
     // Mark a request stale before queuing it so it can be skipped while waiting.
     const superseded = latest.get(options.key);
 
-    if (superseded !== undefined) controllers.get(superseded.token)?.abort();
+    if (superseded !== undefined) {
+      controllers.get(superseded.token)?.abort();
+    }
 
     latest.set(options.key, { token });
 
@@ -62,13 +64,18 @@ export const createQueryScheduler = (): QueryScheduler => {
     controllers.set(token, controller);
 
     if (options.signal !== undefined) {
-      if (options.signal.aborted) controller.abort();
-      else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      if (options.signal.aborted) {
+        controller.abort();
+      } else {
+        options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
     }
 
     const result = queue.then(async (): Promise<ScheduledResult<T>> => {
       // Skip superseded work before it reaches the engine.
-      if (!isCurrent(options.key, token) || controller.signal.aborted) return { stale: true };
+      if (!isCurrent(options.key, token) || controller.signal.aborted) {
+        return { stale: true };
+      }
 
       try {
         const value = await run(controller.signal);
@@ -76,13 +83,17 @@ export const createQueryScheduler = (): QueryScheduler => {
         // A newer same-key request may have arrived while the engine worked.
         return isCurrent(options.key, token) ? { stale: false, value } : { stale: true };
       } catch (error) {
-        if (controller.signal.aborted || !isCurrent(options.key, token)) return { stale: true };
+        if (controller.signal.aborted || !isCurrent(options.key, token)) {
+          return { stale: true };
+        }
 
         throw error;
       } finally {
         controllers.delete(token);
 
-        if (isCurrent(options.key, token)) latest.delete(options.key);
+        if (isCurrent(options.key, token)) {
+          latest.delete(options.key);
+        }
       }
     });
 
@@ -95,7 +106,9 @@ export const createQueryScheduler = (): QueryScheduler => {
   return {
     schedule,
     abortAll: () => {
-      for (const controller of controllers.values()) controller.abort();
+      for (const controller of controllers.values()) {
+        controller.abort();
+      }
 
       controllers.clear();
       latest.clear();

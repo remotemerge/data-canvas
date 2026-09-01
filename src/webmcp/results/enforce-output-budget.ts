@@ -45,7 +45,9 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   // Internal hint from the producing tool; it directs trimming and never reaches the agent.
   const preserveColumns = parsed[PRESERVE_COLUMNS_KEY] === true;
   for (const [key, value] of Object.entries(parsed)) {
-    if (key === PRESERVE_COLUMNS_KEY) continue;
+    if (key === PRESERVE_COLUMNS_KEY) {
+      continue;
+    }
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
       result[key] = typeof value === 'string' ? value.slice(0, 1200) : value;
     }
@@ -82,7 +84,9 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
         keptColumnIds.pop();
       }
       for (const row of keptRows) {
-        if (Array.isArray(row) && row.length > keptColumns.length) row.length = keptColumns.length;
+        if (Array.isArray(row) && row.length > keptColumns.length) {
+          row.length = keptColumns.length;
+        }
       }
     }
 
@@ -107,7 +111,9 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
     index -= 1
   ) {
     const [key, original] = lists[index]!;
-    if ((PRESERVED_LIST_KEYS as readonly string[]).includes(key)) continue;
+    if ((PRESERVED_LIST_KEYS as readonly string[]).includes(key)) {
+      continue;
+    }
     const kept = result[key] as unknown[];
 
     const originalTotal =
@@ -123,7 +129,9 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
         [`${key}Total`]: originalTotal,
         truncated: true,
       });
-    while (kept.length > 0 && measured() > MAX_TOOL_OUTPUT_LENGTH) kept.pop();
+    while (kept.length > 0 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
+      kept.pop();
+    }
     if (kept.length < original.length) {
       result[`${key}Returned`] = kept.length;
       result[`${key}Total`] = originalTotal;
@@ -139,7 +147,9 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
 
 // Removes the internal trimming hint from a payload that is returned as-is.
 const withoutInternalKeys = (serialized: string): string => {
-  if (!serialized.includes(`"${PRESERVE_COLUMNS_KEY}"`)) return serialized;
+  if (!serialized.includes(`"${PRESERVE_COLUMNS_KEY}"`)) {
+    return serialized;
+  }
 
   try {
     const { [PRESERVE_COLUMNS_KEY]: _internal, ...rest } = JSON.parse(serialized) as ToolPayload;
@@ -151,7 +161,9 @@ const withoutInternalKeys = (serialized: string): string => {
 };
 
 export const enforceOutputBudget = (serialized: string): string => {
-  if (serialized.length <= MAX_TOOL_OUTPUT_LENGTH) return withoutInternalKeys(serialized);
+  if (serialized.length <= MAX_TOOL_OUTPUT_LENGTH) {
+    return withoutInternalKeys(serialized);
+  }
 
   try {
     const parsed = JSON.parse(serialized) as ToolPayload;

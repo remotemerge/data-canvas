@@ -62,7 +62,9 @@ const highlightStyle = (
   highlight: HighlightPredicate | undefined,
   theme: ChartTheme,
 ): { itemStyle: { color: (params: { dataIndex: number; seriesIndex: number }) => string } } | undefined => {
-  if (highlight === undefined) return undefined;
+  if (highlight === undefined) {
+    return undefined;
+  }
 
   return {
     itemStyle: {

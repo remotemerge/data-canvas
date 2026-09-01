@@ -12,9 +12,15 @@ import { FIELD_HINT } from '@/ui/canvas/field-hints.ts';
 
 // Mirrors relationship validation for the form's key picker.
 const joinTypeClass = (type: LogicalType): string => {
-  if (isNumericType(type)) return 'number';
-  if (isTemporalType(type)) return 'temporal';
-  if (isTextType(type)) return 'text';
+  if (isNumericType(type)) {
+    return 'number';
+  }
+  if (isTemporalType(type)) {
+    return 'temporal';
+  }
+  if (isTextType(type)) {
+    return 'text';
+  }
 
   return type;
 };
@@ -58,7 +64,9 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
   const validation = candidate === null ? null : validateRelationship(workspace, candidate);
 
   const create = async (): Promise<void> => {
-    if (candidate === null || validation === null || !validation.ok) return;
+    if (candidate === null || validation === null || !validation.ok) {
+      return;
+    }
 
     const result = await actions.createRelationship({ ...candidate, join });
 

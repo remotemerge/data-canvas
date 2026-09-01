@@ -27,9 +27,15 @@ export interface RelationshipSuggestion {
 }
 
 const joinTypeClass = (type: LogicalType): string => {
-  if (isNumericType(type)) return 'number';
-  if (isTemporalType(type)) return 'temporal';
-  if (isTextType(type)) return 'text';
+  if (isNumericType(type)) {
+    return 'number';
+  }
+  if (isTemporalType(type)) {
+    return 'temporal';
+  }
+  if (isTextType(type)) {
+    return 'text';
+  }
 
   return type;
 };
@@ -49,7 +55,9 @@ const scorePair = (
   right: Column,
   rightDatasetName: string,
 ): { confidence: number; reason: string } | undefined => {
-  if (joinTypeClass(left.logicalType) !== joinTypeClass(right.logicalType)) return undefined;
+  if (joinTypeClass(left.logicalType) !== joinTypeClass(right.logicalType)) {
+    return undefined;
+  }
 
   const leftName = normalize(left.name);
   const rightName = normalize(right.name);
@@ -86,14 +94,20 @@ export const suggestRelationships = (workspace: Workspace): RelationshipSuggesti
 
   for (const left of datasets) {
     for (const right of datasets) {
-      if (left.id === right.id) continue;
-      if (relationships.some((existing) => connectsDatasets(existing, left.id, right.id))) continue;
+      if (left.id === right.id) {
+        continue;
+      }
+      if (relationships.some((existing) => connectsDatasets(existing, left.id, right.id))) {
+        continue;
+      }
 
       for (const leftColumn of left.columns) {
         for (const rightColumn of right.columns) {
           const scored = scorePair(leftColumn, rightColumn, right.name);
 
-          if (scored === undefined) continue;
+          if (scored === undefined) {
+            continue;
+          }
 
           suggestions.push({
             leftDatasetId: left.id,
@@ -124,7 +138,9 @@ const dedupe = (suggestions: readonly RelationshipSuggestion[]): RelationshipSug
     const key = [suggestion.leftDatasetId, suggestion.rightDatasetId].toSorted().join('|');
     const current = best.get(key);
 
-    if (current === undefined || suggestion.confidence > current.confidence) best.set(key, suggestion);
+    if (current === undefined || suggestion.confidence > current.confidence) {
+      best.set(key, suggestion);
+    }
   }
 
   return [...best.values()].toSorted((a, b) => b.confidence - a.confidence);

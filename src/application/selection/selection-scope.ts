@@ -12,7 +12,9 @@ export const propagationPath = (
   fromDatasetId: EntityId,
   toDatasetId: EntityId,
 ): Relationship[] | undefined => {
-  if (fromDatasetId === toDatasetId) return [];
+  if (fromDatasetId === toDatasetId) {
+    return [];
+  }
 
   const relationships = Object.values(workspace.relationships);
   const visited = new Set<EntityId>([fromDatasetId]);
@@ -25,11 +27,15 @@ export const propagationPath = (
       for (const relationship of relationships) {
         const neighbour = relatedDatasetId(relationship, entry.datasetId);
 
-        if (neighbour === undefined || visited.has(neighbour)) continue;
+        if (neighbour === undefined || visited.has(neighbour)) {
+          continue;
+        }
 
         const path = [...entry.path, relationship];
 
-        if (neighbour === toDatasetId) return path;
+        if (neighbour === toDatasetId) {
+          return path;
+        }
 
         visited.add(neighbour);
         next.push({ datasetId: neighbour, path });

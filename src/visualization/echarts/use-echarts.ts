@@ -17,7 +17,9 @@ export const useECharts = (
 
   useEffect(() => {
     const element = elementRef.current;
-    if (element === null) return;
+    if (element === null) {
+      return;
+    }
     const chart = init(element, undefined, { renderer: 'canvas' });
     let disposed = false;
     chartRef.current = chart;
@@ -25,26 +27,38 @@ export const useECharts = (
     chart.on('brushEnd', (params) => brushHandler.current?.(params));
     let resizeFrame: number | null = null;
     const observer = new ResizeObserver(() => {
-      if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+      if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+      }
       resizeFrame = requestAnimationFrame(() => {
         resizeFrame = null;
-        if (chartRef.current === chart) chart.resize();
+        if (chartRef.current === chart) {
+          chart.resize();
+        }
       });
     });
     observer.observe(element);
     return () => {
-      if (disposed) return;
+      if (disposed) {
+        return;
+      }
       disposed = true;
       observer.disconnect();
-      if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+      if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+      }
       chartRef.current = null;
-      if (getInstanceByDom(element) === chart) chart.dispose();
+      if (getInstanceByDom(element) === chart) {
+        chart.dispose();
+      }
     };
   }, []);
 
   useEffect(() => {
     const chart = chartRef.current;
-    if (chart === null) return;
+    if (chart === null) {
+      return;
+    }
     // Replace the full option so removed per-mark styles do not survive selection changes.
     chart.setOption(option, { notMerge: true });
     recordRenderCompletion('chart-render');

@@ -53,7 +53,9 @@ export const normalizeLogicalType = (databaseType: string): LogicalType => {
   const normalized = stripParameters(databaseType).toUpperCase();
 
   // Lists and arrays are not scalar domain values.
-  if (normalized.endsWith('[]')) return 'unknown';
+  if (normalized.endsWith('[]')) {
+    return 'unknown';
+  }
 
   return EXACT_TYPES[normalized] ?? 'unknown';
 };
