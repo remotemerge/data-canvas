@@ -16,7 +16,12 @@ export const createToolDefinitions = (deps: ToolDependencies): DataCanvasTool[] 
 export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise<string> => {
   const validator = toolValidators[tool.name];
   if (!validator(input)) {
-    return failure(domainError('INVALID_TOOL_ARGUMENTS', 'Arguments do not match this tool schema.'));
+    const first = validator.errors?.[0];
+    const detail =
+      first === undefined
+        ? 'Arguments do not match this tool schema.'
+        : `'${first.instancePath === '' ? '/' : first.instancePath}' ${first.message ?? 'is invalid'}.`;
+    return failure(domainError('INVALID_TOOL_ARGUMENTS', detail));
   }
 
   try {
