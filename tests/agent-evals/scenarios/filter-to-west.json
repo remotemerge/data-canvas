@@ -1,0 +1,18 @@
+{
+  "name": "keep only the West region",
+  "prompt": "Filter the sales data down to the West region.",
+  "fixture": "sales",
+  "transcript": [
+    {
+      "tool": "apply_filter",
+      "arguments": {
+        "datasetId": "ds_sales",
+        "columnId": "col_region",
+        "operator": "eq",
+        "value": "West",
+        "expectedRevision": 0
+      }
+    }
+  ],
+  "expected": { "tools": ["apply_filter"], "filters": 1 }
+}
