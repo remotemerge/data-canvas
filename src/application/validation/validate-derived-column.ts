@@ -129,14 +129,10 @@ const findsCycle = (
 ): boolean => {
   const visiting = new Set<EntityId>();
 
-  const visit = (columnId: EntityId, definition: DerivedExpression | undefined): boolean => {
+  const visit = (columnId: EntityId, definition: DerivedExpression): boolean => {
     if (visiting.has(columnId)) {
       return true;
     }
-    if (definition === undefined) {
-      return false;
-    }
-
     visiting.add(columnId);
 
     for (const referenced of expressionColumnIds(definition)) {
