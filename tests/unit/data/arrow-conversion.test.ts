@@ -78,6 +78,26 @@ describe('convertArrowValue', () => {
     // Unknown objects become strings for renderers.
     expect(convertArrowValue({ toString: () => 'struct' })).toBe('struct');
   });
+
+  /*
+   * Nested DuckDB values (STRUCT, LIST, MAP) inherit Object's `toString`, which would hide their
+   * contents behind `[object Object]`, so they are serialized as JSON instead.
+   */
+  test('serializes a nested value as JSON instead of [object Object]', () => {
+    expect(convertArrowValue({ region: 'north', total: 3 })).toBe('{"region":"north","total":3}');
+  });
+
+  // A bigint inside a nested value has no JSON form, so the replacer keeps it as exact text.
+  test('keeps a bigint inside a nested value as exact text', () => {
+    expect(convertArrowValue({ total: 9007199254740993n })).toBe('{"total":"9007199254740993"}');
+  });
+
+  test('drops a cyclic nested value rather than throwing', () => {
+    const cyclic: Record<string, unknown> = { region: 'north' };
+    cyclic['self'] = cyclic;
+
+    expect(convertArrowValue(cyclic)).toBeNull();
+  });
 });
 
 describe('convertArrowCell', () => {
