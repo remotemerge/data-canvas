@@ -1,7 +1,7 @@
 import type { Column } from '@/domain/dataset/dataset.ts';
 import type { AnalysisQuery, SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { ColumnRange } from '@/domain/analysis/bin-strategy.ts';
-import type { Filter } from '@/domain/filter/filter.ts';
+import type { Filter, FilterExpression } from '@/domain/filter/filter.ts';
 import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
@@ -22,6 +22,8 @@ export interface TableWindowRequest {
   limit: number;
   sort?: SortSpec[];
   filters: Filter[];
+  // Selection predicate applied alongside the filters; expresses shapes a flat `Filter` cannot, such as `or`.
+  selectionPredicate?: FilterExpression;
   signal?: AbortSignal;
 }
 

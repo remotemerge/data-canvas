@@ -5,6 +5,8 @@ import { registerDataEngine, registeredDataEngine } from '@/application/ports/en
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import { stubDataEngine } from '../application/action-fixtures.ts';
 
+const noopProgress = (): void => {};
+
 const COUNT_QUERY: AnalysisQuery = {
   datasetId: 'ds_sales',
   dimensions: [],
@@ -52,5 +54,36 @@ describe('registeredDataEngine', () => {
     registerDataEngine(unavailableDataEngine);
 
     expect((await registeredDataEngine.dropDataset('ds_sales')).ok).toBe(false);
+  });
+
+  /*
+   * The delegate must forward optional arguments, not just the ones it names. Dropping them silently
+   * disables import progress reporting and query scheduling for every caller using this port.
+   */
+  test('forwards optional arguments the installed engine relies on', async () => {
+    const received: { onProgress?: unknown; options?: unknown } = {};
+    const installed: DataEnginePort = {
+      ...stubDataEngine(),
+      importFile: (_file, _datasetId, onProgress) => {
+        received.onProgress = onProgress;
+
+        return stubDataEngine().importFile(_file, _datasetId);
+      },
+      executeAnalysis: (query, options) => {
+        received.options = options;
+
+        return stubDataEngine().executeAnalysis(query);
+      },
+    };
+
+    registerDataEngine(installed);
+
+    const options = { key: 'visualization:viz_1', signal: new AbortController().signal };
+
+    await registeredDataEngine.importFile({}, 'ds_sales', noopProgress);
+    await registeredDataEngine.executeAnalysis(COUNT_QUERY, options);
+
+    expect(received.onProgress).toBe(noopProgress);
+    expect(received.options).toEqual(options);
   });
 });

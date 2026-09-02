@@ -499,7 +499,12 @@ export const createDataEngine = (): DataEngine => {
     if (options?.key === undefined) {
       try {
         return ok(await run(options?.signal));
-      } catch {
+      } catch (error) {
+        // The caller cancelled this query; report it like supersession so it is not shown as a failure.
+        if (error instanceof QueryAbortedError) {
+          return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+        }
+
         return err(engineFailure('QUERY_FAILED'));
       }
     }
@@ -604,7 +609,11 @@ export const createDataEngine = (): DataEngine => {
 
     const limit = Math.min(Math.max(Math.trunc(request.limit) || 0, 0), MAX_TABLE_WINDOW_ROWS);
     const offset = Math.max(Math.trunc(request.offset) || 0, 0);
-    const filters = enabledExpressions(request.filters);
+    // The selection predicate narrows the same rows as the filters, so it joins them in the WHERE clause.
+    const filters = [
+      ...enabledExpressions(request.filters),
+      ...(request.selectionPredicate === undefined ? [] : [request.selectionPredicate]),
+    ];
     // Derived columns are virtual, so add their metadata before compiling the full projection.
     const derivedColumns = Object.values(derivedColumnDefinitions).filter(
       (column) => column.datasetId === request.datasetId,
@@ -827,11 +836,18 @@ export const createDataEngine = (): DataEngine => {
       return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
     };
 
-    // Cache exact statistics for this dataset revision.
+    // Cache exact statistics for this dataset revision, preserving a numeric extent cached elsewhere.
+    const cached = statisticsCache.columnStatistics(column.id, relation.revision);
+
     statisticsCache.setColumnStatistics(column.id, relation.revision, {
       distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
       distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
-      ...(numeric ? { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) } : {}),
+      ...(numeric
+        ? { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) }
+        : {
+            ...(cached?.min === undefined ? {} : { min: cached.min }),
+            ...(cached?.max === undefined ? {} : { max: cached.max }),
+          }),
     });
 
     const statistics: ColumnStatistics = {
