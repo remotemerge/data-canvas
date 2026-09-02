@@ -319,6 +319,22 @@ describe('sampling disclosure', () => {
     }
   });
 
+  /*
+   * A tiny fraction of a very large result would round to "0.0%", reading as though nothing was
+   * plotted. The floor keeps the badge honest about a small but non-empty sample.
+   */
+  test('a rate below a hundredth of a percent reports a floor rather than rounding to zero', () => {
+    const text = describeSampling({
+      strategy: { kind: 'rowTruncation', rate: 0.00005 },
+      rate: 0.00005,
+      estimatedRows: 20_000_000,
+    });
+
+    expect(text.label).toBe('First <0.01% of rows');
+    expect(text.explanation).toContain('<0.01%');
+    expect(text.label).not.toContain('0.0%');
+  });
+
   test('the widening explanation names the granularity actually used', () => {
     const text = describeSampling({
       strategy: { kind: 'temporalWiden', from: 'day', to: 'month' },
