@@ -65,7 +65,14 @@ const validInputs: Record<keyof typeof toolSchemas, { minimal: object; canonical
   redo: { minimal: {}, canonical: { expectedRevision: 1 } },
   highlight_selection: {
     minimal: { datasetId: 'ds', columnId: 'col', values: ['x'] },
-    canonical: { datasetId: 'ds', columnId: 'col', values: ['x', 'y'], label: 'Focus', expectedRevision: 1 },
+    canonical: {
+      datasetId: 'ds',
+      columnId: 'col',
+      values: ['x', 'y'],
+      operator: 'in',
+      additive: true,
+      expectedRevision: 1,
+    },
   },
   create_metric: {
     minimal: { datasetId: 'ds', name: 'Rows', aggregate: 'count' },
