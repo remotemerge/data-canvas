@@ -5,7 +5,6 @@
  */
 export type EntityId = string; // NOSONAR
 
-// Entity prefixes used in IDs and agent-facing payloads.
 export const ID_PREFIX = {
   workspace: 'ws',
   dataset: 'ds',
@@ -21,5 +20,4 @@ export const ID_PREFIX = {
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
 
-// Creates a prefixed globally unique entity ID.
 export const createEntityId = (prefix: IdPrefix): EntityId => `${prefix}_${crypto.randomUUID()}`;

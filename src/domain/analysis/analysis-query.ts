@@ -10,7 +10,6 @@ export interface MeasureSpec {
   aggregate: AggregateFunction;
   // Display label; never used as a SQL identifier.
   alias?: string;
-  // Optional window transformation over the aggregate.
   modifier?: MetricModifier;
 }
 
@@ -21,10 +20,8 @@ export interface BinnedDimensionSpec {
   range?: ColumnRange;
 }
 
-// Five-number summary used by a box plot.
 export interface DistributionSpec {
   columnId: EntityId;
-  // Optional low-cardinality grouping, one box per value.
   categoryColumnId?: EntityId;
 }
 
@@ -35,18 +32,13 @@ export interface SortSpec {
   direction: 'asc' | 'desc';
 }
 
-// Analysis query accepted by the compiler after validation.
 export interface AnalysisQuery {
-  // Anchor dataset for the query.
   datasetId: EntityId;
-  // Optional relationship path constraint.
   relationshipIds?: EntityId[];
   // Column IDs may belong to the anchor or a reachable dataset.
   dimensions: EntityId[];
-  // Dimensions bucketed before grouping.
   binnedDimensions?: BinnedDimensionSpec[];
   measures: MeasureSpec[];
-  // Five-number summary requested by a box plot.
   distribution?: DistributionSpec;
   filters: FilterExpression[];
   orderBy?: SortSpec[];

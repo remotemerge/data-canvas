@@ -114,9 +114,25 @@ describe('join compilation', () => {
     expect(result.value.sql).not.toContain('Europe');
   });
 
-  test('sorting by a joined column is table-qualified', () => {
+  // A grouped dimension sorts by SELECT position, which is unambiguous across joined relations.
+  test('sorting by a joined grouping column uses its projected position', () => {
     const result = compileAnalysisQuery(
       { ...revenueByRegion, orderBy: [{ columnId: 'col_customer_region', direction: 'asc' }] },
+      context(ordersToCustomers),
+    );
+
+    expect(result.ok && result.value.sql).toContain('ORDER BY 1 ASC');
+  });
+
+  test('sorting by a joined column the query does not group is table-qualified', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: 'ds_orders',
+        dimensions: [],
+        measures: [],
+        filters: [],
+        orderBy: [{ columnId: 'col_customer_region', direction: 'asc' }],
+      },
       context(ordersToCustomers),
     );
 

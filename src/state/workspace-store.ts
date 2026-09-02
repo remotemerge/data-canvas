@@ -4,7 +4,6 @@ import { createEmptyWorkspace, type Workspace } from '@/domain/workspace/workspa
 
 export interface WorkspaceState {
   workspace: Workspace;
-  // Append-only action history capped by a ring buffer.
   history: ActionHistoryEntry[];
   undoStack: string[];
   redoStack: string[];
@@ -18,5 +17,4 @@ export const workspaceStore = createStore<WorkspaceState>()(() => ({
   redoStack: [],
 }));
 
-// Read accessor for non-React consumers.
 export const getWorkspace = (): Workspace => workspaceStore.getState().workspace;

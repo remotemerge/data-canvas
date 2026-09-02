@@ -108,6 +108,33 @@ describe('createToolRegistry', () => {
     registry.dispose();
   });
 
+  /*
+   * The status carries the registered descriptors so the UI can show the contract behind the count.
+   * Publishing them keeps that list in step with registration rather than restating a fixed catalogue.
+   */
+  test('the status publishes the descriptors of exactly the registered tools', async () => {
+    const { host } = recordingHost();
+    const registry = await createToolRegistry(host, webmcpFixture().deps);
+
+    const beforeImport = getToolStatus().tools;
+
+    expect(beforeImport.map((tool) => tool.name)).toContain('get_workspace');
+    expect(beforeImport.map((tool) => tool.name)).not.toContain('preview_data');
+    expect(beforeImport.length).toBe(getToolStatus().registeredCount);
+
+    await registry.setReadyDatasetCount(1);
+
+    const afterImport = getToolStatus().tools;
+    const preview = afterImport.find((tool) => tool.name === 'preview_data');
+
+    expect(preview?.description.length).toBeGreaterThan(0);
+    // The panel reads annotations by name, so the flags must survive publication.
+    expect(preview?.annotations['untrustedContentHint']).toBe(true);
+    expect(afterImport.length).toBe(getToolStatus().registeredCount);
+
+    registry.dispose();
+  });
+
   test('dispose withdraws the tool surface so no agent call outlives the page', async () => {
     const { host } = recordingHost();
     const registry = await createToolRegistry(host, webmcpFixture().deps);
@@ -115,6 +142,6 @@ describe('createToolRegistry', () => {
 
     registry.dispose();
 
-    expect(getToolStatus()).toMatchObject({ available: false, registeredCount: 0, executingCount: 0 });
+    expect(getToolStatus()).toMatchObject({ available: false, registeredCount: 0, executingCount: 0, tools: [] });
   });
 });

@@ -16,10 +16,8 @@ import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-// Maximum number of row keys stored for an explicit selection.
 export const MAX_SELECTION_KEYS = 10_000;
 
-// Bounds the predicate tree an agent or chart interaction can submit.
 export const MAX_SELECTION_PREDICATE_DEPTH = 10;
 
 /*
@@ -62,7 +60,6 @@ const validatePredicate = (dataset: Dataset, predicate: FilterExpression, depth 
   return ok(undefined);
 };
 
-// Replaces the current selection for a dataset.
 export const handleSetSelection: ActionHandler<SetSelectionInput> = (workspace, payload) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
@@ -120,7 +117,6 @@ export const handleSetSelection: ActionHandler<SetSelectionInput> = (workspace, 
   });
 };
 
-// Extends the current selection with a predicate or bounded key list.
 export const handleExtendSelection: ActionHandler<ExtendSelectionInput> = (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 

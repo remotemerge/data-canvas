@@ -19,7 +19,6 @@ export const selectVisualizations = (state: WorkspaceState): Record<EntityId, Vi
 
 export const selectFilters = (state: WorkspaceState): Record<EntityId, Filter> => state.workspace.filters;
 
-// Whether the canvas contains any chart.
 export const selectHasVisualizations = (state: WorkspaceState): boolean =>
   Object.keys(state.workspace.visualizations).length > 0;
 
@@ -27,7 +26,6 @@ export const selectActiveDatasetId = (state: WorkspaceState): EntityId | undefin
 
 export const selectLayoutColumns = (state: WorkspaceState): number => state.workspace.layout.columns;
 
-// Returns the stored history array.
 export const selectHistory = (state: WorkspaceState): ActionHistoryEntry[] => state.history;
 
 export const selectActiveDataset = (state: WorkspaceState): Dataset | undefined => {
@@ -36,7 +34,6 @@ export const selectActiveDataset = (state: WorkspaceState): Dataset | undefined 
   return activeDatasetId === undefined ? undefined : datasets[activeDatasetId];
 };
 
-// Returns filters for one dataset as a new array.
 export const selectFiltersForDataset = (state: WorkspaceState, datasetId: EntityId): Filter[] =>
   Object.values(state.workspace.filters).filter((filter) => filter.datasetId === datasetId);
 

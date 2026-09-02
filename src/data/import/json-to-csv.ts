@@ -7,10 +7,8 @@ import { MAX_COLUMN_COUNT } from '@/data/import/import-limits.ts';
  * preserves scalar type inference.
  */
 
-// Supported JSON layouts.
 type JsonRecord = Record<string, unknown>;
 
-// Error for unsupported JSON shapes.
 export class JsonShapeError extends Error {
   constructor() {
     // Keep parser errors free of file content because they reach the UI and agent history.
@@ -22,7 +20,6 @@ export class JsonShapeError extends Error {
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-// Parses a top-level array, object, or NDJSON document.
 const parseRecords = (text: string): JsonRecord[] => {
   const trimmed = text.trim();
 
@@ -41,7 +38,6 @@ const parseRecords = (text: string): JsonRecord[] => {
       return parsed;
     }
 
-    // Treat a single object as a one-row relation.
     if (isRecord(parsed)) {
       return [parsed];
     }
@@ -52,12 +48,11 @@ const parseRecords = (text: string): JsonRecord[] => {
       throw error;
     }
 
-    // If the whole document is not JSON, try newline-delimited records.
+    // A whole-document parse failure may indicate newline-delimited records.
     return parseNewlineDelimited(trimmed);
   }
 };
 
-// Parses one JSON record per line, ignoring the blank lines that separate them.
 const parseNewlineDelimited = (trimmed: string): JsonRecord[] => {
   const records: JsonRecord[] = [];
 
@@ -86,7 +81,6 @@ const parseNewlineDelimited = (trimmed: string): JsonRecord[] => {
   return records;
 };
 
-// Collects first-seen keys across all records.
 const collectColumns = (records: readonly JsonRecord[]): string[] => {
   const columns = new Set<string>();
 
@@ -104,7 +98,6 @@ const collectColumns = (records: readonly JsonRecord[]): string[] => {
   return [...columns];
 };
 
-// Encodes one JSON value as a quoted CSV field.
 const csvField = (value: unknown): string => {
   // Empty fields become NULL when DuckDB reads the CSV.
   if (value === null || value === undefined) {
@@ -118,7 +111,6 @@ const csvField = (value: unknown): string => {
   return `"${fieldText().replaceAll('"', '""')}"`;
 };
 
-// Converts JSON or NDJSON text to CSV bytes.
 export const jsonToCsvBytes = (text: string): Uint8Array => {
   const records = parseRecords(text);
   const columns = collectColumns(records);

@@ -23,7 +23,6 @@ const outOfRange = (field: string, value: number, min: number, max: number): Dom
 const notFinite = (field: string): DomainError =>
   domainError('UNSUPPORTED_OPERATION', `${field} must be a finite number.`, { field });
 
-// Validates a whole-number count against its inclusive bounds.
 const validateCount = (field: string, value: number, min: number, max: number): Result<void, DomainError> => {
   if (!Number.isInteger(value)) {
     return err(domainError('UNSUPPORTED_OPERATION', `${field} must be a whole number.`, { field }));
@@ -56,7 +55,6 @@ const validateExplicitBreaks = (breaks: readonly number[]): Result<void, DomainE
   return ok(undefined);
 };
 
-// Validates bin-strategy bounds before compilation.
 export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainError> => {
   switch (strategy.kind) {
     case 'equalWidth':

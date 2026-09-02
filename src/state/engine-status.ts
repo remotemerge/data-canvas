@@ -1,7 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 
-// Engine readiness for the current browser session.
 export type EngineStatus = 'idle' | 'starting' | 'ready' | 'failed';
 
 export interface EngineState {

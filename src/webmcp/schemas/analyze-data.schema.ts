@@ -71,11 +71,37 @@ export const analyzeDataSchema = {
       maxItems: 6,
       description: 'At least one aggregate to compute. Use {"aggregate":"count"} to count rows.',
     },
+    orderBy: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          columnId: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 100,
+            description: 'Sort by this grouped dimension. Supply either columnId or measureIndex, not both.',
+          },
+          measureIndex: {
+            type: 'integer',
+            minimum: 0,
+            maximum: 5,
+            description: 'Sort by the aggregate at this position in measures, counting from 0.',
+          },
+          direction: { type: 'string', enum: ['asc', 'desc'] },
+        },
+        required: ['direction'],
+        additionalProperties: false,
+      },
+      maxItems: 3,
+      description:
+        'Orders the aggregate rows before limit applies, so a ranking question returns the actual top rows rather than an arbitrary slice. Sort by measureIndex descending for "top N by <measure>".',
+    },
     limit: {
       type: 'integer',
       minimum: 1,
       maximum: 200,
-      description: 'Maximum aggregate rows to return. Defaults to 50.',
+      description: 'Maximum aggregate rows to return. Defaults to 50. Combine with orderBy for a top-N ranking.',
     },
   },
   required: ['datasetId', 'measures'],

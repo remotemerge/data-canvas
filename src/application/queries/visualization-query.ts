@@ -3,7 +3,12 @@ import type { AnalysisResult, DataEnginePort } from '@/application/ports/data-en
 import { planSampling, requiresExactResult } from '@/application/queries/adaptive-sampling.ts';
 import type { SamplingDisclosure } from '@/application/queries/adaptive-sampling.ts';
 import { foldOtherBucket, isAdditiveAggregate } from '@/application/queries/sampling-disclosure.ts';
-import { boundChartRows, MAX_CHART_POINTS, readableChartPoints } from '@/application/queries/sampling-policy.ts';
+import {
+  boundChartRows,
+  MAX_CHART_POINTS,
+  MAX_DONUT_SLICES,
+  readableChartPoints,
+} from '@/application/queries/sampling-policy.ts';
 import { propagateSelection } from '@/application/selection/propagate-selection.ts';
 import type { ResultColumn } from '@/data/compiler/result-columns.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
@@ -149,6 +154,9 @@ const resolveBinRanges = async (
   });
 };
 
+const chartPointBudget = (kind: Visualization['kind']): number | undefined =>
+  kind === 'donut' ? MAX_DONUT_SLICES : undefined;
+
 export const executeVisualizationQuery = async (
   visualization: Visualization,
   workspace: Workspace,
@@ -171,6 +179,9 @@ export const executeVisualizationQuery = async (
     ? undefined
     : await estimateResultRows(engine, resolved);
 
+  // A donut turns unreadable at a far lower group count than an axis-based chart.
+  const pointBudget = chartPointBudget(visualization.kind);
+
   const plan =
     estimatedRows === undefined
       ? { query: resolved, disclosure: null }
@@ -178,6 +189,7 @@ export const executeVisualizationQuery = async (
           query: resolved,
           kind: visualization.kind,
           estimatedRows,
+          ...(pointBudget === undefined ? {} : { budget: pointBudget }),
           ...(plotWidth === undefined ? {} : { readableBudget: readableChartPoints(plotWidth) }),
         });
 

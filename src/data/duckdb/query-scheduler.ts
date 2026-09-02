@@ -3,7 +3,6 @@
 // Outcome of a scheduled query; superseded work is a value, not an error.
 export type ScheduledResult<T> = { stale: true } | { stale: false; value: T };
 
-// Identifies scheduler cancellation.
 export class QueryAbortedError extends Error {
   constructor() {
     super('The query was aborted before it completed.');
@@ -28,13 +27,10 @@ export interface QueryScheduler {
 }
 
 export const createQueryScheduler = (): QueryScheduler => {
-  // Monotonic request token used to order supersession.
   let nextToken = 0;
 
-  // Newest token for each key.
   const latest = new Map<string, PendingEntry>();
 
-  // Abort controllers for in-flight queries.
   const controllers = new Map<number, AbortController>();
 
   // Runs a query serially and skips work already superseded.

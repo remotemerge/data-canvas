@@ -244,8 +244,12 @@ describe('adaptive sampling policy', () => {
     expect(plan.query).toEqual(query);
   });
 
-  // Ranking needs an alias the ORDER BY can name, so an unaliased measure keeps the query's own order.
-  test('top-N over an unaliased measure retains the leading groups without a sort', () => {
+  /*
+   * Ranking needs an alias the ORDER BY can name. Chart queries are built from a binding and carry no
+   * alias, so the planner supplies one; without it top-N would keep whatever groups the engine
+   * returned first and fold larger ones into `Other`.
+   */
+  test('top-N aliases an unaliased measure so the largest groups are the ones retained', () => {
     const query: AnalysisQuery = {
       datasetId: 'ds_1' as EntityId,
       dimensions: [columnId('region')],
@@ -255,7 +259,10 @@ describe('adaptive sampling policy', () => {
     const plan = planSampling({ query, kind: 'bar', estimatedRows: 6_000, budget: 1 });
 
     expect(plan.disclosure?.strategy).toEqual({ kind: 'topN', retained: 1, otherBucket: true });
-    expect(plan.query.orderBy).toBeUndefined();
+    expect(plan.query.measures[0]?.alias).toBe('sum');
+    expect(plan.query.orderBy).toEqual([{ measureAlias: 'sum', direction: 'desc' }]);
+    // The `Other` row is derived from the same measures, so its subtraction stays aligned.
+    expect(plan.totalQuery?.measures).toEqual(plan.query.measures);
   });
 
   /*

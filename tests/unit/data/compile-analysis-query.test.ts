@@ -233,10 +233,39 @@ describe('compileAnalysisQuery', () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.sql).toContain('ORDER BY "m0" DESC, "c0" ASC');
+    // A grouped dimension sorts by its SELECT position, which stays valid however it is projected.
+    expect(result.value.sql).toContain('ORDER BY "m0" DESC, 1 ASC');
     expect(result.value.sql).toContain('OFFSET 2');
     expect(result.value.resultColumns).toHaveLength(2);
     expect(result.value.joined).toBe(false);
+  });
+
+  /*
+   * A time-grain dimension projects `date_trunc(...)` rather than the bare column, and GROUP BY names
+   * the SELECT position. Ordering by the raw column would reference a term absent from the grouping,
+   * which the engine rejects, so the chronological trend must sort by that position instead.
+   */
+  test('a sort naming a time-grain dimension orders by its projected position', () => {
+    const result = compileAnalysisQuery(
+      {
+        datasetId: temporalDataset.id,
+        dimensions: [],
+        binnedDimensions: [{ columnId: 'col_date', strategy: { kind: 'temporal', unit: 'month' } }],
+        measures: [{ columnId: 'col_value', aggregate: 'sum' }],
+        filters: [],
+        orderBy: [{ columnId: 'col_date', direction: 'asc' }],
+      },
+      temporalDataset,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.sql).toContain('GROUP BY 1');
+    expect(result.value.sql).toContain('ORDER BY 1 ASC');
+    // The truncation expression is emitted once, so its unit still binds exactly one parameter.
+    expect(result.value.parameters).toEqual(['month']);
   });
 });
 

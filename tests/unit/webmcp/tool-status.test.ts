@@ -3,19 +3,19 @@ import { getToolStatus, setToolStatus, subscribeToolStatus } from '@/webmcp/regi
 
 // The status snapshot is module state shared with the registry, so each test restores what it read.
 afterEach(() => {
-  setToolStatus({ available: false, registeredCount: 0, executingCount: 0 });
+  setToolStatus({ available: false, registeredCount: 0, executingCount: 0, tools: [] });
 });
 
 describe('tool status', () => {
   test('starts unavailable with nothing registered or executing', () => {
-    expect(getToolStatus()).toEqual({ available: false, registeredCount: 0, executingCount: 0 });
+    expect(getToolStatus()).toEqual({ available: false, registeredCount: 0, executingCount: 0, tools: [] });
   });
 
   test('a partial update leaves the untouched counters alone', () => {
     setToolStatus({ registeredCount: 3 });
     setToolStatus({ available: true });
 
-    expect(getToolStatus()).toEqual({ available: true, registeredCount: 3, executingCount: 0 });
+    expect(getToolStatus()).toEqual({ available: true, registeredCount: 3, executingCount: 0, tools: [] });
   });
 
   test('a subscriber sees the new snapshot on every change', () => {

@@ -653,6 +653,105 @@ textarea:focus-visible,
   text-transform: uppercase;
 }
 
+/* The status doubles as the entry point to the tool contract, so it reads as actionable. */
+button.agent-status {
+  cursor: pointer;
+}
+
+button.agent-status:hover {
+  border-color: var(--agent-border);
+  color: var(--agent);
+}
+
+.agent-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-3);
+}
+
+.agent-tools__intro {
+  margin: 0;
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-tools__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-tools__item {
+  border: 1px solid var(--dc-color-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-color-surface-raised);
+}
+
+.agent-tools__item summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dc-space-1) var(--dc-space-2);
+  align-items: baseline;
+  padding: var(--dc-space-2);
+  cursor: pointer;
+}
+
+.agent-tools__name {
+  font-family: var(--dc-font-mono);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-tools__title {
+  color: var(--dc-color-text-muted);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-tools__description {
+  margin: 0;
+  padding: 0 var(--dc-space-2) var(--dc-space-2);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-tools__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dc-space-1);
+  margin: 0;
+  padding: 0 var(--dc-space-2) var(--dc-space-2);
+  list-style: none;
+}
+
+.agent-tools__badges li {
+  padding: 0 var(--dc-space-1);
+  border: 1px solid var(--agent-border);
+  border-radius: var(--dc-radius);
+  background: var(--agent-soft);
+  color: var(--agent);
+  font-size: 0.6875rem;
+}
+
+.agent-tools__arguments {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--dc-space-1) var(--dc-space-2);
+  margin: 0;
+  padding: 0 var(--dc-space-2) var(--dc-space-2);
+  font-size: var(--dc-text-sm);
+}
+
+.agent-tools__arguments dt {
+  color: var(--dc-color-text-muted);
+}
+
+.agent-tools__arguments dd {
+  margin: 0;
+  font-family: var(--dc-font-mono);
+  overflow-wrap: anywhere;
+}
+
 /* Let the middle grid track shrink below the table's intrinsic width. */
 /* Let the workspace row grow with its tallest panel so controls remain reachable. */
 .workspace__body {
@@ -1836,7 +1935,7 @@ textarea:focus-visible,
 
   .workspace__header .selection-summary,
   .workspace__header .workspace__revision,
-  .workspace__header .agent-status {
+  .workspace__header .agent-status-indicator {
     display: none;
   }
 

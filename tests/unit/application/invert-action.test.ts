@@ -42,6 +42,24 @@ describe('invertAction', () => {
     });
   });
 
+  /*
+   * A link mode is ordinary visualization metadata. Leaving it uninverted made a single chart control
+   * change mark the newest history entry non-undoable, which is what blocked undo in practice.
+   */
+  test('inverts a link-mode change by restoring the prior visualizations', () => {
+    const workspace = workspaceWithDataset();
+    const inverse = invertAction(
+      { type: 'visualization.setLinkMode', payload: { visualizationId: 'viz_1', linkMode: 'filter' } },
+      workspace,
+      ['viz_1'],
+    );
+
+    expect(inverse).toEqual({
+      type: 'history.restore',
+      payload: { state: { visualizations: workspace.visualizations }, changedEntityIds: ['viz_1'] },
+    });
+  });
+
   test('marks dataset ingestion actions non-invertible', () => {
     expect(
       invertAction(

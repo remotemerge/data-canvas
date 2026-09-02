@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
@@ -16,6 +16,31 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
   const visualizations = useMemo(() => Object.values(visualizationRecord), [visualizationRecord]);
   const metrics = useMemo(() => Object.values(metricRecord), [metricRecord]);
   const layoutById = useMemo(() => new Map(layout.items.map((item) => [item.visualizationId, item])), [layout.items]);
+  const itemRefs = useRef(new Map<string, HTMLDivElement>());
+  // IDs already on screen, so only a genuinely new chart scrolls the canvas.
+  const seenIds = useRef<Set<string> | null>(null);
+
+  /*
+   * Bring a newly added chart into view. The canvas scrolls and new charts are appended below the
+   * fold, so an agent-created chart otherwise lands outside the viewport with nothing indicating the
+   * workspace changed. Scrolling on the first render would fight the initial paint, so the first pass
+   * only records what was already present.
+   */
+  useEffect(() => {
+    const ids = new Set(visualizations.map((visualization) => visualization.id));
+
+    if (seenIds.current === null) {
+      seenIds.current = ids;
+      return;
+    }
+
+    const added = visualizations.find((visualization) => !seenIds.current?.has(visualization.id));
+    seenIds.current = ids;
+
+    if (added !== undefined) {
+      itemRefs.current.get(added.id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [visualizations]);
 
   const resize = async (visualizationId: string, amount: number) => {
     if (!layoutById.has(visualizationId)) {
@@ -57,6 +82,13 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
             return (
               <div
                 key={visualization.id}
+                ref={(element) => {
+                  if (element === null) {
+                    itemRefs.current.delete(visualization.id);
+                  } else {
+                    itemRefs.current.set(visualization.id, element);
+                  }
+                }}
                 className="visualization-grid__item"
                 /*
                  * Honor the stored column position so placement from `placeNewVisualization`, layout

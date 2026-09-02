@@ -180,17 +180,27 @@ export const planSampling = ({
   const retained = Math.max(deliverable - 1, 1);
   const firstMeasure = query.measures[0];
 
-  // Rank by the leading measure when available; otherwise preserve the query's order.
-  const rankable = firstMeasure?.alias !== undefined;
+  /*
+   * Top-N is only meaningful when the retained groups are the largest ones, so the leading measure
+   * has to be sortable. Chart queries are built from a binding and carry no alias, so one is supplied
+   * here rather than falling back to the engine's arbitrary group order, which would fold big groups
+   * into `Other` and leave small ones on the chart.
+   */
+  const measures =
+    firstMeasure === undefined
+      ? query.measures
+      : [{ ...firstMeasure, alias: firstMeasure.alias ?? firstMeasure.aggregate }, ...query.measures.slice(1)];
+  const rankAlias = measures[0]?.alias;
 
   return {
     query: {
       ...query,
-      ...(rankable ? { orderBy: [{ measureAlias: firstMeasure.alias as string, direction: 'desc' as const }] } : {}),
+      measures,
+      ...(rankAlias === undefined ? {} : { orderBy: [{ measureAlias: rankAlias, direction: 'desc' as const }] }),
       limit: retained,
     },
     // Whole-population aggregate used to compute the `Other` row.
-    totalQuery: { ...query, dimensions: [], binnedDimensions: [], orderBy: [], limit: 1 },
+    totalQuery: { ...query, measures, dimensions: [], binnedDimensions: [], orderBy: [], limit: 1 },
     disclosure: { strategy: { kind: 'topN', retained, otherBucket: true }, rate: 1, estimatedRows },
   };
 };

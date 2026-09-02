@@ -3,10 +3,8 @@ import type { Relationship } from '@/domain/relationship/relationship.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-// Maximum relationship hops allowed for selection propagation.
 const MAX_PROPAGATION_DEPTH = 8;
 
-// Finds the relationship chain between two datasets, if one exists.
 export const propagationPath = (
   workspace: Workspace,
   fromDatasetId: EntityId,
@@ -72,6 +70,5 @@ export const propagationPath = (
   return undefined;
 };
 
-// Returns whether selection can propagate between two datasets.
 export const isWithinSelectionScope = (workspace: Workspace, fromDatasetId: EntityId, toDatasetId: EntityId): boolean =>
   propagationPath(workspace, fromDatasetId, toDatasetId) !== undefined;

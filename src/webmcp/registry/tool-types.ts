@@ -32,7 +32,6 @@ export interface DataCanvasTool {
   handler(input: unknown): Promise<string>;
 }
 
-// Ready datasets required before a tool is registered.
 export const requiredDatasetCount = (tool: DataCanvasTool): number =>
   tool.needsDataset ? Math.max(tool.minimumDatasets ?? 1, 1) : 0;
 

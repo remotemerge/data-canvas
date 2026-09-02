@@ -1,6 +1,5 @@
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 
-// Discriminated result for expected success and failure values.
 export type Result<T, E = DomainError> = { ok: true; value: T } | { ok: false; error: E };
 
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });

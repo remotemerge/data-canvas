@@ -166,6 +166,16 @@ export const EChart = ({
     [actions, visualization.binding.x, visualization.datasetId],
   );
   const ref = useECharts(option, onClick, onBrush);
+
+  /*
+   * ECharts creates the canvas itself, so it cannot be labelled in JSX. Left bare it is announced as
+   * an unlabelled graphic sitting inside the labelled figure; hiding it moves assistive technology on
+   * to the figure's own label, which already names the chart and its interaction.
+   */
+  useEffect(() => {
+    ref.current?.querySelector('canvas')?.setAttribute('aria-hidden', 'true');
+  }, [option, ref]);
+
   return (
     <>
       {/*

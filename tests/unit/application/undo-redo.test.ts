@@ -76,6 +76,46 @@ describe('undo and redo', () => {
     expect((await history.redo()).ok).toBe(false);
   });
 
+  /*
+   * A non-invertible entry on top of the stack used to block every reversible action beneath it, so
+   * one dataset import disabled undo for the whole session. Undo now reaches the newest entry it can
+   * actually reverse and drops the record it walked past.
+   */
+  test('undo reaches past a non-invertible entry to the newest reversible action', async () => {
+    const harness = createHarness();
+    const history = createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store });
+    await harness.dispatcher.execute({ type: 'layout.update', payload: { columns: 6 } }, { actor: 'human' });
+    // Record a non-invertible action above the reversible one, as a dataset import would.
+    harness.store.setState((state) => ({
+      ...state,
+      history: [...state.history, NON_INVERTIBLE_ENTRY],
+      undoStack: [...state.undoStack, NON_INVERTIBLE_ENTRY.actionId],
+    }));
+
+    const undone = await history.undo();
+
+    expect(undone.ok).toBe(true);
+    expect(harness.workspace().layout.columns).not.toBe(6);
+    // The skipped record leaves the stack with the entry it blocked, so undo does not stall on it.
+    expect(harness.store.getState().undoStack).toEqual([]);
+  });
+
+  // With nothing reversible anywhere on the stack, undo still refuses rather than reversing at random.
+  test('undo refuses when every stacked entry is non-invertible', async () => {
+    const harness = createHarness();
+    const history = createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store });
+    harness.store.setState({
+      history: [NON_INVERTIBLE_ENTRY],
+      undoStack: [NON_INVERTIBLE_ENTRY.actionId],
+      redoStack: [],
+    });
+
+    const undone = await history.undo();
+
+    expect(undone.ok).toBe(false);
+    expect(undone.ok ? null : undone.error.details).toEqual({ reason: 'non-invertible' });
+  });
+
   // The bound keeps history from growing without limit across a long session.
   test('the history stack is bounded', () => {
     expect(HISTORY_STACK_LIMIT).toBe(100);

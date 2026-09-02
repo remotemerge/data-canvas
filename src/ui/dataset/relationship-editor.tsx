@@ -25,7 +25,6 @@ const joinTypeClass = (type: LogicalType): string => {
   return type;
 };
 
-// Creates a relationship using shared validation and engine key-quality checks.
 export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) => void }): React.JSX.Element => {
   const workspace = useWorkspace((state) => state.workspace);
   const actions = useActions();
