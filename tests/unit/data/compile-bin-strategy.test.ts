@@ -87,7 +87,35 @@ describe('bin strategy compilation', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.sql).toBe('CASE WHEN "revenue" < ? THEN ? WHEN "revenue" < ? THEN ? ELSE ? END');
-      expect(result.value.parameters).toEqual([10, Number.NEGATIVE_INFINITY, 20, 10, 20]);
+      // The open-ended bucket borrows the next bucket's width so its label stays finite.
+      expect(result.value.parameters).toEqual([10, 0, 20, 10, 20]);
+    }
+  });
+
+  /*
+   * A non-finite label reaches the UI as `null` (see `convertArrowValue`) and renders as a gap
+   * rather than a bucket, so every explicit bin label must be a finite, renderable number.
+   */
+  test('explicit bin labels stay finite so the lowest bucket renders', () => {
+    for (const breaks of [[10, 20], [0, 5, 10], [7]]) {
+      const result = compileBinStrategy({ kind: 'explicit', breaks }, REFERENCE);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        for (const parameter of result.value.parameters) {
+          expect(Number.isFinite(parameter as number)).toBe(true);
+        }
+      }
+    }
+  });
+
+  test('a single explicit break still separates its two buckets', () => {
+    const result = compileBinStrategy({ kind: 'explicit', breaks: [7] }, REFERENCE);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Below-7 bucket labelled 6, at-or-above-7 bucket labelled 7.
+      expect(result.value.parameters).toEqual([7, 6, 7]);
     }
   });
 

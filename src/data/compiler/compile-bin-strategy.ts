@@ -76,11 +76,21 @@ export const compileBinStrategy = (
       return ok({ sql: `NTILE(?) OVER (ORDER BY ${reference})`, parameters: [strategy.quantiles] });
 
     case 'explicit': {
+      /*
+       * Each bucket is labelled with its lower boundary. The bucket below the first break is
+       * open-ended, so it borrows the spacing of the next bucket for a finite label: a non-finite
+       * label would reach the UI as `null` (see `convertArrowValue`) and render as a gap rather
+       * than a bucket. A single break has no spacing to borrow, so the label steps down by one.
+       */
+      const first = strategy.breaks[0] as number;
+      const second = strategy.breaks[1];
+      const openEndedLabel = first - (second === undefined ? 1 : second - first);
+
       // The validator orders breaks, so the searched CASE arms are non-overlapping.
       const arms = strategy.breaks.map(() => `WHEN ${reference} < ? THEN ?`).join(' ');
       const parameters = strategy.breaks.flatMap((value, index) => [
         value,
-        index === 0 ? Number.NEGATIVE_INFINITY : (strategy.breaks[index - 1] as number),
+        index === 0 ? openEndedLabel : (strategy.breaks[index - 1] as number),
       ]);
 
       return ok({
