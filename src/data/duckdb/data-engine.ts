@@ -99,6 +99,59 @@ const statisticsMeasures = (columnId: EntityId, numeric: boolean, extrema: boole
 ];
 
 /*
+ * Reads the extrema pair from a statistics row. Numeric extrema are already numbers; temporal ones
+ * arrive as epoch values and are converted to ISO strings for the data-engine port, with a
+ * non-temporal value surfaced verbatim only when it has a faithful string form.
+ */
+const statisticsExtrema = (
+  row: readonly unknown[] | undefined,
+  logicalType: Column['logicalType'],
+): { min: number | string; max: number | string } => {
+  if (logicalType === 'number') {
+    return { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) };
+  }
+
+  const bound = (value: unknown): string => {
+    const date = new Date(typeof value === 'number' ? value : Number(value));
+
+    if (Number.isNaN(date.getTime())) {
+      return metadataText(value, '');
+    }
+
+    return logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
+  };
+
+  return { min: bound(row?.[3]), max: bound(row?.[4]) };
+};
+
+/*
+ * Assembles the profile from a statistics row. Alias positions shift with the column's logical type,
+ * matching the measures `statisticsMeasures` requested for the same column.
+ */
+const readColumnStatistics = (row: readonly unknown[] | undefined, column: Column): ColumnStatistics => {
+  const rowCount = Number(row?.[0] ?? 0);
+  const nonNull = Number(row?.[1] ?? 0);
+  const distinctCount = Number(row?.[2] ?? 0);
+  const numeric = column.logicalType === 'number';
+  const extrema = numeric || column.logicalType === 'date' || column.logicalType === 'timestamp';
+
+  return {
+    rowCount,
+    nullCount: Math.max(rowCount - nonNull, 0),
+    distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
+    distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
+    ...(extrema ? statisticsExtrema(row, column.logicalType) : {}),
+    ...(numeric
+      ? {
+          mean: Number(row?.[5] ?? 0),
+          median: Number(row?.[6] ?? 0),
+          stddev: Number(row?.[7] ?? 0),
+        }
+      : {}),
+  };
+};
+
+/*
  * Resolves the profiled column, which may be physical or derived. A derived column has no physical
  * counterpart, so it is described from its definition and only when it belongs to the target dataset.
  */
@@ -865,25 +918,14 @@ export const createDataEngine = (): DataEngine => {
     }
 
     const [row] = summary.value.rows;
-    const rowCount = Number(row?.[0] ?? 0);
-    const nonNull = Number(row?.[1] ?? 0);
-    const distinctCount = Number(row?.[2] ?? 0);
-    // Convert temporal extrema to ISO strings for the data-engine port.
-    const temporalBound = (value: unknown): string => {
-      const date = new Date(typeof value === 'number' ? value : Number(value));
-      if (Number.isNaN(date.getTime())) {
-        // A non-temporal extremum is surfaced verbatim only when it has a faithful string form.
-        return metadataText(value, '');
-      }
-      return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
-    };
+    const statistics = readColumnStatistics(row, column);
 
     // Cache exact statistics for this dataset revision, preserving a numeric extent cached elsewhere.
     const cached = statisticsCache.columnStatistics(column.id, relation.revision);
 
     statisticsCache.setColumnStatistics(column.id, relation.revision, {
-      distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
-      distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
+      distinctCount: statistics.distinctCount,
+      distinctCountCapped: statistics.distinctCountCapped,
       ...(numeric
         ? { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) }
         : {
@@ -891,26 +933,6 @@ export const createDataEngine = (): DataEngine => {
             ...(cached?.max === undefined ? {} : { max: cached.max }),
           }),
     });
-
-    const statistics: ColumnStatistics = {
-      rowCount,
-      nullCount: Math.max(rowCount - nonNull, 0),
-      distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
-      distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
-      ...(extrema
-        ? {
-            min: numeric ? Number(row?.[3] ?? 0) : temporalBound(row?.[3]),
-            max: numeric ? Number(row?.[4] ?? 0) : temporalBound(row?.[4]),
-            ...(numeric
-              ? {
-                  mean: Number(row?.[5] ?? 0),
-                  median: Number(row?.[6] ?? 0),
-                  stddev: Number(row?.[7] ?? 0),
-                }
-              : {}),
-          }
-        : {}),
-    };
 
     if (!numeric) {
       const limit = Math.min(Math.max(Math.trunc(request.topValueLimit ?? 10), 1), MAX_TOP_VALUES);
