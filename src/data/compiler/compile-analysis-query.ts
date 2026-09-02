@@ -259,11 +259,24 @@ const buildOrderBy = (
   sorts: NonNullable<AnalysisQuery['orderBy']>,
   resolve: ColumnReferenceResolver,
   measureAliases: ReadonlyMap<string, string>,
+  dimensionPositions: ReadonlyMap<EntityId, number>,
 ): Result<string[], DomainError> => {
   const orderBy: string[] = [];
 
   for (const sort of sorts) {
     if (sort.columnId !== undefined) {
+      /*
+       * A grouped dimension is sorted by its SELECT position. Binned and derived dimensions project a
+       * computed expression rather than the bare column, so ordering by the raw column would name a
+       * term that is absent from GROUP BY and the engine would reject the statement.
+       */
+      const position = dimensionPositions.get(sort.columnId);
+
+      if (position !== undefined) {
+        orderBy.push(`${position} ${sort.direction.toUpperCase()}`);
+        continue;
+      }
+
       const resolved = resolve(sort.columnId);
       if (resolved === undefined) {
         return err(missingColumn(sort.columnId));
@@ -297,6 +310,8 @@ interface Projection {
   // Dimension parameters come first because their placeholders appear in SELECT.
   dimensionParameters: unknown[];
   quantileBins: QuantileBin[];
+  // SELECT position of each grouped dimension, by column ID, so ORDER BY can reference it.
+  dimensionPositions: Map<EntityId, number>;
   measureAliases: Map<string, string>;
   // Base aggregates kept per measure so the time-spine branch can rebind them.
   aggregateByMeasure: Map<AnalysisQuery['measures'][number], { sql: string; parameters: unknown[] }>;
@@ -314,15 +329,19 @@ const buildProjection = (
     resultColumns: [],
     dimensionParameters: [],
     quantileBins: [],
+    dimensionPositions: new Map(),
     measureAliases: new Map(),
     aggregateByMeasure: new Map(),
   };
-  const { select, groupBy, resultColumns, dimensionParameters, quantileBins } = projection;
+  const { select, groupBy, resultColumns, dimensionParameters, quantileBins, dimensionPositions } = projection;
   const derivedContext = { resolve, derivedColumns };
 
-  // Records the SELECT position used by GROUP BY.
-  const groupBySelectPosition = (): void => {
+  // Records the SELECT position used by GROUP BY, and by ORDER BY when the dimension names a column.
+  const groupBySelectPosition = (columnId?: EntityId): void => {
     groupBy.push(`${select.length}`);
+    if (columnId !== undefined) {
+      dimensionPositions.set(columnId, select.length);
+    }
   };
 
   // Projects a plain dimension, following a derived reference to its compiled expression.
@@ -335,7 +354,7 @@ const buildProjection = (
         return compiled;
       }
       select.push(compiled.value.sql);
-      groupBySelectPosition();
+      groupBySelectPosition(derived.id);
       dimensionParameters.push(...compiled.value.parameters);
       resultColumns.push({ key: derived.id, name: derived.name, logicalType: derived.logicalType });
       return ok(undefined);
@@ -346,7 +365,7 @@ const buildProjection = (
       return err(missingColumn(columnId));
     }
     select.push(resolved.sql);
-    groupBySelectPosition();
+    groupBySelectPosition(resolved.column.id);
     resultColumns.push({
       key: resolved.column.id,
       name: resolved.column.name,
@@ -379,11 +398,11 @@ const buildProjection = (
 
       quantileBins.push({ sql: compiled.value.sql, alias, parameters: compiled.value.parameters });
       select.push(quoteIdentifier(alias));
-      groupBySelectPosition();
+      groupBySelectPosition(resolved.column.id);
     } else {
       select.push(compiled.value.sql);
       dimensionParameters.push(...compiled.value.parameters);
-      groupBySelectPosition();
+      groupBySelectPosition(resolved.column.id);
     }
 
     resultColumns.push({
@@ -491,7 +510,11 @@ const buildProjection = (
       for (const [index, position] of groupBy.entries()) {
         groupBy[index] = `${Number(position) + 1}`;
       }
+      for (const [columnId, position] of dimensionPositions) {
+        dimensionPositions.set(columnId, position + 1);
+      }
       groupBy.unshift('1');
+      dimensionPositions.set(category.column.id, 1);
       resultColumns.unshift({
         key: category.column.id,
         name: category.column.name,
@@ -690,7 +713,7 @@ export const compileAnalysisQuery = (
     return projected;
   }
 
-  const { select, groupBy, resultColumns, measureAliases, aggregateByMeasure } = projected.value;
+  const { select, groupBy, resultColumns, measureAliases, aggregateByMeasure, dimensionPositions } = projected.value;
 
   if (select.length === 0) {
     projectAnchorColumns(anchor, plan.value.steps.length === 0, select, resultColumns);
@@ -716,7 +739,7 @@ export const compileAnalysisQuery = (
     );
   }
 
-  const orderByClauses = buildOrderBy(query.orderBy ?? [], resolve, measureAliases);
+  const orderByClauses = buildOrderBy(query.orderBy ?? [], resolve, measureAliases, dimensionPositions);
 
   if (!orderByClauses.ok) {
     return orderByClauses;
