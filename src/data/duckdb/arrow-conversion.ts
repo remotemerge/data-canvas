@@ -74,22 +74,47 @@ export const convertArrowValue = (value: unknown): CellValue => {
   }
 
   if (ArrayBuffer.isView(value)) {
-    if (value.byteLength === 16) {
-      return convertBigInt(decodeHugeInt(value));
-    }
-    if (value.byteLength === 8) {
-      const i64 = new BigInt64Array(value.buffer, value.byteOffset, 1)[0]!;
-      return convertBigInt(i64);
-    }
-    // 32-bit integer types that DuckDB may emit for aggregate results fitting within INT32.
-    if (value.byteLength === 4) {
-      const i32 = new Int32Array(value.buffer, value.byteOffset, 1)[0]!;
-      return Number(i32);
-    }
-    return null;
+    return convertBufferView(value);
   }
 
-  return String(value);
+  return convertObject(value);
+};
+
+// DuckDB emits wide integer types as raw buffers, sized by the type's width.
+const convertBufferView = (value: ArrayBufferView): CellValue => {
+  if (value.byteLength === 16) {
+    return convertBigInt(decodeHugeInt(value));
+  }
+  if (value.byteLength === 8) {
+    return convertBigInt(new BigInt64Array(value.buffer, value.byteOffset, 1)[0]!);
+  }
+  // 32-bit integer types that DuckDB may emit for aggregate results fitting within INT32.
+  if (value.byteLength === 4) {
+    return Number(new Int32Array(value.buffer, value.byteOffset, 1)[0]!);
+  }
+
+  return null;
+};
+
+/*
+ * A value carrying its own `toString` describes itself, so that form is preferred. Nested DuckDB
+ * values (STRUCT, LIST, MAP) inherit Object's, which yields `[object Object]` and hides the
+ * contents, so those are serialized as JSON instead.
+ */
+const convertObject = (value: unknown): CellValue => {
+  const text = String(value);
+
+  if (text !== '[object Object]') {
+    return text;
+  }
+
+  try {
+    return (
+      JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry)) ?? null
+    );
+  } catch {
+    return null;
+  }
 };
 
 // Converts a cell using its logical type, including temporal epoch values.

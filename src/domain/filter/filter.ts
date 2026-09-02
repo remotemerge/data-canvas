@@ -44,6 +44,25 @@ export interface Filter {
   createdBy: 'human' | 'agent' | 'system';
 }
 
+/**
+ * Renders a filter value as display text.
+ *
+ * Values originate in imported data and are typed `unknown`, so only scalars have a faithful string
+ * form. Anything else is described by shape rather than stringified into `[object Object]`.
+ */
+export const filterValueText = (value: unknown): string => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry: unknown) => filterValueText(entry)).join(', ');
+  }
+  if (typeof value === 'object') {
+    return value instanceof Date ? value.toISOString() : 'a value';
+  }
+  return String(value as string | number | boolean | bigint | symbol);
+};
+
 // Composable filter predicate for selections and analysis queries.
 export type FilterExpression =
   | { kind: 'comparison'; columnId: EntityId; operator: FilterOperator; value?: unknown }

@@ -8,6 +8,9 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 
+// A single cell the engine can return. Structured values are converted before they cross the port.
+export type ScalarValue = string | number | boolean | null;
+
 // Result of importing a file into an engine relation.
 export interface ImportedRelation {
   relationId: string;
@@ -28,7 +31,7 @@ export interface TableWindowRequest {
 }
 
 export interface TableWindow {
-  rows: readonly (string | number | boolean | null)[][];
+  rows: readonly ScalarValue[][];
   // Column IDs in row order.
   columnIds: readonly EntityId[];
   offset: number;
@@ -39,7 +42,7 @@ export interface TableWindow {
 }
 
 export interface AnalysisResult {
-  rows: readonly (string | number | boolean | null)[][];
+  rows: readonly ScalarValue[][];
   columns: ResultColumn[];
   // Value-free warning for the UI and agent responses, currently used for join fan-out.
   warning?: string;
@@ -62,7 +65,7 @@ export interface DistinctValuesRequest {
 }
 
 export interface DistinctValue {
-  value: string | number | boolean | null;
+  value: ScalarValue;
   count: number;
 }
 
@@ -94,7 +97,7 @@ export interface ColumnStatistics {
   median?: number;
   stddev?: number;
   // Text and category columns only; values are dataset content.
-  topValues?: { value: string | number | boolean | null; count: number }[];
+  topValues?: { value: ScalarValue; count: number }[];
 }
 
 // Request for the numeric extent used by equal-width bins.

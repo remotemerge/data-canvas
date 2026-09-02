@@ -1,8 +1,16 @@
 import type { MetricFormat } from '@/domain/metric/metric.ts';
 
+const numberStyle = (style: MetricFormat['style'] | undefined): 'currency' | 'percent' | 'decimal' => {
+  if (style === 'currency') {
+    return 'currency';
+  }
+
+  return style === 'percent' ? 'percent' : 'decimal';
+};
+
 export const formatNumber = (value: number, format?: MetricFormat): string =>
   new Intl.NumberFormat(undefined, {
-    style: format?.style === 'currency' ? 'currency' : format?.style === 'percent' ? 'percent' : 'decimal',
+    style: numberStyle(format?.style),
     ...(format?.currency === undefined ? {} : { currency: format.currency }),
     ...(format?.maximumFractionDigits === undefined
       ? { maximumFractionDigits: 2 }
@@ -36,7 +44,25 @@ export const formatValue = (value: unknown): string => {
   if (value instanceof Date) {
     return new Intl.DateTimeFormat().format(value);
   }
-  return String(value);
+  if (typeof value === 'string' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+
+  /*
+   * A value carrying its own `toString` describes itself. Plain objects inherit Object's, which
+   * renders as `[object Object]`, so those are shown as JSON; the catch covers cyclic values.
+   */
+  const text = String(value);
+
+  if (text !== '[object Object]') {
+    return text;
+  }
+
+  try {
+    return JSON.stringify(value) ?? '—';
+  } catch {
+    return '—';
+  }
 };
 
 export const escapeText = (value: unknown): string =>
