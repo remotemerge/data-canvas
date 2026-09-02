@@ -9,6 +9,6 @@ interface LabelProps extends LabelHTMLAttributes<HTMLLabelElement> {
   htmlFor: string;
 }
 
-export const Label = ({ className, ...props }: LabelProps): React.JSX.Element => (
-  <label className={cn('grid gap-1 text-xs font-medium text-foreground', className)} {...props} />
+export const Label = ({ className, htmlFor, ...props }: LabelProps): React.JSX.Element => (
+  <label htmlFor={htmlFor} className={cn('grid gap-1 text-xs font-medium text-foreground', className)} {...props} />
 );
