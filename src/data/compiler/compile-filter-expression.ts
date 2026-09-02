@@ -37,6 +37,30 @@ const SQL_OPERATOR: Readonly<Partial<Record<FilterOperator, string>>> = {
 const missingColumn = (columnId: EntityId): DomainError =>
   domainError('COLUMN_NOT_FOUND', 'The filter references a column that does not exist in this dataset.', { columnId });
 
+// Joins the compiled operands of an `and` or `or` node, keeping each operand parenthesized.
+const compileCombinator = (
+  expression: Extract<FilterExpression, { kind: 'and' | 'or' }>,
+  resolve: ColumnReferenceResolver,
+): Result<CompiledFilter, DomainError> => {
+  if (expression.operands.length === 0) {
+    return err(domainError('INVALID_TOOL_ARGUMENTS', `A ${expression.kind} filter must contain an operand.`));
+  }
+
+  const fragments: string[] = [];
+  const parameters: unknown[] = [];
+
+  for (const operand of expression.operands) {
+    const compiled = compileFilterExpression(operand, resolve);
+    if (!compiled.ok) {
+      return compiled;
+    }
+    fragments.push(`(${compiled.value.sql})`);
+    parameters.push(...compiled.value.parameters);
+  }
+
+  return ok({ sql: fragments.join(expression.kind === 'and' ? ' AND ' : ' OR '), parameters });
+};
+
 // Compiles a filter tree to a parameterized `WHERE` fragment.
 export const compileFilterExpression = (
   expression: FilterExpression,
@@ -51,21 +75,7 @@ export const compileFilterExpression = (
   }
 
   if (expression.kind === 'and' || expression.kind === 'or') {
-    if (expression.operands.length === 0) {
-      return err(domainError('INVALID_TOOL_ARGUMENTS', `A ${expression.kind} filter must contain an operand.`));
-    }
-
-    const fragments: string[] = [];
-    const parameters: unknown[] = [];
-    for (const operand of expression.operands) {
-      const compiled = compileFilterExpression(operand, resolve);
-      if (!compiled.ok) {
-        return compiled;
-      }
-      fragments.push(`(${compiled.value.sql})`);
-      parameters.push(...compiled.value.parameters);
-    }
-    return ok({ sql: fragments.join(expression.kind === 'and' ? ' AND ' : ' OR '), parameters });
+    return compileCombinator(expression, resolve);
   }
 
   const resolved = resolve(expression.columnId);

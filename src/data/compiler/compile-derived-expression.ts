@@ -67,6 +67,64 @@ export interface DerivedCompilerContext {
 const missingColumn = (columnId: EntityId): DomainError =>
   domainError('COLUMN_NOT_FOUND', 'The expression references a column that does not exist.', { columnId });
 
+// Compiles the searched `CASE` arms, keeping each arm's placeholders in emitted order.
+const compileCaseExpression = (
+  expression: Extract<DerivedExpression, { kind: 'case' }>,
+  context: DerivedCompilerContext,
+  depth: number,
+): Result<CompiledExpression, DomainError> => {
+  const fragments: string[] = [];
+  const parameters: unknown[] = [];
+
+  for (const arm of expression.when) {
+    const left = compileDerivedExpression(arm.left, context, depth + 1);
+
+    if (!left.ok) {
+      return left;
+    }
+
+    const right = compileDerivedExpression(arm.right, context, depth + 1);
+
+    if (!right.ok) {
+      return right;
+    }
+
+    const armResult = compileDerivedExpression(arm.result, context, depth + 1);
+
+    if (!armResult.ok) {
+      return armResult;
+    }
+
+    const operator = COMPARISON_SQL[arm.operator];
+
+    if (operator === undefined) {
+      return err(
+        domainError('UNSUPPORTED_OPERATION', 'That comparison operator is not supported.', {
+          operator: arm.operator,
+        }),
+      );
+    }
+
+    fragments.push(`WHEN ${left.value.sql} ${operator} ${right.value.sql} THEN ${armResult.value.sql}`);
+    parameters.push(...left.value.parameters, ...right.value.parameters, ...armResult.value.parameters);
+  }
+
+  if (fragments.length === 0) {
+    return err(domainError('UNSUPPORTED_OPERATION', 'A case expression needs at least one when arm.'));
+  }
+
+  const otherwise = compileDerivedExpression(expression.otherwise, context, depth + 1);
+
+  if (!otherwise.ok) {
+    return otherwise;
+  }
+
+  return ok({
+    sql: `CASE ${fragments.join(' ')} ELSE ${otherwise.value.sql} END`,
+    parameters: [...parameters, ...otherwise.value.parameters],
+  });
+};
+
 // Compiles a derived-expression tree to a parameterized SQL fragment.
 export const compileDerivedExpression = (
   expression: DerivedExpression,
@@ -126,58 +184,8 @@ export const compileDerivedExpression = (
       });
     }
 
-    case 'case': {
-      const fragments: string[] = [];
-      const parameters: unknown[] = [];
-
-      for (const arm of expression.when) {
-        const left = compileDerivedExpression(arm.left, context, depth + 1);
-
-        if (!left.ok) {
-          return left;
-        }
-
-        const right = compileDerivedExpression(arm.right, context, depth + 1);
-
-        if (!right.ok) {
-          return right;
-        }
-
-        const armResult = compileDerivedExpression(arm.result, context, depth + 1);
-
-        if (!armResult.ok) {
-          return armResult;
-        }
-
-        const operator = COMPARISON_SQL[arm.operator];
-
-        if (operator === undefined) {
-          return err(
-            domainError('UNSUPPORTED_OPERATION', 'That comparison operator is not supported.', {
-              operator: arm.operator,
-            }),
-          );
-        }
-
-        fragments.push(`WHEN ${left.value.sql} ${operator} ${right.value.sql} THEN ${armResult.value.sql}`);
-        parameters.push(...left.value.parameters, ...right.value.parameters, ...armResult.value.parameters);
-      }
-
-      if (fragments.length === 0) {
-        return err(domainError('UNSUPPORTED_OPERATION', 'A case expression needs at least one when arm.'));
-      }
-
-      const otherwise = compileDerivedExpression(expression.otherwise, context, depth + 1);
-
-      if (!otherwise.ok) {
-        return otherwise;
-      }
-
-      return ok({
-        sql: `CASE ${fragments.join(' ')} ELSE ${otherwise.value.sql} END`,
-        parameters: [...parameters, ...otherwise.value.parameters],
-      });
-    }
+    case 'case':
+      return compileCaseExpression(expression, context, depth);
 
     case 'datePart': {
       const resolved = context.resolve(expression.columnId);
