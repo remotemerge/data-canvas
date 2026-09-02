@@ -53,33 +53,37 @@ const parseRecords = (text: string): JsonRecord[] => {
     }
 
     // If the whole document is not JSON, try newline-delimited records.
-    const records: JsonRecord[] = [];
+    return parseNewlineDelimited(trimmed);
+  }
+};
 
-    for (const line of trimmed.split('\n')) {
-      const candidate = line.trim();
+// Parses one JSON record per line, ignoring the blank lines that separate them.
+const parseNewlineDelimited = (trimmed: string): JsonRecord[] => {
+  const records: JsonRecord[] = [];
 
-      // Ignore blank lines between NDJSON records.
-      if (candidate.length === 0) {
-        continue;
-      }
+  for (const line of trimmed.split('\n')) {
+    const candidate = line.trim();
 
-      let parsedLine: unknown;
-
-      try {
-        parsedLine = JSON.parse(candidate);
-      } catch {
-        throw new JsonShapeError();
-      }
-
-      if (!isRecord(parsedLine)) {
-        throw new JsonShapeError();
-      }
-
-      records.push(parsedLine);
+    if (candidate.length === 0) {
+      continue;
     }
 
-    return records;
+    let parsedLine: unknown;
+
+    try {
+      parsedLine = JSON.parse(candidate);
+    } catch {
+      throw new JsonShapeError();
+    }
+
+    if (!isRecord(parsedLine)) {
+      throw new JsonShapeError();
+    }
+
+    records.push(parsedLine);
   }
+
+  return records;
 };
 
 // Collects first-seen keys across all records.
@@ -107,10 +111,18 @@ const csvField = (value: unknown): string => {
     return '';
   }
 
-  const text =
-    typeof value === 'object' ? JSON.stringify(value) : typeof value === 'bigint' ? value.toString() : String(value);
+  // Nested objects and arrays are preserved as JSON text so the CSV keeps one field per column.
+  const fieldText = (): string => {
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    return String(value as string | number | boolean);
+  };
 
-  return `"${text.replaceAll('"', '""')}"`;
+  return `"${fieldText().replaceAll('"', '""')}"`;
 };
 
 // Converts JSON or NDJSON text to CSV bytes.

@@ -14,7 +14,12 @@ export interface DisclosureText {
 const percent = (rate: number): string => {
   const value = rate * 100;
 
-  return value < 0.01 ? '<0.01%' : `${value < 1 ? value.toFixed(2) : value.toFixed(1)}%`;
+  if (value < 0.01) {
+    return '<0.01%';
+  }
+
+  // Sub-one-percent rates keep a second decimal so they do not all render as "0.0%".
+  return `${value < 1 ? value.toFixed(2) : value.toFixed(1)}%`;
 };
 
 export const describeSampling = (disclosure: SamplingDisclosure): DisclosureText => {

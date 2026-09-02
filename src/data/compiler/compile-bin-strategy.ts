@@ -36,8 +36,9 @@ export const compileBinStrategy = (
 
       const width = (range.max - range.min) / strategy.binCount;
 
-      // A constant column has no range to divide; place every row in one bucket.
-      if (!(width > 0)) {
+      // A constant column has no range to divide; place every row in one bucket. A non-finite
+      // width (an all-null column yields NaN bounds) takes the same single-bucket path.
+      if (!Number.isFinite(width) || width <= 0) {
         return ok({ sql: '?', parameters: [range.min] });
       }
 
@@ -95,7 +96,7 @@ export const compileBinStrategy = (
 
       return ok({
         sql: `CASE ${arms} ELSE ? END`,
-        parameters: [...parameters, strategy.breaks[strategy.breaks.length - 1] as number],
+        parameters: [...parameters, strategy.breaks.at(-1) as number],
       });
     }
 

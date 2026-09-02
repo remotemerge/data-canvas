@@ -81,7 +81,7 @@ export const widenTemporalUnit = (from: TemporalUnit, estimatedRows: number, bud
 const isRowLevel = (query: AnalysisQuery): boolean =>
   query.measures.length === 0 && (query.binnedDimensions ?? []).length === 0;
 
-const clampRate = (rate: number): number => Math.min(Math.max(rate, 0.000_01), 1);
+const clampRate = (rate: number): number => Math.min(Math.max(rate, 0.00001), 1);
 
 export interface SamplingInput {
   query: AnalysisQuery;
@@ -112,7 +112,7 @@ export const planSampling = ({
   const temporalBin = (query.binnedDimensions ?? []).find((bin) => bin.strategy.kind === 'temporal');
 
   // Widening preserves every row and measure, so try it before lossy sampling.
-  if (temporalBin !== undefined && temporalBin.strategy.kind === 'temporal') {
+  if (temporalBin?.strategy.kind === 'temporal') {
     const target = Math.min(budget, readableBudget ?? budget);
 
     if (estimatedRows > target) {

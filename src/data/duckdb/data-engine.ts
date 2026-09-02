@@ -75,6 +75,44 @@ interface DescribedColumn {
   null: unknown;
 }
 
+/*
+ * Aggregates profiled for one column. Extrema apply to ordered types only, and the distribution
+ * measures to numeric columns, so the alias positions shift with the column's logical type.
+ */
+const statisticsMeasures = (columnId: EntityId, numeric: boolean, extrema: boolean): AnalysisQuery['measures'] => [
+  { aggregate: 'count', alias: 'rows' },
+  { columnId, aggregate: 'count', alias: 'nonNull' },
+  { columnId, aggregate: 'count_distinct', alias: 'distinct' },
+  ...(extrema
+    ? ([
+        { columnId, aggregate: 'min' as const, alias: 'lo' },
+        { columnId, aggregate: 'max' as const, alias: 'hi' },
+        ...(numeric
+          ? [
+              { columnId, aggregate: 'avg' as const, alias: 'mean' },
+              { columnId, aggregate: 'median' as const, alias: 'median' },
+              { columnId, aggregate: 'stddev' as const, alias: 'stddev' },
+            ]
+          : []),
+      ] satisfies AnalysisQuery['measures'])
+    : []),
+];
+
+/*
+ * DuckDB metadata columns are declared `unknown` because the driver returns untyped Arrow values.
+ * Only genuine scalars have a faithful string form, so anything else falls back rather than
+ * stringifying to `[object Object]`.
+ */
+const metadataText = (value: unknown, fallback: string): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return fallback;
+};
+
 export interface DataEngine extends DataEnginePort {
   initialize(): Promise<Result<void, DomainError>>;
   dispose(): Promise<void>;
@@ -147,7 +185,7 @@ const buildColumns = async (
   const columns: Column[] = [];
 
   for (const [ordinal, entry] of described.entries()) {
-    const databaseType = String(entry.column_type ?? 'UNKNOWN');
+    const databaseType = metadataText(entry.column_type, 'UNKNOWN');
     const physicalName = createColumnName(ordinal);
     const baseType = normalizeLogicalType(databaseType);
 
@@ -165,7 +203,7 @@ const buildColumns = async (
       databaseType,
       logicalType,
       // Treat unexpected nullability metadata as nullable, the safe direction.
-      nullable: String(entry.null ?? 'YES').toUpperCase() !== 'NO',
+      nullable: metadataText(entry.null, 'YES').toUpperCase() !== 'NO',
     });
   }
 
@@ -347,7 +385,7 @@ export const createDataEngine = (): DataEngine => {
 
       const staged = await describeRelation(connection, stagingName);
 
-      return staged.map((entry) => String(entry.column_name ?? ''));
+      return staged.map((entry) => metadataText(entry.column_name, ''));
     } finally {
       // Release the registered buffer so worker memory does not retain a second file copy.
       await handle?.database.dropFile(virtualPath).catch(() => undefined);
@@ -556,7 +594,8 @@ export const createDataEngine = (): DataEngine => {
     const sampleRows = Math.min(Math.max(Math.trunc(request.sampleRows) || 0, 1), 100_000);
 
     try {
-      const sample = `(SELECT ${identifiers.join(', ')} FROM ${quoteIdentifier(relation.relationName)} WHERE ${identifiers.map((identifier) => `${identifier} IS NOT NULL`).join(' AND ')} LIMIT ${sampleRows})`;
+      const notNull = identifiers.map((identifier) => `${identifier} IS NOT NULL`).join(' AND ');
+      const sample = `(SELECT ${identifiers.join(', ')} FROM ${quoteIdentifier(relation.relationName)} WHERE ${notNull} LIMIT ${sampleRows})`;
       const counted = await connectionResult.value.query(
         `SELECT count(*) AS ${quoteIdentifier('sampled')}, count(DISTINCT (${identifiers.join(', ')})) AS ${quoteIdentifier('distinct_keys')} FROM ${sample}`,
       );
@@ -792,24 +831,7 @@ export const createDataEngine = (): DataEngine => {
     const numeric = column.logicalType === 'number';
     const temporal = column.logicalType === 'date' || column.logicalType === 'timestamp';
     const extrema = numeric || temporal;
-    const measures: AnalysisQuery['measures'] = [
-      { aggregate: 'count', alias: 'rows' },
-      { columnId: column.id, aggregate: 'count', alias: 'nonNull' },
-      { columnId: column.id, aggregate: 'count_distinct', alias: 'distinct' },
-      ...(extrema
-        ? ([
-            { columnId: column.id, aggregate: 'min' as const, alias: 'lo' },
-            { columnId: column.id, aggregate: 'max' as const, alias: 'hi' },
-            ...(numeric
-              ? [
-                  { columnId: column.id, aggregate: 'avg' as const, alias: 'mean' },
-                  { columnId: column.id, aggregate: 'median' as const, alias: 'median' },
-                  { columnId: column.id, aggregate: 'stddev' as const, alias: 'stddev' },
-                ]
-              : []),
-          ] satisfies AnalysisQuery['measures'])
-        : []),
-    ];
+    const measures = statisticsMeasures(column.id, numeric, extrema);
 
     const summary = await executeAnalysis({
       datasetId: request.datasetId,
@@ -831,7 +853,8 @@ export const createDataEngine = (): DataEngine => {
     const temporalBound = (value: unknown): string => {
       const date = new Date(typeof value === 'number' ? value : Number(value));
       if (Number.isNaN(date.getTime())) {
-        return String(value ?? '');
+        // A non-temporal extremum is surfaced verbatim only when it has a faithful string form.
+        return metadataText(value, '');
       }
       return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
     };
