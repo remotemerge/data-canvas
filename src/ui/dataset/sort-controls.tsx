@@ -7,26 +7,25 @@ interface SortControlsProps {
   onChange(sort: SortSpec[]): void;
 }
 
+// Clicking a header cycles the column through unsorted, ascending, then descending.
+const SORT_STATE = {
+  none: { label: 'Not sorted', indicator: '', next: 'asc' },
+  asc: { label: 'Sorted ascending', indicator: '↑', next: 'desc' },
+  desc: { label: 'Sorted descending', indicator: '↓', next: 'none' },
+} as const;
+
 export const SortControls = ({ column, sort, onChange }: SortControlsProps): React.JSX.Element => {
   const current = sort.find((entry) => entry.columnId === column.id);
-  const label =
-    current === undefined ? 'Not sorted' : current.direction === 'asc' ? 'Sorted ascending' : 'Sorted descending';
+  const state = SORT_STATE[current?.direction ?? 'none'];
+
   return (
     <button
       className="data-table__sort"
       type="button"
-      aria-label={`${column.name}: ${label}`}
-      onClick={() =>
-        onChange(
-          current === undefined
-            ? [{ columnId: column.id, direction: 'asc' }]
-            : current.direction === 'asc'
-              ? [{ columnId: column.id, direction: 'desc' }]
-              : [],
-        )
-      }
+      aria-label={`${column.name}: ${state.label}`}
+      onClick={() => onChange(state.next === 'none' ? [] : [{ columnId: column.id, direction: state.next }])}
     >
-      {column.name} {current === undefined ? '' : current.direction === 'asc' ? '↑' : '↓'}
+      {column.name} {state.indicator}
     </button>
   );
 };

@@ -34,8 +34,7 @@ export const AnnotationEditor = ({
       }}
     >
       <label>
-        Note
-        <input maxLength={280} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
+        Note <input maxLength={280} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
       </label>
       <div className="form-actions">
         <Button type="submit" disabled={text.trim().length === 0}>

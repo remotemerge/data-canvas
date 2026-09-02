@@ -96,7 +96,7 @@ export const MetricEditor = ({
       <h3 id={`metric-editor-${metric.id}`}>{metric.name}</h3>
 
       <label>
-        Calculation
+        Calculation{' '}
         <select value={kind} onChange={(event) => setKind(event.target.value as ModifierKind)}>
           {(Object.keys(MODIFIER_LABEL) as ModifierKind[]).map((item) => (
             <option key={item} value={item}>
@@ -108,7 +108,7 @@ export const MetricEditor = ({
 
       {kind === 'runningTotal' ? (
         <label>
-          Order by
+          Order by{' '}
           <select value={orderBy} onChange={(event) => setOrderBy(event.target.value)}>
             <option value="">Choose</option>
             {columns.map((column) => (
@@ -123,7 +123,7 @@ export const MetricEditor = ({
       {kind === 'timeComparison' ? (
         <>
           <label>
-            Date column
+            Date column{' '}
             <select value={dateColumnId} onChange={(event) => setDateColumnId(event.target.value)}>
               <option value="">Choose</option>
               {temporalColumns.map((column) => (
@@ -134,7 +134,7 @@ export const MetricEditor = ({
             </select>
           </label>
           <label>
-            Period
+            Period{' '}
             <select value={unit} onChange={(event) => setUnit(event.target.value as TemporalUnit)}>
               {TEMPORAL_UNITS.map((item) => (
                 <option key={item} value={item}>
@@ -144,7 +144,7 @@ export const MetricEditor = ({
             </select>
           </label>
           <label>
-            Periods back
+            Periods back{' '}
             <input
               type="number"
               min={1}
@@ -154,7 +154,7 @@ export const MetricEditor = ({
             />
           </label>
           <label>
-            Show
+            Show{' '}
             <select value={output} onChange={(event) => setOutput(event.target.value as TimeComparisonOutput)}>
               {TIME_COMPARISON_OUTPUTS.map((item) => (
                 <option key={item} value={item}>
@@ -168,7 +168,7 @@ export const MetricEditor = ({
       ) : null}
 
       <label>
-        When this rises
+        When this rises{' '}
         <select value={direction} onChange={(event) => setDirection(event.target.value as MetricDirection)}>
           {METRIC_DIRECTIONS.map((item) => (
             <option key={item} value={item}>

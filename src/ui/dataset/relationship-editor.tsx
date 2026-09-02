@@ -64,7 +64,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
   const validation = candidate === null ? null : validateRelationship(workspace, candidate);
 
   const create = async (): Promise<void> => {
-    if (candidate === null || validation === null || !validation.ok) {
+    if (candidate === null || validation?.ok !== true) {
       return;
     }
 
@@ -92,7 +92,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
       ) : (
         <>
           <label>
-            From
+            From{' '}
             <select
               value={leftDatasetId}
               onChange={(event) => {
@@ -110,7 +110,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
           </label>
 
           <label>
-            To
+            To{' '}
             <select
               value={rightDatasetId}
               onChange={(event) => {
@@ -130,7 +130,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
           </label>
 
           <label>
-            From key
+            From key{' '}
             <select value={leftColumnId} onChange={(event) => setLeftColumnId(event.target.value)}>
               <option value="">Choose</option>
               {(left?.columns ?? []).map((column) => (
@@ -142,7 +142,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
           </label>
 
           <label>
-            To key
+            To key{' '}
             <select value={rightColumnId} onChange={(event) => setRightColumnId(event.target.value)}>
               <option value="">Choose</option>
               {rightColumns.map((column) => (
@@ -154,7 +154,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
           </label>
 
           <label title={FIELD_HINT.cardinality}>
-            Cardinality
+            Cardinality{' '}
             <select value={kind} onChange={(event) => setKind(event.target.value as RelationshipKind)}>
               {RELATIONSHIP_KINDS.map((item) => (
                 <option key={item} value={item}>
@@ -165,7 +165,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
           </label>
 
           <label title={FIELD_HINT.join}>
-            Join
+            Join{' '}
             <select value={join} onChange={(event) => setJoin(event.target.value as JoinKind)}>
               {JOIN_KINDS.map((item) => (
                 <option key={item} value={item}>
@@ -175,7 +175,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
             </select>
           </label>
 
-          <button type="button" disabled={validation === null || !validation.ok} onClick={() => void create()}>
+          <button type="button" disabled={validation?.ok !== true} onClick={() => void create()}>
             Create relationship
           </button>
 
@@ -183,11 +183,7 @@ export const RelationshipEditor = ({ onError }: { onError: (error: DomainError) 
             <p className="relationship-editor__hint">{validation.error.message}</p>
           ) : null}
 
-          {notice === null ? null : (
-            <p className="relationship-editor__notice" role="status">
-              {notice}
-            </p>
-          )}
+          {notice === null ? null : <output className="relationship-editor__notice">{notice}</output>}
 
           {suggestions.length === 0 ? null : (
             <div className="relationship-editor__suggestions">

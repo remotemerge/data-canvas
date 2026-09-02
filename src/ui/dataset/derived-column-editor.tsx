@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { validateDerivedColumn } from '@/application/validation/validate-derived-column.ts';
-import type { ArithmeticOperator, DerivedExpression } from '@/domain/analysis/derived-expression.ts';
 import { ARITHMETIC_OPERATORS, DATE_PARTS } from '@/domain/analysis/derived-expression.ts';
-import type { DatePart } from '@/domain/analysis/derived-expression.ts';
+import type { ArithmeticOperator, DatePart, DerivedExpression } from '@/domain/analysis/derived-expression.ts';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
@@ -69,7 +68,7 @@ export const DerivedColumnEditor = ({
       : validateDerivedColumn(dataset, { name, expression }, derivedColumns);
 
   const submit = (): void => {
-    if (expression === null || validation === null || !validation.ok) {
+    if (expression === null || validation?.ok !== true) {
       return;
     }
 
@@ -87,12 +86,11 @@ export const DerivedColumnEditor = ({
       <p>Build a column from existing data. DuckDB calculates its values when you query the dataset.</p>
 
       <label>
-        Name
-        <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+        Name <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
       </label>
 
       <label>
-        Kind
+        Kind{' '}
         <select value={mode} onChange={(event) => setMode(event.target.value as FormMode)}>
           <option value="arithmetic">Arithmetic</option>
           <option value="datePart">Date part</option>
@@ -102,7 +100,7 @@ export const DerivedColumnEditor = ({
       {mode === 'arithmetic' ? (
         <>
           <label>
-            Left
+            Left{' '}
             <select value={left} onChange={(event) => setLeft(event.target.value)}>
               <option value="">Choose</option>
               {numericColumns.map((column) => (
@@ -113,7 +111,7 @@ export const DerivedColumnEditor = ({
             </select>
           </label>
           <label>
-            Operator
+            Operator{' '}
             <select value={operator} onChange={(event) => setOperator(event.target.value as ArithmeticOperator)}>
               {ARITHMETIC_OPERATORS.map((item) => (
                 <option key={item} value={item}>
@@ -123,7 +121,7 @@ export const DerivedColumnEditor = ({
             </select>
           </label>
           <label>
-            Right
+            Right{' '}
             <select value={right} onChange={(event) => setRight(event.target.value)}>
               <option value="">Choose</option>
               {numericColumns.map((column) => (
@@ -138,7 +136,7 @@ export const DerivedColumnEditor = ({
       ) : (
         <>
           <label>
-            Column
+            Column{' '}
             <select value={dateColumn} onChange={(event) => setDateColumn(event.target.value)}>
               <option value="">Choose</option>
               {temporalColumns.map((column) => (
@@ -149,7 +147,7 @@ export const DerivedColumnEditor = ({
             </select>
           </label>
           <label>
-            Part
+            Part{' '}
             <select value={part} onChange={(event) => setPart(event.target.value as DatePart)}>
               {DATE_PARTS.map((item) => (
                 <option key={item} value={item}>
@@ -161,7 +159,7 @@ export const DerivedColumnEditor = ({
         </>
       )}
 
-      <button type="button" disabled={validation === null || !validation.ok} onClick={submit}>
+      <button type="button" disabled={validation?.ok !== true} onClick={submit}>
         Add column
       </button>
 
