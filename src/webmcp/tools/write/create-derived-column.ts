@@ -7,10 +7,16 @@ import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 // Adds a derived column from a validated expression tree.
 export const createCreateDerivedColumnTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'create_derived_column',
+  title: 'Create derived column',
   description:
-    'Add a computed column from a structured expression tree of columns, literals, arithmetic, conditionals, date parts, bins, and casts. Formula strings and SQL are not accepted.',
+    'Add a permanent computed column from a structured expression tree of column references, literals, arithmetic, conditionals, date parts, bins, and casts. Use it when later filters, charts, or analyses need a value the dataset lacks, such as a margin ratio or category band. Prefer analyze_data or a chart aggregate for a one-off figure. Formula strings and SQL are not accepted.',
   schema: toolSchemas.create_derived_column,
-  annotations: { readOnlyHint: false },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   needsDataset: true,
   handler: async (raw) => {
     const input = asInput(raw);

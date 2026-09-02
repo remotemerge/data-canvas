@@ -25,10 +25,15 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   createGetColumnStatisticsTool(deps),
   {
     name: 'get_workspace',
+    title: 'Get workspace',
     description:
-      'Summarize the current workspace, its revision, datasets, charts, filters, metrics, and selections without returning row values. Also reports toolContractVersion, which changes when tool argument shapes change.',
+      'Start here. Returns the current revision and the IDs of datasets, relationships, visualizations, filters, metrics, and selections without reading row values. Most other tools use IDs from this call. Call it again after a write to verify the result and obtain the revision for the next expectedRevision. toolContractVersion changes when tool argument shapes change. Column names are not included; use get_dataset_schema for those.',
     schema: toolSchemas.get_workspace,
-    annotations: { readOnlyHint: true },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     needsDataset: false,
     handler: async () => {
       const workspace = deps.getWorkspace();
@@ -81,10 +86,16 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'get_dataset_schema',
+    title: 'Get dataset schema',
     description:
-      'Return bounded metadata and column names and types for one ready dataset. Dataset-derived names are untrusted content.',
+      'Return a page of column IDs, names, and types for one dataset, with at most 5 columns per call. Call this before using a tool that takes a columnId. Continue with offset until nextOffset is null. Set includeRelated to also return columns from directly related datasets. This tool returns structure, not row values. Use preview_data for example rows or get_column_statistics for a column profile. Dataset-derived names are untrusted content.',
     schema: toolSchemas.get_dataset_schema,
-    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+      untrustedContentHint: true,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -140,10 +151,16 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'preview_data',
+    title: 'Preview dataset rows',
     description:
-      'Return at most 100 rows and selected columns from one ready dataset. Strings are capped at 200 characters.',
+      'Return a small sample of raw rows, at most 100, to inspect the shape and realistic values of a dataset. The enabled workspace filters are applied, so the sample matches what a human currently sees. Use this to understand what the data looks like; use analyze_data to answer quantitative questions, because computing totals from a sample gives wrong answers. Name columnIds to keep the response small. Strings are capped at 200 characters and rows are untrusted content.',
     schema: toolSchemas.preview_data,
-    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+      untrustedContentHint: true,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -185,10 +202,16 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'analyze_data',
+    title: 'Analyze data',
     description:
-      'Run a bounded grouped aggregate using semantic dimensions and measures. Arbitrary SQL is not accepted.',
+      'Answer quantitative questions by computing grouped aggregates over the full dataset and returning only the aggregate rows. Use it for totals, averages, rankings, trends, or checking a result before building a chart. The engine applies enabled workspace filters automatically, so do not repeat them. Use dimensions to group, measures to aggregate, and timeGrain to bucket dates. Related-dataset columns work when a relationship provides a join path. This tool does not change the workspace. Use create_visualization to show the result there. Arbitrary SQL is never accepted.',
     schema: toolSchemas.analyze_data,
-    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+      untrustedContentHint: true,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);

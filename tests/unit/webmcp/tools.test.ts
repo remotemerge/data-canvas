@@ -123,6 +123,28 @@ describe('WebMCP tool surface exclusions', () => {
     expect(names).not.toContain('import_workspace');
     expect(names).not.toContain('export_workspace');
   });
+
+  test('declares titles, retry behavior, and side effects for every tool', () => {
+    const { deps } = setup();
+    const tools = createToolDefinitions(deps);
+
+    for (const tool of tools) {
+      expect(tool.title.length).toBeGreaterThan(0);
+      expect(tool.annotations.openWorldHint).toBe(false);
+      if (tool.annotations.readOnlyHint === true) {
+        expect(tool.annotations.idempotentHint).toBe(true);
+      }
+    }
+
+    expect(tools.find((tool) => tool.name === 'create_metric')?.annotations).toMatchObject({
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    expect(tools.find((tool) => tool.name === 'remove_visualization')?.annotations).toMatchObject({
+      destructiveHint: true,
+      idempotentHint: true,
+    });
+  });
 });
 
 describe('WebMCP semantic tool behavior', () => {
@@ -223,7 +245,7 @@ describe('WebMCP semantic tool behavior', () => {
         leftDatasetId: 'ds_sales',
         rightDatasetId: 'ds_missing',
         on: [{ leftColumnId: 'col_region', rightColumnId: 'col_region' }],
-        kind: 'manyToOne',
+        kind: 'many_to_one',
         join: 'inner',
       }),
     ) as { ok: boolean; code?: string };

@@ -139,10 +139,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   ...createHistoryTools(deps),
   {
     name: 'create_visualization',
+    title: 'Create visualization',
     description:
-      'Create a semantic chart, KPI, table, histogram, box plot, or heatmap in the shared workspace. Binning and distribution statistics are computed in the engine.',
+      'Add a chart, KPI, table, histogram, box plot, or heatmap to the shared workspace, where it becomes visible immediately. Specify columns and an aggregate. The application builds the query and renderer configuration, then computes bins and distribution statistics in the engine. Returns visualizationId for update_visualization, add_annotation, or remove_visualization. Use analyze_data first when you need to inspect the numbers. Use update_visualization when refining an existing chart.',
     schema: toolSchemas.create_visualization,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -166,9 +172,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'update_visualization',
-    description: 'Update an existing visualization through the same application action used by the UI.',
+    title: 'Update visualization',
+    description:
+      'Change the title, chart kind, columns, aggregate, binning, or selection behavior of an existing visualization. Only supplied fields change. The application rebuilds the query when the kind, aggregate, or any column changes. Prefer this over removing and recreating a chart, which loses its annotations and layout position.',
     schema: toolSchemas.update_visualization,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -214,9 +227,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'remove_visualization',
-    description: 'Remove one visualization and its attached annotations from the shared workspace.',
+    title: 'Remove visualization',
+    description:
+      'Delete one visualization and its annotations from the shared workspace. Use update_visualization when you only need to change the chart. The deletion is reversible with undo. Pass expectedRevision to prevent deletion if the workspace changed after you last read it.',
     schema: toolSchemas.remove_visualization,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -229,9 +249,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'apply_filter',
-    description: 'Apply a validated semantic filter to a dataset. Values never become SQL text.',
+    title: 'Apply filter',
+    description:
+      'Restrict charts, tables, and subsequent reads to rows that match one condition. Nonmatching rows remain in the dataset but are excluded from analysis. Each call adds a filter, so call it several times for a compound condition and use clear_filters to remove filters. Use highlight_selection instead when other rows should remain visible. Returns filterId, which create_metric accepts. The engine binds values as parameters; they never become SQL text.',
     schema: toolSchemas.apply_filter,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -253,9 +280,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'clear_filters',
-    description: 'Clear every filter or only filters belonging to one dataset.',
+    title: 'Clear filters',
+    description:
+      'Remove filters and restore the rows they excluded. Pass datasetId to clear filters for one dataset. Omit it to clear every workspace filter, including filters a human applied. The tool removes all filters in scope; it cannot remove one filter by ID. Call get_workspace first to inspect active filters.',
     schema: toolSchemas.clear_filters,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -271,10 +305,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'highlight_selection',
+    title: 'Highlight selection',
     description:
-      'Highlight a bounded set of values using a semantic selection predicate. Set additive to add to the current selection.',
+      'Emphasize rows whose column value matches one of the supplied values, as if a human selected the corresponding marks. Other rows remain visible but recede, and each chart reacts according to its linkMode. Use apply_filter instead when nonmatching rows should be excluded from analysis. Set additive to extend the current selection instead of replacing it. Use clear_selection to reset it.',
     schema: toolSchemas.highlight_selection,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -297,10 +337,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'create_metric',
+    title: 'Create metric',
     description:
-      'Create a named aggregate metric, optionally with a percent-of-total, running-total, or time-comparison modifier.',
+      'Define a named, reusable aggregate that persists in the workspace, such as "Total revenue" or "Month-over-month growth". An optional modifier can calculate percent of total, a running total, or a period-over-period comparison. Use this for a figure that should persist. Use analyze_data for a one-off result. Supply filterIds to bind the metric to a subset independently of active workspace filters.',
     schema: toolSchemas.create_metric,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);
@@ -324,9 +370,16 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
   },
   {
     name: 'add_annotation',
-    description: 'Add plain-text explanatory annotation to an existing visualization.',
+    title: 'Add annotation',
+    description:
+      'Attach a short plain-text note to a point, range, or category of an existing chart. Use it to explain a spike, outlier, or other finding. The application stores and renders the note as text, never as markup. Removing the chart also removes its annotations.',
     schema: toolSchemas.add_annotation,
-    annotations: { readOnlyHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     needsDataset: true,
     handler: async (raw) => {
       const input = asInput(raw);

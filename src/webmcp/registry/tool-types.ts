@@ -4,15 +4,22 @@ import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
 import type { AnalysisResult, TableWindow } from '@/application/ports/data-engine-port.ts';
 import type { ColumnProfile } from '@/application/queries/column-statistics.ts';
 import type { ActionResult, ApplicationActions } from '@/application/actions/action-types.ts';
+
+type DataCanvasToolAnnotations = WebMcpToolAnnotations & {
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { Result } from '@/shared/result/result.ts';
 import type { ToolName } from '@/webmcp/schemas/compile-schemas.ts';
 
 export interface DataCanvasTool {
   name: ToolName;
+  title: string;
   description: string;
   schema: object;
-  annotations: WebMcpToolAnnotations;
+  annotations: DataCanvasToolAnnotations;
   needsDataset: boolean;
   /**
    * Ready datasets this tool needs before it can succeed, when one is not enough.
