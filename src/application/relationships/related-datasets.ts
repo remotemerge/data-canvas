@@ -3,10 +3,8 @@ import type { Dataset } from '@/domain/dataset/dataset.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 
-// Maximum relationship hops exposed to callers.
 const MAX_REACHABLE_DEPTH = 8;
 
-// Returns datasets reachable from an anchor, excluding the anchor.
 export const reachableDatasets = (workspace: Workspace, anchorId: EntityId): Dataset[] => {
   const relationships = Object.values(workspace.relationships);
   const found: Dataset[] = [];

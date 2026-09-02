@@ -6,7 +6,6 @@ import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { selectActiveDatasetId, selectDatasets } from '@/state/selectors/workspace-selectors.ts';
 
-// Lists workspace datasets and handles selection and removal.
 export const DatasetList = ({ onError }: { onError: (error: DomainError) => void }): React.JSX.Element => {
   const datasets = useWorkspace(selectDatasets);
   const activeDatasetId = useWorkspace(selectActiveDatasetId);

@@ -13,7 +13,6 @@ export const workspaceTableFeatures = tableFeatures({
 export const formatCellValue = (value: unknown): string =>
   value === null || value === undefined ? '' : String(value as string | number | boolean);
 
-// Returns the alignment for a table column.
 export const columnAlignment = (column: Column): 'end' | 'start' =>
   isNumericType(column.logicalType) ? 'end' : 'start';
 

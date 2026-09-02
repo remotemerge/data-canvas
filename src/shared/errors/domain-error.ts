@@ -1,4 +1,3 @@
-// Stable error codes used by callers and agents.
 export type DomainErrorCode =
   | 'INVALID_TOOL_ARGUMENTS'
   | 'DATASET_NOT_FOUND'
@@ -10,7 +9,6 @@ export type DomainErrorCode =
   | 'RELATIONSHIP_CYCLE'
   | 'DATASET_IN_USE'
   | 'STALE_WORKSPACE_REVISION'
-  // Persisted workspace cannot be loaded by this schema version.
   | 'WORKSPACE_VERSION_UNSUPPORTED'
   | 'RESULT_LIMIT_EXCEEDED'
   | 'UNSUPPORTED_OPERATION'
@@ -18,7 +16,6 @@ export type DomainErrorCode =
   | 'QUERY_FAILED'
   | 'ENGINE_UNAVAILABLE';
 
-// Error payload safe to cross the agent boundary.
 export interface DomainError {
   code: DomainErrorCode;
   // Short corrective text that must not contain dataset values.

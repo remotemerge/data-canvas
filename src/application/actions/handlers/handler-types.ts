@@ -5,7 +5,6 @@ import type { DomainError } from '@/shared/errors/domain-error.ts';
 import type { EntityId } from '@/shared/ids/entity-id.ts';
 import type { Result } from '@/shared/result/result.ts';
 
-// Dependencies available to an action handler.
 export interface HandlerDeps {
   dataEngine: DataEnginePort;
   actor: Actor;
@@ -30,7 +29,6 @@ export type ActionHandler<TPayload> = (
   deps: HandlerDeps,
 ) => Result<HandlerOutcome, DomainError> | Promise<Result<HandlerOutcome, DomainError>>;
 
-// Omits selected entries from a normalized entity map without mutating it.
 export const omitKeys = <T>(record: Record<EntityId, T>, keys: readonly EntityId[]): Record<EntityId, T> => {
   const next: Record<EntityId, T> = { ...record };
 

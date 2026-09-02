@@ -35,7 +35,6 @@ export const rangeSelection = (columnId: string, start: number, end: number): Fi
 export const isSameSelection = (left: FilterExpression | undefined, right: FilterExpression): boolean =>
   left !== undefined && JSON.stringify(left) === JSON.stringify(right);
 
-// Returns whether the click should extend selection.
 export const isAdditiveClick = (event: { event?: { ctrlKey?: boolean; metaKey?: boolean } }): boolean =>
   event.event?.ctrlKey === true || event.event?.metaKey === true;
 

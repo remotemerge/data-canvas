@@ -40,9 +40,8 @@ export interface Workspace {
   activeDatasetId?: EntityId;
 
   datasets: Record<EntityId, Dataset>;
-  // Workspace-level derived columns kept in an acyclic reference graph.
+  // Derived-column references must remain acyclic.
   derivedColumns: Record<EntityId, DerivedColumn>;
-  // Governed joins between datasets.
   relationships: Record<EntityId, Relationship>;
   visualizations: Record<EntityId, Visualization>;
   filters: Record<EntityId, Filter>;

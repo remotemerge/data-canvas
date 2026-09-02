@@ -22,7 +22,6 @@ const TRUNC_UNIT: Readonly<Record<TemporalUnit, string>> = {
 const missingRange = (kind: string): DomainError =>
   domainError('UNSUPPORTED_OPERATION', `Bin strategy '${kind}' requires the column's range.`, { kind });
 
-// Compiles a bin strategy over a resolved column reference.
 export const compileBinStrategy = (
   strategy: BinStrategy,
   reference: string,

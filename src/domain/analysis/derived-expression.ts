@@ -57,7 +57,6 @@ export const DERIVED_EXPRESSION_KINDS: readonly DerivedExpression['kind'][] = [
 export const MAX_EXPRESSION_DEPTH = 8;
 export const MAX_EXPRESSION_NODES = 64;
 
-// Returns every direct child of an expression node.
 export const childExpressions = (expression: DerivedExpression): DerivedExpression[] => {
   switch (expression.kind) {
     case 'arithmetic':
@@ -74,7 +73,6 @@ export const childExpressions = (expression: DerivedExpression): DerivedExpressi
   }
 };
 
-// Returns maximum expression depth, counting the root as one.
 export const expressionDepth = (expression: DerivedExpression): number => {
   const children = childExpressions(expression);
 
@@ -84,7 +82,6 @@ export const expressionDepth = (expression: DerivedExpression): number => {
 export const expressionNodeCount = (expression: DerivedExpression): number =>
   1 + childExpressions(expression).reduce((total, child) => total + expressionNodeCount(child), 0);
 
-// Returns all column IDs referenced by an expression tree.
 export const expressionColumnIds = (expression: DerivedExpression): EntityId[] => {
   const own = expression.kind === 'column' || expression.kind === 'datePart' || expression.kind === 'bin';
 

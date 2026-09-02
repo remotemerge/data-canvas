@@ -14,14 +14,11 @@ const AGGREGATE_LABEL: Partial<Record<AggregateFunction, string>> = {
 
 interface TitleInput {
   kind: VisualizationKind;
-  // Measure display name, when the chart uses one.
   measureName?: string;
-  // Dimension display name, when the chart uses one.
   dimensionName?: string;
   aggregate?: AggregateFunction;
 }
 
-// Names the measure, prefixed by its aggregate when that aggregate adds meaning.
 const describeMeasure = (
   measureName: string | undefined,
   aggregate: AggregateFunction | undefined,
@@ -35,7 +32,6 @@ const describeMeasure = (
   return prefix === undefined ? measureName : `${prefix} ${measureName}`;
 };
 
-// Suggests an editable title from the chart kind and its bound fields.
 export const suggestVisualizationTitle = ({ kind, measureName, dimensionName, aggregate }: TitleInput): string => {
   const measure = describeMeasure(measureName, aggregate);
 
