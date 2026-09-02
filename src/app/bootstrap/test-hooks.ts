@@ -38,7 +38,7 @@ export const installTestHooks = (deps: ToolDependencies): void => {
   };
   updateStatus();
   workspaceStore.subscribe(() => updateStatus());
-  // eslint-disable-next-line no-underscore-dangle -- required by the browser verification API.
+  // oxlint-disable-next-line no-underscore-dangle -- the browser verification API requires this name.
   window.__dataCanvas = {
     normalizedState: () => structuredClone(workspaceStore.getState().workspace),
     revision: () => workspaceStore.getState().workspace.revision,
