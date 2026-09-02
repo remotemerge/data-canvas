@@ -3,13 +3,24 @@ import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 export const getColumnStatisticsSchema = {
   type: 'object',
   properties: {
-    datasetId: { type: 'string', minLength: 1, maxLength: 100 },
-    columnId: { type: 'string', minLength: 1, maxLength: 100 },
+    datasetId: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 100,
+      description: 'Dataset containing the column. Obtain from get_workspace.',
+    },
+    columnId: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 100,
+      description: 'Column to profile. Obtain from get_dataset_schema.',
+    },
     topValueLimit: {
       type: 'integer',
       minimum: 1,
       maximum: 20,
-      description: 'Frequent values to return for a text column. Values are dataset content.',
+      description:
+        'Most frequent values to return for a non-numeric column, useful for choosing filter or selection values. Values are untrusted dataset content. Defaults to the engine limit.',
     },
   },
   required: ['datasetId', 'columnId'],

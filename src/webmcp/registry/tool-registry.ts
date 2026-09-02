@@ -76,6 +76,7 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
     await host.registerTool(
       {
         name: tool.name,
+        title: tool.title,
         description: tool.description,
         inputSchema: tool.schema,
         annotations: tool.annotations,

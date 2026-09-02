@@ -37,12 +37,23 @@ interface ToolPayload {
 
 const serializedLength = (value: object): number => JSON.stringify(value).length;
 
-// Copies the payload's scalar fields, capping free text and dropping the internal trimming hint.
+/*
+ * Copies the payload's scalar fields, capping free text and dropping the internal trimming hint.
+ *
+ * `details` is carried through despite being an object: it holds the machine-readable half of a
+ * recoverable failure, such as the currentRevision a stale write must retry against, and the
+ * recovery hint tells the agent to read it. Dropping it while keeping the hint would point the
+ * agent at a field that is no longer there.
+ */
 const copyScalarFields = (parsed: ToolPayload): Record<string, unknown> => {
   const scalars: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(parsed)) {
     if (key === PRESERVE_COLUMNS_KEY) {
+      continue;
+    }
+    if (key === 'details' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      scalars[key] = value;
       continue;
     }
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
@@ -202,6 +213,12 @@ const scalarFallback = (parsed: ToolPayload): string => {
   const code = typeof parsed.code === 'string' ? { code: parsed.code } : {};
   const summary = typeof parsed.summary === 'string' ? parsed.summary : undefined;
   const error = typeof parsed.error === 'string' ? parsed.error : undefined;
+  // Recovery fields are small and are what an agent acts on, so they outrank the free text.
+  const details =
+    parsed['details'] !== null && typeof parsed['details'] === 'object' && !Array.isArray(parsed['details'])
+      ? { details: parsed['details'] }
+      : {};
+  const recovery = typeof parsed['recovery'] === 'string' ? { recovery: parsed['recovery'] } : {};
 
   const build = (textBudget: number): string =>
     JSON.stringify({
@@ -210,6 +227,8 @@ const scalarFallback = (parsed: ToolPayload): string => {
       ...code,
       ...(summary === undefined ? {} : { summary: summary.slice(0, textBudget) }),
       ...(error === undefined ? {} : { error: error.slice(0, textBudget) }),
+      ...details,
+      ...recovery,
       truncated: true,
     });
 

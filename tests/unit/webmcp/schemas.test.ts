@@ -69,7 +69,6 @@ const validInputs: Record<keyof typeof toolSchemas, { minimal: object; canonical
       datasetId: 'ds',
       columnId: 'col',
       values: ['x', 'y'],
-      operator: 'in',
       additive: true,
       expectedRevision: 1,
     },
@@ -163,6 +162,43 @@ test('analyze_data accepts bounded temporal dimensions', () => {
       measures: [{ aggregate: 'count' }],
     }),
   ).toBe(false);
+});
+
+test('highlight_selection rejects the removed operator field', () => {
+  // The handler always matches with `in`, so accepting an operator implied a choice that did not exist.
+  expect(toolValidators.highlight_selection({ datasetId: 'ds', columnId: 'col', values: ['x'], operator: 'in' })).toBe(
+    false,
+  );
+});
+
+test('create_relationship accepts only canonical snake_case cardinality', () => {
+  const base = {
+    leftDatasetId: 'ds_orders',
+    rightDatasetId: 'ds_customers',
+    on: [{ leftColumnId: 'col_customer', rightColumnId: 'col_id' }],
+    join: 'inner',
+  };
+  expect(toolValidators.create_relationship({ ...base, kind: 'many_to_one' })).toBe(true);
+  expect(toolValidators.create_relationship({ ...base, kind: 'manyToOne' })).toBe(false);
+});
+
+test('update_visualization accepts bin strategies so a chart can be re-binned', () => {
+  expect(
+    toolValidators.update_visualization({
+      visualizationId: 'viz',
+      binX: { kind: 'equalWidth', binCount: 10 },
+    }),
+  ).toBe(true);
+});
+
+test('every tool argument is documented for an agent that cannot read the tool list', () => {
+  for (const [name, schema] of Object.entries(toolSchemas)) {
+    for (const [property, definition] of Object.entries(
+      (schema as { properties?: Record<string, Record<string, unknown>> }).properties ?? {},
+    )) {
+      expect(typeof definition['description'], `${name}.${property} needs a description`).toBe('string');
+    }
+  }
 });
 
 test('tool names and prohibited control fields stay out of the contract', () => {
