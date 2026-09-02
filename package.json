@@ -1,6 +1,6 @@
 {
   "name": "@remotemerge/data-canvas",
-  "description": "Local-first visual analytics workspace where humans and AI agents share the same data, state, and analytical context.",
+  "description": "The shared visual workspace where people and AI agents explore data together.",
   "homepage": "https://data-canvas.madansapkota.com",
   "bugs": {
     "url": "https://github.com/remotemerge/data-canvas/issues"
@@ -50,8 +50,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",
-    "oxfmt": "^0.65.0",
-    "oxlint": "^1.80.0",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
