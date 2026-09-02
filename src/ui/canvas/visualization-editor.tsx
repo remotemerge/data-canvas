@@ -123,54 +123,136 @@ export const VisualizationEditor = ({
   const temporalDimension = seriesDimension !== undefined && isTemporalType(seriesDimension.logicalType);
   const dimensionBin: BinStrategy = { kind: 'temporal', unit: 'day' };
 
-  const binding: VisualBinding =
-    kind === 'kpi'
-      ? { y: y === '' ? [] : [y] }
-      : kind === 'histogram'
-        ? x === ''
-          ? {}
-          : { x, binX: binStrategy }
-        : {
-            ...(x === '' ? {} : { x }),
-            ...(y === '' ? {} : { y: [y] }),
-            ...(temporalDimension ? { binX: dimensionBin } : {}),
-          };
+  // A KPI has no dimension, and a histogram bins its own dimension instead of taking a measure.
+  const buildBinding = (): VisualBinding => {
+    if (kind === 'kpi') {
+      return { y: y === '' ? [] : [y] };
+    }
+
+    if (kind === 'histogram') {
+      return x === '' ? {} : { x, binX: binStrategy };
+    }
+
+    return {
+      ...(x === '' ? {} : { x }),
+      ...(y === '' ? {} : { y: [y] }),
+      ...(temporalDimension ? { binX: dimensionBin } : {}),
+    };
+  };
+
+  const binding: VisualBinding = buildBinding();
 
   const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding, related);
   const titled = title.trim() !== '';
 
+  // Mirrors the builder's query shapes so an edited chart matches an equivalent new one.
+  const buildQuery = (datasetId: string) => {
+    if (kind === 'histogram') {
+      return {
+        datasetId,
+        dimensions: [],
+        ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
+        measures: [{ aggregate: 'count' as const }],
+        filters: [],
+      };
+    }
+
+    if (kind === 'boxplot') {
+      return {
+        datasetId,
+        dimensions: [],
+        measures: [],
+        ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
+        filters: [],
+      };
+    }
+
+    return {
+      datasetId,
+      dimensions: x === '' || temporalDimension ? [] : [x],
+      ...(x === '' || !temporalDimension ? {} : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
+      measures: y === '' ? [] : [{ columnId: y, aggregate }],
+      filters: [],
+    };
+  };
+
+  /*
+   * A histogram bins a column instead of grouping by one, so it offers a bin column and bucket
+   * count. A KPI has no dimension at all. Every other kind groups by a single dimension.
+   */
+  const renderDimensionField = (): React.ReactNode => {
+    if (kind === 'kpi') {
+      return null;
+    }
+
+    if (kind === 'histogram') {
+      return (
+        <>
+          <label>
+            Column to bin{' '}
+            <select value={x} onChange={(event) => setX(event.target.value)}>
+              <option value="">Choose</option>
+              {groupByDataset(binnable).map((group) => (
+                <optgroup key={group.dataset.id} label={group.dataset.name}>
+                  {group.columns.map((column) => (
+                    <option key={column.id} value={column.id}>
+                      {column.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          {temporalBin ? (
+            <small>Date and timestamp values are grouped by month.</small>
+          ) : (
+            <label>
+              Buckets{' '}
+              <input
+                type="number"
+                min={MIN_BIN_COUNT}
+                max={MAX_BIN_COUNT}
+                value={binCount}
+                onChange={(event) =>
+                  setBinCount(
+                    Math.min(
+                      Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
+                      MAX_BIN_COUNT,
+                    ),
+                  )
+                }
+              />
+            </label>
+          )}
+        </>
+      );
+    }
+
+    return (
+      <label title={FIELD_HINT.dimension}>
+        Dimension{' '}
+        <select value={x} onChange={(event) => setX(event.target.value)}>
+          <option value="">Choose</option>
+          {groupByDataset(dimensionColumns).map((group) => (
+            <optgroup key={group.dataset.id} label={group.dataset.name}>
+              {group.columns.map((column) => (
+                <option key={column.id} value={column.id}>
+                  {column.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+    );
+  };
+
   const save = async (): Promise<void> => {
-    if (dataset === undefined || validation === null || !validation.ok || !titled) {
+    if (dataset === undefined || validation?.ok !== true || !titled) {
       return;
     }
 
-    // Mirrors the builder's query shapes so an edited chart matches an equivalent new one.
-    const query =
-      kind === 'histogram'
-        ? {
-            datasetId: dataset.id,
-            dimensions: [],
-            ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
-            measures: [{ aggregate: 'count' as const }],
-            filters: [],
-          }
-        : kind === 'boxplot'
-          ? {
-              datasetId: dataset.id,
-              dimensions: [],
-              measures: [],
-              ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
-              filters: [],
-            }
-          : {
-              datasetId: dataset.id,
-              dimensions: x === '' || temporalDimension ? [] : [x],
-              ...(x === '' || !temporalDimension
-                ? {}
-                : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
-              measures: y === '' ? [] : [{ columnId: y, aggregate }],
-              filters: [],
-            };
+    const query = buildQuery(dataset.id);
 
     const result = await actions.updateVisualization({
       visualizationId: visualization.id,
@@ -194,7 +276,7 @@ export const VisualizationEditor = ({
       <h4 id={`visualization-editor-${visualization.id}`}>Edit view</h4>
 
       <label>
-        Chart
+        Chart{' '}
         <select
           value={kind}
           onChange={(event) => {
@@ -210,71 +292,15 @@ export const VisualizationEditor = ({
       </label>
 
       <label>
-        Title
-        <input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} />
+        Title <input value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} />
       </label>
 
-      {kind === 'histogram' ? (
-        <>
-          <label>
-            Column to bin
-            <select value={x} onChange={(event) => setX(event.target.value)}>
-              <option value="">Choose</option>
-              {groupByDataset(binnable).map((group) => (
-                <optgroup key={group.dataset.id} label={group.dataset.name}>
-                  {group.columns.map((column) => (
-                    <option key={column.id} value={column.id}>
-                      {column.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-          {temporalBin ? (
-            <small>Date and timestamp values are grouped by month.</small>
-          ) : (
-            <label>
-              Buckets
-              <input
-                type="number"
-                min={MIN_BIN_COUNT}
-                max={MAX_BIN_COUNT}
-                value={binCount}
-                onChange={(event) =>
-                  setBinCount(
-                    Math.min(
-                      Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
-                      MAX_BIN_COUNT,
-                    ),
-                  )
-                }
-              />
-            </label>
-          )}
-        </>
-      ) : kind === 'kpi' ? null : (
-        <label title={FIELD_HINT.dimension}>
-          Dimension
-          <select value={x} onChange={(event) => setX(event.target.value)}>
-            <option value="">Choose</option>
-            {groupByDataset(dimensionColumns).map((group) => (
-              <optgroup key={group.dataset.id} label={group.dataset.name}>
-                {group.columns.map((column) => (
-                  <option key={column.id} value={column.id}>
-                    {column.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-      )}
+      {renderDimensionField()}
 
       {/* Histogram y is its bucket count, so it has no measure selector. */}
       {kind === 'histogram' ? null : (
         <label title={FIELD_HINT.measure}>
-          Measure
+          Measure{' '}
           <select value={y} onChange={(event) => setY(event.target.value)}>
             <option value="">Choose</option>
             {groupByDataset(numericColumns).map((group) => (
@@ -293,7 +319,7 @@ export const VisualizationEditor = ({
       {/* Box plots compute quantiles, so they have no aggregate selector. */}
       {kind === 'histogram' || kind === 'boxplot' ? null : (
         <label title={FIELD_HINT.aggregate}>
-          Aggregate
+          Aggregate{' '}
           <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
             {AGGREGATES.map((item) => (
               <option key={item} value={item}>
@@ -304,7 +330,7 @@ export const VisualizationEditor = ({
         </label>
       )}
 
-      <button type="button" disabled={!titled || validation === null || !validation.ok} onClick={() => void save()}>
+      <button type="button" disabled={!titled || validation?.ok !== true} onClick={() => void save()}>
         Save view
       </button>
 

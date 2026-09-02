@@ -103,18 +103,24 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const temporalDimension = seriesDimension !== undefined && isTemporalType(seriesDimension.logicalType);
   const dimensionBin: BinStrategy = { kind: 'temporal', unit: 'day' };
 
-  const binding: VisualBinding =
-    kind === 'kpi'
-      ? { y: y === '' ? [] : [y] }
-      : kind === 'histogram'
-        ? x === ''
-          ? {}
-          : { x, binX: binStrategy }
-        : {
-            ...(x === '' ? {} : { x }),
-            ...(y === '' ? {} : { y: [y] }),
-            ...(temporalDimension ? { binX: dimensionBin } : {}),
-          };
+  // A KPI has no dimension, and a histogram bins its own dimension instead of taking a measure.
+  const buildBinding = (): VisualBinding => {
+    if (kind === 'kpi') {
+      return { y: y === '' ? [] : [y] };
+    }
+
+    if (kind === 'histogram') {
+      return x === '' ? {} : { x, binX: binStrategy };
+    }
+
+    return {
+      ...(x === '' ? {} : { x }),
+      ...(y === '' ? {} : { y: [y] }),
+      ...(temporalDimension ? { binX: dimensionBin } : {}),
+    };
+  };
+
+  const binding: VisualBinding = buildBinding();
 
   const validation = dataset === undefined ? null : validateVisualization(dataset, kind, binding, related);
 
@@ -133,46 +139,126 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   });
   const effectiveTitle = title.trim() === '' ? suggestedTitle : title;
 
+  // Distribution kinds use dedicated query shapes.
+  const buildQuery = () => {
+    if (kind === 'histogram') {
+      return {
+        datasetId,
+        dimensions: [],
+        ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
+        measures: [{ aggregate: 'count' as const }],
+        filters: [],
+      };
+    }
+
+    if (kind === 'boxplot') {
+      return {
+        datasetId,
+        dimensions: [],
+        measures: [],
+        ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
+        filters: [],
+      };
+    }
+
+    // A scatter plot draws one mark per row, so both channels stay dimensions.
+    if (kind === 'scatter') {
+      return {
+        datasetId,
+        dimensions: [...(x === '' ? [] : [x]), ...(y === '' ? [] : [y])],
+        measures: [],
+        filters: [],
+      };
+    }
+
+    return {
+      datasetId,
+      // Binned dimensions use the compiler's `binnedDimensions` shape.
+      dimensions: x === '' || temporalDimension ? [] : [x],
+      ...(x === '' || !temporalDimension ? {} : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
+      measures: y === '' ? [] : [{ columnId: y, aggregate }],
+      filters: [],
+    };
+  };
+
+  /*
+   * A histogram bins a column instead of grouping by one, so it offers a bin column and bucket
+   * count. A KPI has no dimension at all. Every other kind groups by a single dimension.
+   */
+  const renderDimensionField = (): React.ReactNode => {
+    if (kind === 'kpi') {
+      return null;
+    }
+
+    if (kind === 'histogram') {
+      return (
+        <>
+          <label>
+            Column to bin{' '}
+            <select value={x} onChange={(event) => setX(event.target.value)}>
+              <option value="">Choose</option>
+              {groupByDataset(binnable).map((group) => (
+                <optgroup key={group.dataset.id} label={group.dataset.name}>
+                  {group.columns.map((column) => (
+                    <option key={column.id} value={column.id}>
+                      {column.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          {temporalBin ? (
+            <small>Date and timestamp values are grouped by month.</small>
+          ) : (
+            <label>
+              Buckets{' '}
+              <input
+                type="number"
+                min={MIN_BIN_COUNT}
+                max={MAX_BIN_COUNT}
+                value={binCount}
+                onChange={(event) =>
+                  setBinCount(
+                    Math.min(
+                      Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
+                      MAX_BIN_COUNT,
+                    ),
+                  )
+                }
+              />
+            </label>
+          )}
+        </>
+      );
+    }
+
+    return (
+      <label title={FIELD_HINT.dimension}>
+        Dimension{' '}
+        <select value={x} onChange={(event) => setX(event.target.value)}>
+          <option value="">Choose</option>
+          {groupByDataset(dimensionColumns).map((group) => (
+            // Group by dataset so provenance stays visible for joined columns.
+            <optgroup key={group.dataset.id} label={group.dataset.name}>
+              {group.columns.map((column) => (
+                <option key={column.id} value={column.id}>
+                  {column.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+    );
+  };
+
   const create = async () => {
-    if (dataset === undefined || validation === null || !validation.ok) {
+    if (dataset === undefined || validation?.ok !== true) {
       return;
     }
-    // Distribution kinds use dedicated query shapes.
-    const query =
-      kind === 'histogram'
-        ? {
-            datasetId,
-            dimensions: [],
-            ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
-            measures: [{ aggregate: 'count' as const }],
-            filters: [],
-          }
-        : kind === 'boxplot'
-          ? {
-              datasetId,
-              dimensions: [],
-              measures: [],
-              ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
-              filters: [],
-            }
-          : // A scatter plot draws one mark per row, so both channels stay dimensions.
-            kind === 'scatter'
-            ? {
-                datasetId,
-                dimensions: [...(x === '' ? [] : [x]), ...(y === '' ? [] : [y])],
-                measures: [],
-                filters: [],
-              }
-            : {
-                datasetId,
-                // Binned dimensions use the compiler's `binnedDimensions` shape.
-                dimensions: x === '' || temporalDimension ? [] : [x],
-                ...(x === '' || !temporalDimension
-                  ? {}
-                  : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
-                measures: y === '' ? [] : [{ columnId: y, aggregate }],
-                filters: [],
-              };
+
+    const query = buildQuery();
 
     const result = await actions.createVisualization({
       datasetId,
@@ -196,7 +282,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
       </header>
       <div className="visualization-builder__body">
         <label>
-          Dataset
+          Dataset{' '}
           <select
             value={datasetId}
             onChange={(event) => {
@@ -214,7 +300,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           </select>
         </label>
         <label>
-          Chart
+          Chart{' '}
           <select
             value={kind}
             onChange={(event) => {
@@ -240,67 +326,11 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
-        {kind === 'histogram' ? (
-          <>
-            <label>
-              Column to bin
-              <select value={x} onChange={(event) => setX(event.target.value)}>
-                <option value="">Choose</option>
-                {groupByDataset(binnable).map((group) => (
-                  <optgroup key={group.dataset.id} label={group.dataset.name}>
-                    {group.columns.map((column) => (
-                      <option key={column.id} value={column.id}>
-                        {column.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-            {temporalBin ? (
-              <small>Date and timestamp values are grouped by month.</small>
-            ) : (
-              <label>
-                Buckets
-                <input
-                  type="number"
-                  min={MIN_BIN_COUNT}
-                  max={MAX_BIN_COUNT}
-                  value={binCount}
-                  onChange={(event) =>
-                    setBinCount(
-                      Math.min(
-                        Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
-                        MAX_BIN_COUNT,
-                      ),
-                    )
-                  }
-                />
-              </label>
-            )}
-          </>
-        ) : kind === 'kpi' ? null : (
-          <label title={FIELD_HINT.dimension}>
-            Dimension
-            <select value={x} onChange={(event) => setX(event.target.value)}>
-              <option value="">Choose</option>
-              {groupByDataset(dimensionColumns).map((group) => (
-                // Group by dataset so provenance stays visible for joined columns.
-                <optgroup key={group.dataset.id} label={group.dataset.name}>
-                  {group.columns.map((column) => (
-                    <option key={column.id} value={column.id}>
-                      {column.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-        )}
+        {renderDimensionField()}
         {/* Histogram y is its bucket count, so it has no measure selector. */}
         {kind === 'histogram' ? null : (
           <label title={FIELD_HINT.measure}>
-            Measure
+            Measure{' '}
             <select value={y} onChange={(event) => setY(event.target.value)}>
               <option value="">Choose</option>
               {groupByDataset(numericColumns).map((group) => (
@@ -318,7 +348,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
         {/* Box plots compute quantiles, so they have no aggregate selector. */}
         {kind === 'histogram' || kind === 'boxplot' ? null : (
           <label title={FIELD_HINT.aggregate}>
-            Aggregate
+            Aggregate{' '}
             <select value={aggregate} onChange={(event) => setAggregate(event.target.value as AggregateFunction)}>
               {['sum', 'avg', 'min', 'max', 'median', 'stddev'].map((item) => (
                 <option key={item}>{item}</option>
@@ -328,7 +358,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
         )}
         <button
           type="button"
-          disabled={effectiveTitle.trim() === '' || validation === null || !validation.ok}
+          disabled={effectiveTitle.trim() === '' || validation?.ok !== true}
           onClick={() => void create()}
         >
           Create view
