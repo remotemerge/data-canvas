@@ -17,9 +17,5 @@ export const EngineStatusBanner = (): React.JSX.Element | null => {
     );
   }
 
-  return (
-    <div className="engine-status" role="status">
-      Starting the analytical engine…
-    </div>
-  );
+  return <output className="engine-status">Starting the analytical engine…</output>;
 };

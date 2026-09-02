@@ -137,7 +137,7 @@ textarea:focus-visible,
 }
 
 .visualization-builder__header {
-  padding: var(--dc-space-3) var(--dc-space-4);
+  padding: var(--dc-space-2) var(--dc-space-3);
   border-bottom: 1px solid var(--dc-color-border);
 }
 
@@ -145,8 +145,8 @@ textarea:focus-visible,
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: var(--dc-space-3);
-  padding: var(--dc-space-4);
+  gap: var(--dc-space-2) var(--dc-space-3);
+  padding: var(--dc-space-3);
 }
 
 .visualization-builder h2,
@@ -213,6 +213,9 @@ textarea:focus-visible,
   display: flex;
   flex-direction: column;
   gap: var(--dc-space-2);
+  /* A container query drives the chart width, which depends on the panel's grid span. */
+  container-type: inline-size;
+  padding: var(--dc-space-3);
 }
 
 /* Let the card body shrink below its content height. */
@@ -229,6 +232,7 @@ textarea:focus-visible,
   flex-wrap: wrap;
   gap: var(--dc-space-2);
   justify-content: space-between;
+  min-height: 2rem;
 }
 
 /* Keep the title and provenance disclosure on one line. */
@@ -238,6 +242,8 @@ textarea:focus-visible,
   min-width: 0;
   align-items: center;
   gap: var(--dc-space-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 /* Truncate long titles so the controls retain room. */
@@ -293,6 +299,7 @@ textarea:focus-visible,
   flex-wrap: wrap;
   margin-left: auto;
   gap: var(--dc-space-2);
+  align-items: center;
 }
 
 @container (max-width: 30rem) {
@@ -321,7 +328,9 @@ textarea:focus-visible,
 .chart-panel__chart {
   flex: 1;
   width: 100%;
-  min-height: 20rem;
+  min-height: 18rem;
+  /* The chart is a figure for semantics only; its default margin would inset the canvas. */
+  margin: 0;
 }
 
 .chart-panel__badge,
@@ -420,7 +429,8 @@ textarea:focus-visible,
 .metric-card strong {
   display: block;
   margin-top: var(--dc-space-4);
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: clamp(1.5rem, 3vw, 1.75rem);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -560,8 +570,13 @@ textarea:focus-visible,
 
 .workspace__title {
   margin: 0;
-  font-size: var(--dc-text-lg);
+  max-width: 16rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace__identity,
@@ -598,15 +613,6 @@ textarea:focus-visible,
   font-size: 0.8125rem;
   font-weight: 650;
   letter-spacing: -0.01em;
-}
-
-.workspace__title {
-  max-width: 16rem;
-  overflow: hidden;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Badge the revision so it reads as workspace metadata rather than part of the title. */
@@ -895,6 +901,10 @@ textarea:focus-visible,
   display: flex;
   flex-wrap: wrap;
   gap: var(--dc-space-2);
+  /* Grouping is semantic only; the fieldset's default chrome would read as a nested panel. */
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .density__option {
@@ -1053,12 +1063,14 @@ textarea:focus-visible,
 .import__button {
   padding: var(--dc-space-2) var(--dc-space-4);
   width: 100%;
-  border: 1px solid var(--dc-color-accent);
+  min-height: 2rem;
+  border: 1px solid var(--primary);
   border-radius: var(--dc-radius);
-  background: var(--dc-color-surface-raised);
-  color: var(--dc-color-text);
+  background: var(--primary);
+  color: var(--primary-foreground);
   font: inherit;
-  font-size: var(--dc-text-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -1108,8 +1120,9 @@ textarea:focus-visible,
 }
 
 .dataset-list__item[data-active="true"] {
-  border-color: var(--dc-color-accent);
-  background: var(--dc-color-surface-raised);
+  border-color: var(--selection-border);
+  background: var(--selection);
+  color: var(--selection-foreground);
 }
 
 .dataset-list__select {
@@ -1633,6 +1646,7 @@ textarea:focus-visible,
   overflow: auto;
   border: 1px solid var(--dc-color-border);
   border-radius: var(--dc-radius);
+  background: var(--panel);
 }
 
 .data-table__table {
@@ -1669,9 +1683,11 @@ textarea:focus-visible,
 .data-table__table th,
 .data-table__table td {
   flex: 1 0 12rem;
-  padding: var(--dc-space-2) var(--dc-space-3);
+  height: 34px;
+  padding: 0 var(--dc-space-3);
   overflow: hidden;
   border-bottom: 1px solid var(--dc-color-border);
+  line-height: 34px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1752,49 +1768,6 @@ textarea:focus-visible,
   background: var(--panel);
 }
 
-/* Use a container query because chart width depends on its grid span. */
-.chart-panel {
-  container-type: inline-size;
-  padding: var(--dc-space-3);
-}
-
-/* The builder is a fixed block above the charts, so keep it compact to leave them height. */
-.visualization-builder__header {
-  padding: var(--dc-space-2) var(--dc-space-3);
-}
-
-.visualization-builder__body {
-  padding: var(--dc-space-3);
-  gap: var(--dc-space-2) var(--dc-space-3);
-}
-
-.chart-panel__header {
-  min-height: 2rem;
-}
-
-.chart-panel__header h3 {
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.chart-panel__controls {
-  align-items: center;
-}
-
-.chart-panel__chart {
-  min-height: 18rem;
-}
-
-.chart-panel__kpi,
-.metric-card strong {
-  font-size: clamp(1.5rem, 3vw, 1.75rem);
-  font-weight: 600;
-}
-
-.data-table__viewport {
-  background: var(--panel);
-}
-
 .data-table__table thead,
 .preview__table thead th {
   background: var(--table-header);
@@ -1803,28 +1776,6 @@ textarea:focus-visible,
 
 .data-table__table tbody tr:hover {
   background: var(--table-hover);
-}
-
-.data-table__table th,
-.data-table__table td {
-  height: 34px;
-  padding: 0 var(--dc-space-3);
-  line-height: 34px;
-}
-
-.dataset-list__item[data-active="true"] {
-  border-color: var(--selection-border);
-  background: var(--selection);
-  color: var(--selection-foreground);
-}
-
-.import__button {
-  min-height: 2rem;
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-size: 0.8125rem;
-  font-weight: 500;
 }
 
 .import__button:hover:not(:disabled) {
