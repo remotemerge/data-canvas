@@ -37,26 +37,40 @@ interface ToolPayload {
 
 const serializedLength = (value: object): number => JSON.stringify(value).length;
 
-// Trims an oversized payload while preserving its shape.
-const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
-  const result: Record<string, unknown> = {};
-  // Set when the projection is narrowed, then appended to the summary once row trimming settles.
-  let columnNotice: string | undefined;
-  // Internal hint from the producing tool; it directs trimming and never reaches the agent.
-  const preserveColumns = parsed[PRESERVE_COLUMNS_KEY] === true;
+// Copies the payload's scalar fields, capping free text and dropping the internal trimming hint.
+const copyScalarFields = (parsed: ToolPayload): Record<string, unknown> => {
+  const scalars: Record<string, unknown> = {};
+
   for (const [key, value] of Object.entries(parsed)) {
     if (key === PRESERVE_COLUMNS_KEY) {
       continue;
     }
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
-      result[key] = typeof value === 'string' ? value.slice(0, 1200) : value;
+      scalars[key] = typeof value === 'string' ? value.slice(0, 1200) : value;
     }
   }
 
+  return scalars;
+};
+
+// Orders the payload's array fields from most to least important for trimming.
+const collectLists = (parsed: ToolPayload): (readonly [string, unknown[]])[] => {
   const knownKeys = new Set<string>([...PRESERVED_LIST_KEYS, ...TRIMMABLE_KEYS]);
   const additionalListKeys = Object.keys(parsed).filter((key) => Array.isArray(parsed[key]) && !knownKeys.has(key));
   const orderedKeys = [...PRESERVED_LIST_KEYS, ...TRIMMABLE_KEYS, ...additionalListKeys];
-  const lists = orderedKeys.flatMap((key) => (Array.isArray(parsed[key]) ? [[key, parsed[key]] as const] : []));
+
+  return orderedKeys.flatMap((key) => (Array.isArray(parsed[key]) ? [[key, parsed[key]] as const] : []));
+};
+
+// Trims an oversized payload while preserving its shape.
+const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
+  // Set when the projection is narrowed, then appended to the summary once row trimming settles.
+  let columnNotice: string | undefined;
+  // Internal hint from the producing tool; it directs trimming and never reaches the agent.
+  const preserveColumns = parsed[PRESERVE_COLUMNS_KEY] === true;
+  const result = copyScalarFields(parsed);
+
+  const lists = collectLists(parsed);
   for (const [key, value] of lists) {
     result[key] = key === 'rows' ? value.map((row) => (Array.isArray(row) ? [...row] : row)) : [...value];
   }

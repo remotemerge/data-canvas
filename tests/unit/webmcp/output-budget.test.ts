@@ -93,6 +93,63 @@ test('oversized output remains valid JSON and carries a truncation marker', () =
   expect(JSON.parse(output)).toMatchObject({ ok: true, revision: 4, truncated: true });
 });
 
+/*
+ * Narrowing never drops the last column, so a single-column preview goes to row trimming with its
+ * projection intact. Every count an agent reads must still describe what it actually received.
+ */
+/*
+ * An empty list has nothing to drop, so trimming moves on to the next one. Emitting
+ * `Returned`/`Total` counters for it would describe a truncation that never happened.
+ */
+test('an already-empty list reports no trim counters and trimming moves to the next list', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 2,
+      annotations: [],
+      metrics: Array.from({ length: 400 }, (_unused, index) => ({ id: `metric_${index}`, name: 'n'.repeat(30) })),
+    }),
+  );
+  const parsed = JSON.parse(output) as Record<string, unknown>;
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  expect(parsed['annotations']).toEqual([]);
+  expect(parsed['annotationsReturned']).toBeUndefined();
+  expect(parsed['annotationsTotal']).toBeUndefined();
+  // The oversized list is the one actually reduced.
+  expect(parsed['metricsReturned']).toBeLessThan(400);
+});
+
+test('a single-column preview trims rows and reports counts matching what it returns', () => {
+  const output = enforceOutputBudget(
+    JSON.stringify({
+      ok: true,
+      revision: 3,
+      columns: [column(0)],
+      rows: Array.from({ length: 400 }, (_unused, index) => [`region ${'x'.repeat(40)} ${index}`]),
+      rowsTotal: 400,
+    }),
+  );
+  const parsed = JSON.parse(output) as {
+    columns: unknown[];
+    columnsReturned: number;
+    columnsTotal: number;
+    rows: unknown[];
+    rowsReturned: number;
+    rowsTotal: number;
+    summary: string;
+  };
+
+  expect(output.length).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_LENGTH);
+  expect(parsed.rows.length).toBeLessThan(400);
+  expect(parsed.rowsReturned).toBe(parsed.rows.length);
+  expect(parsed.rowsTotal).toBe(400);
+  expect(parsed.summary).toBe(`Returned ${parsed.rows.length} of 400 rows.`);
+  // Counters track the lists as returned, so a caller never over-reads the payload.
+  expect(parsed.columnsReturned).toBe(parsed.columns.length);
+  expect(parsed.columnsTotal).toBe(1);
+});
+
 // Preserve schema columns when trimming oversized output so callers can still address fields.
 test('a schema over budget keeps columns rather than degrading to its summary', () => {
   const output = enforceOutputBudget(
