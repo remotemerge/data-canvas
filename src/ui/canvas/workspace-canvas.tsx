@@ -58,7 +58,15 @@ export const WorkspaceCanvas = ({ onError }: { onError: (error: DomainError) => 
               <div
                 key={visualization.id}
                 className="visualization-grid__item"
-                style={{ gridColumn: `span ${item?.width ?? 6}`, gridRow: `span ${item?.height ?? 4}` }}
+                /*
+                 * Honor the stored column position so placement from `placeNewVisualization`, layout
+                 * edits, and the layout WebMCP tool are visible. Rows keep auto-placement, which
+                 * closes vertical gaps left by removed charts.
+                 */
+                style={{
+                  gridColumn: item === undefined ? `span ${6}` : `${item.x + 1} / span ${item.width}`,
+                  gridRow: `span ${item?.height ?? 4}`,
+                }}
               >
                 <ChartPanel
                   visualization={visualization}

@@ -121,8 +121,21 @@ export const ChartPanel = ({
     return () => {
       controller.abort();
     };
-    // Quantize width changes so resizing triggers only a few re-queries.
-  }, [visualization, workspace.filters, workspace.selections, workspace.revision, plotWidth]);
+    /*
+     * Depend on the workspace slices the query actually reads rather than on `revision`, which every
+     * committed action bumps. Results are not cached, so a `revision` dependency re-runs the SQL for
+     * every chart on annotation edits, layout drags, and other unrelated actions.
+     *
+     * Width changes are quantized upstream so resizing triggers only a few re-queries.
+     */
+  }, [
+    visualization,
+    workspace.filters,
+    workspace.selections,
+    workspace.relationships,
+    workspace.derivedColumns,
+    plotWidth,
+  ]);
 
   const remove = async () => {
     const outcome = await actions.removeVisualization({ visualizationId: visualization.id });
