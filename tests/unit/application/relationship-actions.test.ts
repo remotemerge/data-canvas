@@ -319,6 +319,42 @@ describe('dataset.remove', () => {
     expect(Object.keys(after.visualizations)).toHaveLength(0);
   });
 
+  /*
+   * A derived column points at its dataset, so leaving one behind orphans a definition the compiler
+   * can no longer resolve and that `handleRemoveDerivedColumn` cannot clean up.
+   */
+  test('cascade drops the derived columns defined on the dataset', async () => {
+    const harness = createHarness(workspaceWithJoinableDatasets(), stubDataEngine());
+
+    const created = await harness.dispatcher.execute(
+      {
+        type: 'derivedColumn.create',
+        payload: {
+          datasetId: 'ds_orders',
+          name: 'Doubled revenue',
+          expression: {
+            kind: 'arithmetic',
+            op: 'mul',
+            left: { kind: 'column', columnId: 'col_order_revenue' },
+            right: { kind: 'literal', value: 2 },
+          },
+        },
+      },
+      { actor: 'human' },
+    );
+
+    expect(created.ok).toBe(true);
+    expect(Object.keys(harness.workspace().derivedColumns)).toHaveLength(1);
+
+    const result = await harness.dispatcher.execute(
+      { type: 'dataset.remove', payload: { datasetId: 'ds_orders', cascade: true } },
+      { actor: 'human' },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(Object.keys(harness.workspace().derivedColumns)).toHaveLength(0);
+  });
+
   test('removing the active dataset activates another rather than leaving a dangling id', async () => {
     const harness = harnessWithJoinableDatasets();
 

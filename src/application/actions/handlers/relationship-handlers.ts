@@ -98,6 +98,7 @@ interface DatasetDependents {
   selectionIds: EntityId[];
   relationshipIds: EntityId[];
   annotationIds: EntityId[];
+  derivedColumnIds: EntityId[];
 }
 
 // Collects direct and transitive dependents of a dataset.
@@ -123,6 +124,10 @@ const collectDependents = (workspace: Workspace, datasetId: EntityId): DatasetDe
     annotationIds: Object.values(workspace.annotations)
       .filter((annotation) => visualizationIds.includes(annotation.visualizationId))
       .map((annotation) => annotation.id),
+    // Removing every derived column of the dataset also breaks any chain built on top of them.
+    derivedColumnIds: Object.values(workspace.derivedColumns)
+      .filter((derived) => derived.datasetId === datasetId)
+      .map((derived) => derived.id),
   };
 };
 
@@ -184,6 +189,7 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
       metrics: omitKeys(workspace.metrics, dependents.metricIds),
       selections: omitKeys(workspace.selections, dependents.selectionIds),
       annotations: omitKeys(workspace.annotations, dependents.annotationIds),
+      derivedColumns: omitKeys(workspace.derivedColumns, dependents.derivedColumnIds),
       tableSorts,
       layout: {
         ...workspace.layout,
@@ -198,6 +204,7 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
       ...dependents.metricIds,
       ...dependents.selectionIds,
       ...dependents.annotationIds,
+      ...dependents.derivedColumnIds,
     ],
     summary:
       total === 0
