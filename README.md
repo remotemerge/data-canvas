@@ -3,200 +3,123 @@
 > Local-first visual analytics workspace where humans and AI agents share the same data, state, and analytical context.
 
 [![Bun Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/remotemerge/data-canvas/main/package.json&query=$.engines.bun&label=Bun&logo=bun&style=flat)](https://github.com/remotemerge/data-canvas)
-[![Tests](https://img.shields.io/github/actions/workflow/status/remotemerge/data-canvas/test.yml?style=flat&logo=counterstrike&label=test)](https://github.com/remotemerge/totp-php)
+[![Tests](https://img.shields.io/github/actions/workflow/status/remotemerge/data-canvas/test.yml?style=flat&logo=counterstrike&label=test)](https://github.com/remotemerge/data-canvas/actions/workflows/test.yml)
 [![Sonar Quality](https://img.shields.io/sonar/quality_gate/data-canvas/main?server=https%3A%2F%2Fsonarcloud.io&style=flat&logo=sonarqubecloud&logoColor=126ED3&label=quality)](https://sonarcloud.io/summary/overall?id=data-canvas&branch=main)
 [![Sonar Coverage](https://img.shields.io/sonar/coverage/data-canvas/main?server=https%3A%2F%2Fsonarcloud.io&style=flat&logo=sonarqubeserver&logoColor=126ED3)](https://sonarcloud.io/summary/overall?id=data-canvas&branch=main)
 [![License](https://img.shields.io/github/license/remotemerge/data-canvas)](https://github.com/remotemerge/data-canvas?tab=MIT-1-ov-file)
 
-Data Canvas is a browser-native environment for exploring, transforming, querying, and visualizing data.
+Data Canvas is a browser-based workspace for exploring and visualizing local data. Humans use the web interface, while AI agents use semantic WebMCP tools. Both routes execute the same application actions against one workspace, so agent changes appear in the interface immediately.
 
-Humans work through the visual interface. AI agents work through WebMCP. Both operate on the same workspace and the same application actions, so a filter applied by an agent is the same filter a human sees and edits. A visualization created by an agent appears directly on the canvas. There is no separate agent-side copy of the workspace.
+DuckDB-Wasm performs ingestion and analytical queries in the browser. The application has no backend, API server, cloud database, authentication service, or built-in LLM. Workspace state is memory-only and resets when the page reloads.
 
-The application runs in the browser with DuckDB-Wasm. It has no application backend, API server, cloud database, authentication service, or built-in LLM.
+## Major features
 
-## What you can do
+- **Local data exploration.** Import CSV, TSV, JSON, and NDJSON files up to 512 MB and 512 columns. Inspect inferred schemas and column statistics, then browse filtered and sorted data through 500-row DuckDB windows and a virtualized table.
+- **Visual analysis.** Create line, bar, area, scatter, donut, KPI, histogram, box plot, and heatmap views. Data Canvas builds analytical queries from project-owned visualization definitions and converts bounded results to ECharts options.
+- **Multi-dataset analysis.** Define one-to-one, one-to-many, or many-to-one relationships with inner or left joins. Relationship suggestions, key validation, and fan-out warnings help prevent invalid or inflated results.
+- **Controlled transformations and metrics.** Add type-checked arithmetic or date-part columns through the interface. WebMCP also accepts structured conditionals, literals, bins, and casts. Reusable metrics support ordinary aggregates, percent of total, running totals, and period comparisons.
+- **Linked interaction.** Filters and selections affect tables, charts, and agent reads through shared workspace state. Visualizations can ignore, highlight, or filter by external selections. Users and agents can also add chart annotations and undo or redo workspace changes.
+- **Installable browser application.** The production build includes a web app manifest and service worker. Its precache includes the DuckDB Wasm artifacts needed to start offline after the assets have been cached.
 
-### Explore data
+## Technology stack
 
-- Import CSV, TSV, JSON, and NDJSON files.
-- Inspect inferred schemas and column types.
-- Browse large datasets through a virtualized table.
-- Sort and filter without loading the full dataset into JavaScript.
-- Inspect column statistics and distributions.
-- Work with several datasets in one workspace.
+Package versions below are the exact direct dependency versions recorded in `bun.lock`. The Bun row shows the supported runtime range from `package.json`.
 
-### Analyze across datasets
+| Technology        | Version | Purpose                                                                                                               |
+| ----------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| React / React DOM | >=19.2  | Renders the workspace and user interactions.                                                                          |
+| TypeScript        | >=7.0   | Defines domain, application, adapter, and UI contracts.                                                               |
+| DuckDB-Wasm       | >=1.33  | Imports local files and runs filtering, sorting, joins, aggregation, statistics, and bounded row queries in a worker. |
+| Zustand           | >=5.0   | Stores normalized workspace metadata, revisions, and action history. Raw dataset rows stay in DuckDB.                 |
+| TanStack Table    | >=9.2   | Provides table models while sorting, filtering, and pagination remain engine-controlled.                              |
+| TanStack Virtual  | >=3.14  | Limits rendered table rows to the visible window and overscan.                                                        |
+| Apache ECharts    | >=6.1   | Renders chart options produced by the visualization adapter.                                                          |
+| Ajv               | >=8.20  | Compiles structural validators for WebMCP inputs.                                                                     |
+| Vite              | >=8.2   | Runs the development server and creates production builds.                                                            |
+| vite-plugin-pwa   | >=1.3   | Generates the web app manifest, service worker, and offline asset cache.                                              |
+| Bun               | >=1.4   | Installs dependencies, runs tests and quality checks, and invokes project scripts.                                    |
 
-Define controlled relationships between datasets and analyze across them without writing join SQL.
+## WebMCP tools
 
-Data Canvas supports:
+Data Canvas registers the following tools when the browser supplies `document.modelContext`. It also supports the deprecated `navigator.modelContext` location as a fallback. Inputs pass through Ajv validation and semantic validation against the current workspace. Write tools use the shared dispatcher, and revision-aware writes reject stale changes. No tool accepts raw SQL, JavaScript, URLs, DOM selectors, or ECharts options.
 
-- one-to-one, one-to-many, and many-to-one relationships;
-- inner and left joins;
-- relationship validation;
-- key-quality checks;
-- relationship suggestions;
-- cross-dataset filters, metrics, and visualizations.
+| Tool                    | Title                       | Description                                                                                                                |
+| ----------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `list_relationships`    | List dataset relationships  | Lists defined dataset joins and can return up to five suggestions inferred from matching column names and types.           |
+| `get_column_statistics` | Get column statistics       | Returns bounded counts, numeric statistics, and frequent values for one column.                                            |
+| `get_workspace`         | Get workspace               | Returns the revision and IDs and summaries for workspace entities without reading row values.                              |
+| `get_dataset_schema`    | Get dataset schema          | Returns a page of up to five columns and can include schemas from directly related datasets.                               |
+| `preview_data`          | Preview dataset rows        | Returns at most 100 filtered rows, with optional column projection and bounded string values.                              |
+| `analyze_data`          | Analyze data                | Computes grouped aggregates, rankings, and time-bucketed results over filtered data, including reachable related datasets. |
+| `create_relationship`   | Create dataset relationship | Connects two datasets through validated key columns, cardinality, and join type, then reports detected fan-out.            |
+| `create_derived_column` | Create derived column       | Adds a computed column from a validated expression tree rather than a formula string or SQL.                               |
+| `clear_selection`       | Clear selection             | Clears highlighted selections for one dataset or the whole workspace.                                                      |
+| `undo`                  | Undo workspace change       | Reverses the most recent reversible human or agent workspace action.                                                       |
+| `redo`                  | Redo workspace change       | Reapplies the change most recently reversed by `undo`.                                                                     |
+| `create_visualization`  | Create visualization        | Adds a visualization definition and returns its ID. The application builds its query and renderer configuration.           |
+| `update_visualization`  | Update visualization        | Changes supplied fields on an existing visualization while preserving its ID, annotations, and layout position.            |
+| `remove_visualization`  | Remove visualization        | Removes one visualization and its annotations. The action can be undone.                                                   |
+| `apply_filter`          | Apply filter                | Adds one validated condition used by charts, tables, and subsequent agent reads.                                           |
+| `clear_filters`         | Clear filters               | Removes filters for one dataset or the entire workspace.                                                                   |
+| `highlight_selection`   | Highlight selection         | Sets or extends a predicate selection while leaving nonmatching rows available to views that highlight rather than filter. |
+| `create_metric`         | Create metric               | Adds a named aggregate with optional filter references and percent, running-total, or time-comparison behavior.            |
+| `add_annotation`        | Add annotation              | Attaches a plain-text note to a point, range, or category on an existing visualization.                                    |
 
-The query compiler resolves relationships and generates the SQL internally.
+Raw previews and dataset-derived labels are marked as untrusted content. Read results are bounded, and quantitative analysis returns no more than 200 aggregate rows. WebMCP is optional. The human interface continues to work when the browser does not expose a model-context host.
 
-### Build visualizations
+## Architecture
 
-Create and interact with:
+```text
+React UI ───────┐
+                ├──> application action dispatcher ──> Zustand workspace state
+WebMCP tools ───┘                    │
+                                    └──> DuckDB-Wasm data engine
+                                                  │
+                           bounded table and chart results
+```
 
-- line charts
-- area charts
-- bar charts
-- scatter plots
-- donut charts
-- KPI cards
-- histograms
-- box plots
-- heatmaps
-
-Charts query DuckDB directly through the application's analytical query model. Large results are aggregated or sampled before reaching the renderer.
-
-When Data Canvas changes the fidelity of a result, the UI tells you. Sampling is never silently applied to KPI values.
-
-### Transform data
-
-Create derived columns through a validated expression model instead of free-form SQL.
-
-Supported operations include:
-
-- arithmetic
-- conditional expressions
-- date parts
-- casts
-- numeric and temporal binning
-
-Derived expressions are bounded, type-checked, and compiled by Data Canvas.
-
-Metrics support ordinary aggregates as well as:
-
-- percent of total
-- running totals
-- time comparisons
-- absolute change
-- percent change
-
-### Work interactively
-
-Selections and filters are shared workspace state.
-
-You can:
-
-- click charts to filter or highlight related data;
-- propagate selections across related datasets;
-- choose whether visualizations ignore, highlight, or filter by a selection;
-- use additive selections;
-- annotate points and ranges;
-- undo and redo workspace changes.
-
-## WebMCP
-
-Data Canvas exposes semantic analytical capabilities through WebMCP.
-
-Agents can work with concepts such as:
-
-- workspace state
-- datasets and schemas
-- column statistics
-- analysis queries
-- filters
-- selections
-- visualizations
-- metrics
-- derived columns
-- dataset relationships
-- annotations
-
-The WebMCP layer intentionally does not expose:
-
-- arbitrary SQL
-- arbitrary JavaScript
-- DOM selectors
-- screen coordinates
-- arbitrary URLs
-- raw ECharts configuration
-- workspace export
-
-Agent inputs pass through structural and semantic validation before they can affect the workspace.
-
-Write operations use workspace revisions so an agent cannot silently overwrite a newer human change. A stale write is rejected instead.
-
-WebMCP support depends on browser availability. Data Canvas remains fully usable as a human analytical workspace when WebMCP is unavailable.
-
-## Local-first by design
-
-Imported datasets are processed by DuckDB-Wasm inside the browser.
-
-Workspace data and metadata persist locally through the Origin Private File System. Reloading the page restores the workspace without requiring a server.
-
-Data Canvas also supports portable workspace archives for backup and transfer between browser profiles.
-
-There are two export modes:
-
-- definition-only, which exports the analytical structure without dataset contents;
-- full, which includes the workspace and dataset data.
-
-The application can also be installed for offline use.
-
-### Privacy boundary
-
-Local-first storage does not mean every AI interaction stays on the device.
-
-Dataset contents stay in the browser unless you explicitly expose information through a connected agent or export the data yourself. If your AI agent runs remotely, information returned through WebMCP may leave the device.
-
-Data Canvas minimizes that exposure.
-
-Read operations are bounded. Schema inspection returns metadata. Analytical tools prefer aggregates. Raw previews have strict row limits. Dataset-derived content is treated as untrusted input.
-
-The application itself does not upload imported datasets to a Data Canvas backend because there is no Data Canvas backend.
+The dispatcher is the sole workspace mutation entry point. It serializes actions, validates expected revisions, records history, and commits normalized metadata to Zustand. DuckDB owns imported rows and analytical execution. React, TanStack, ECharts, and WebMCP remain adapters around project-owned domain types.
 
 ## Getting started
 
-### Requirements
+Requirements:
 
 - Git
-- Bun matching the version declared by the repository
-- a modern Chromium-based browser
+- Bun 1.4 or later, below 2.0
+- a modern browser with Web Workers and WebAssembly support
 
-WebMCP functionality requires a browser build with WebMCP support. Human-facing Data Canvas functionality does not.
-
-### Install
+Clone, install, and run the development server:
 
 ```bash
-git clone <repository-url>
+git clone git@github.com:remotemerge/data-canvas.git
 cd data-canvas
-bun install --frozen-lockfile
-```
-
-### Run locally
-
-```bash
+bun install
 bun run dev
 ```
 
-Then open the local URL printed by Vite.
+Vite serves the application at `http://localhost:3000`. WebMCP tools require a browser that implements the native WebMCP model-context API.
 
-### Production build
+Build and preview the production bundle:
 
 ```bash
 bun run build
 bun run preview
 ```
 
-## Project principles
+## Testing
 
-Data Canvas is intentionally opinionated about a few things.
+```bash
+bun test
+```
 
-Data should remain under the application's control. An agent gets explicit capabilities, not unrestricted access to the database.
+The test suite covers domain and application behavior, SQL compilation, architectural boundaries, WebMCP contracts, human-agent action equivalence, integration flows, and performance policies.
 
-The visual workspace is the shared state. Humans and agents do not work in separate copies and synchronize later.
+## Privacy and security
 
-Analytical work belongs in DuckDB. React and ECharts receive bounded results instead of becoming data-processing engines.
+Imported files stay in the browser application. Data Canvas does not upload them to an application backend because no backend exists. A connected AI agent may process data returned by WebMCP outside the browser, so the tools favor schemas, aggregates, statistics, and bounded samples over bulk row access.
 
-Local-first means the application remains useful without an application server. It does not make misleading promises about external AI processing.
+The application generates SQL from validated domain operations and parameterizes data values. Agent inputs cannot request arbitrary SQL, scripts, network resources, DuckDB extensions, or renderer configuration.
 
-Those constraints shape the project more than any individual library.
+## License
+
+[MIT](LICENSE) © 2026 Madan Sapkota
