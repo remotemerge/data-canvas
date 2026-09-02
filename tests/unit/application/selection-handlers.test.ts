@@ -39,6 +39,34 @@ const EAST: FilterExpression = { kind: 'comparison', columnId: 'col_region', ope
 const nestPredicate = (levels: number): FilterExpression =>
   Array.from({ length: levels }).reduce<FilterExpression>((operand) => ({ kind: 'not', operand }), WEST);
 
+/*
+ * `handleSetSelection` rejects predicate mode without a predicate, so this state is not reachable
+ * through the actions. Extending it must still produce a well-formed `or` rather than folding an
+ * absent predicate into the operands.
+ */
+test('extending a predicate selection that carries no predicate starts a fresh disjunction', () => {
+  const base = workspaceWithDataset();
+  const workspace: Workspace = {
+    ...base,
+    selections: {
+      sel_empty: { id: 'sel_empty', datasetId: 'ds_sales', mode: 'predicate', origin: 'chart' },
+    },
+  };
+
+  const extended = extendSelection(workspace, {
+    datasetId: 'ds_sales',
+    mode: 'predicate',
+    predicate: WEST,
+    origin: 'chart',
+  });
+
+  expect(extended.ok).toBe(true);
+  expect(extended.ok && extended.value.workspace.selections['sel_empty']?.predicate).toEqual({
+    kind: 'or',
+    operands: [WEST],
+  });
+});
+
 // A workspace whose sales dataset carries a two-key selection, plus that selection's id.
 const workspaceWithKeySelection = (): { workspace: Workspace; selectionId: string } => {
   const selected = setSelection(workspaceWithDataset(), {
