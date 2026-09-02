@@ -346,6 +346,23 @@ describe('handleUpdateMetric', () => {
     );
   });
 
+  /*
+   * `handleCreateMetric` refuses a count metric that carries a column, so an update that switches to
+   * count must not leave the previous aggregate's column behind and break that invariant.
+   */
+  test('drops the inherited column when the aggregate becomes count', () => {
+    const { workspace, metricId } = workspaceWithMetric();
+    const result = updateMetric(workspace, { metricId, aggregate: 'count' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const updated = result.value.workspace.metrics[metricId];
+
+      expect(updated?.aggregate).toBe('count');
+      expect(updated?.columnId).toBeUndefined();
+    }
+  });
+
   test('rejects switching a count metric to a column aggregate with no column', () => {
     const { workspace, metricId } = workspaceWithCountMetric();
 

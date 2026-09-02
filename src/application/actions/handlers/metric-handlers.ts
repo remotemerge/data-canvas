@@ -194,7 +194,8 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
   const columnId = payload.columnId ?? existing.value.columnId;
 
   if (aggregate === 'count') {
-    if (columnId !== undefined && payload.aggregate === 'count' && payload.columnId !== undefined) {
+    // Only an explicitly supplied column conflicts; a column inherited from the previous aggregate is dropped below.
+    if (payload.columnId !== undefined) {
       return err(
         domainError('UNSUPPORTED_OPERATION', "Aggregate 'count' counts rows and takes no column.", { aggregate }),
       );
@@ -246,11 +247,14 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
     }
   }
 
+  // Spreading the existing metric would carry its column into a `count`, so drop it explicitly.
+  const { columnId: _existingColumnId, ...retained } = existing.value;
+
   const metric: Metric = {
-    ...existing.value,
+    ...retained,
     name,
     aggregate,
-    ...(aggregate === 'count' ? {} : columnId === undefined ? {} : { columnId }),
+    ...(aggregate === 'count' || columnId === undefined ? {} : { columnId }),
     ...(payload.filters === undefined ? {} : { filters: payload.filters }),
     ...(payload.format === undefined ? {} : { format: payload.format }),
     ...(payload.modifier === undefined ? {} : { modifier: payload.modifier }),
