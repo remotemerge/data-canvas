@@ -17,6 +17,8 @@ export interface ToolInput {
   includeSuggestions?: unknown;
   dimensions?: unknown;
   measures?: unknown;
+  orderBy?: unknown;
+  section?: unknown;
   limit?: unknown;
   offset?: unknown;
   visualizationId?: unknown;

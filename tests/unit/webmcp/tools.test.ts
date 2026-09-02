@@ -322,6 +322,36 @@ describe('WebMCP semantic tool behavior', () => {
     expect(workspace.filters[0]).toMatchObject({ value: ['Europe', 'Asia'], origin: 'agent' });
   });
 
+  /*
+   * `origin` reports the last writer, so an agent editing a human's filter would otherwise read as
+   * though the agent introduced it. Reporting `createdBy` alongside keeps the original author visible,
+   * matching what visualizations already expose.
+   */
+  test('get_workspace keeps the original author of a filter an agent updated', async () => {
+    const { harness, tool } = setup();
+    await harness.dispatcher.execute(
+      {
+        type: 'filter.apply',
+        payload: { datasetId: 'ds_sales', columnId: 'col_region', operator: 'eq', value: 'West' },
+      },
+      { actor: 'human' },
+    );
+
+    await tool('apply_filter').handler({
+      datasetId: 'ds_sales',
+      columnId: 'col_region',
+      operator: 'eq',
+      value: 'East',
+    });
+
+    const workspace = JSON.parse(await tool('get_workspace').handler({})) as {
+      filters: { origin: string; createdBy: string }[];
+    };
+
+    expect(workspace.filters).toHaveLength(1);
+    expect(workspace.filters[0]).toMatchObject({ origin: 'agent', createdBy: 'human' });
+  });
+
   // A populated workspace exercises the mapping of every collection, not only the empty-list path.
   test('get_workspace lists the datasets, relationships, and visualizations the workspace holds', async () => {
     const base = workspaceWithJoinableDatasets();
@@ -372,6 +402,45 @@ describe('WebMCP semantic tool behavior', () => {
     expect(workspace.visualizations.map((item) => item.id)).toEqual(['viz_orders']);
   });
 
+  /*
+   * Visualization IDs are obtainable only here, so update_visualization, remove_visualization, and
+   * add_annotation are unreachable if a grown workspace returns an empty list. The overview reports
+   * the total and the `section` page returns the entries the overview had to leave out.
+   */
+  test('get_workspace pages visualizations so every ID stays reachable in a large workspace', async () => {
+    const charts = Array.from({ length: 30 }, (_unused, index) => makeVisualization(`viz_${index}`, 'ds_sales'));
+    const { tool } = webmcpFixture({
+      ...workspaceWithDataset(),
+      visualizations: Object.fromEntries(charts.map((chart) => [chart.id, chart])),
+    });
+
+    const overview = JSON.parse(await tool('get_workspace').handler({})) as {
+      visualizations: { id: string }[];
+      visualizationsTotal: number;
+    };
+
+    expect(overview.visualizationsTotal).toBe(30);
+    expect(overview.visualizations.length).toBeGreaterThan(0);
+
+    // Page through `section` until exhausted, then check every chart was reachable.
+    const seen: string[] = [];
+    let offset = 0;
+    let nextOffset: number | null = 0;
+
+    while (nextOffset !== null) {
+      const raw =
+        // eslint-disable-next-line no-await-in-loop -- each page's offset comes from the previous one.
+        await tool('get_workspace').handler({ section: 'visualizations', offset, limit: 25 });
+      const page = JSON.parse(raw) as { visualizations: { id: string }[]; nextOffset: number | null };
+
+      seen.push(...page.visualizations.map((item) => item.id));
+      nextOffset = page.nextOffset;
+      offset = nextOffset ?? offset;
+    }
+
+    expect(new Set(seen).size).toBe(30);
+  });
+
   test('analyze_data converts a temporal dimension into the domain bin strategy', async () => {
     const { deps, tool } = setup();
     const executeAnalysis = deps.executeAnalysis;
@@ -394,6 +463,82 @@ describe('WebMCP semantic tool behavior', () => {
     expect(observedQuery?.binnedDimensions).toEqual([
       { columnId: 'col_date', strategy: { kind: 'temporal', unit: 'month' } },
     ]);
+  });
+
+  /*
+   * Measures are projected after dimensions, so narrowing the projection from the right strips the
+   * aggregate and returns group labels with no numbers. Rows are the redundant axis here: fewer of
+   * them still answers the question, and the trim is disclosed.
+   */
+  test('analyze_data keeps the measure column when the result exceeds the output budget', async () => {
+    const rows = Array.from({ length: 200 }, (_unused, index) => [`region ${'x'.repeat(20)} ${index}`, index * 3]);
+    const engine = stubDataEngine();
+    engine.executeAnalysis = () =>
+      Promise.resolve(
+        ok({
+          columns: [
+            { key: 'col_region', name: 'Region', logicalType: 'category' as const },
+            { key: 'm0', name: 'sum', logicalType: 'number' as const },
+          ],
+          rows,
+        }),
+      );
+    const { tool } = webmcpFixture(workspaceWithDataset(), engine);
+
+    const output = JSON.parse(
+      await tool('analyze_data').handler({
+        datasetId: 'ds_sales',
+        dimensions: ['col_region'],
+        measures: [{ columnId: 'col_revenue', aggregate: 'sum' }],
+      }),
+    ) as { columns: { key: string }[]; rows: unknown[][]; rowsReturned?: number; truncated?: boolean };
+
+    expect(output.truncated).toBe(true);
+    expect(output.rows.length).toBeLessThan(200);
+    // Both the group label and its aggregate survive; only the number of groups is reduced.
+    expect(output.columns.map((column) => column.key)).toEqual(['col_region', 'm0']);
+    expect(output.rows.every((row) => row.length === 2)).toBe(true);
+  });
+
+  // Without a sort a ranking question returns an arbitrary slice of groups rather than the largest.
+  test('analyze_data orders by a measure so a top-N ranking is answerable', async () => {
+    const { deps, tool } = setup();
+    const executeAnalysis = deps.executeAnalysis;
+    let observedQuery: Parameters<ToolDependencies['executeAnalysis']>[0] | undefined;
+    deps.executeAnalysis = (query) => {
+      observedQuery = query;
+      return executeAnalysis(query);
+    };
+
+    const output = JSON.parse(
+      await tool('analyze_data').handler({
+        datasetId: 'ds_sales',
+        dimensions: ['col_region'],
+        measures: [{ columnId: 'col_revenue', aggregate: 'sum' }],
+        orderBy: [{ measureIndex: 0, direction: 'desc' }],
+        limit: 5,
+      }),
+    ) as { ok: boolean };
+
+    expect(output.ok).toBe(true);
+    expect(observedQuery?.orderBy).toEqual([{ measureAlias: 'sum', direction: 'desc' }]);
+    expect(observedQuery?.limit).toBe(5);
+  });
+
+  test('analyze_data rejects a sort naming a measure the query does not have', async () => {
+    const { tool } = setup();
+
+    const output = JSON.parse(
+      await tool('analyze_data').handler({
+        datasetId: 'ds_sales',
+        dimensions: ['col_region'],
+        measures: [{ columnId: 'col_revenue', aggregate: 'sum' }],
+        orderBy: [{ measureIndex: 4, direction: 'desc' }],
+      }),
+    ) as { ok: boolean; code: string };
+
+    expect(output.ok).toBe(false);
+    expect(output.code).toBe('COLUMN_NOT_FOUND');
   });
 
   test('undo and redo expose shared workspace history to agents', async () => {

@@ -12,17 +12,22 @@ export const PRESERVE_COLUMNS_KEY = 'preserveColumns';
 // Fields retained when trimming a payload.
 const PRESERVED_LIST_KEYS = ['datasets'] as const;
 
-// Result arrays trimmed from least to most important.
+/*
+ * Result arrays ordered most to least important; the trim loop walks this from the end, so later
+ * entries lose rows first. `visualizations` sits near the front because visualization IDs are only
+ * obtainable from get_workspace, and update_visualization, remove_visualization, and add_annotation
+ * are unreachable without them -- a trimmed-away chart list strands those tools entirely.
+ */
 const TRIMMABLE_KEYS = [
   'columnIds',
   'columns',
   'rows',
+  'visualizations',
   'filters',
-  'selections',
   'relationships',
   'metrics',
+  'selections',
   'annotations',
-  'visualizations',
   'related',
 ] as const;
 
@@ -153,7 +158,17 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
         truncated: true,
       });
 
-    while (kept.length > 0 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
+    /*
+     * Prefer keeping one entry over emptying the list. An emptied list reads as "there are none" to an
+     * agent that only looks at the array, while a single entry beside its total says "there are more,
+     * page for them" -- and for identity lists it preserves the one ID needed to make progress.
+     */
+    while (kept.length > 1 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
+      kept.pop();
+    }
+
+    // A single entry too large to fit still has to go, or the whole payload degrades to its summary.
+    if (kept.length === 1 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
       kept.pop();
     }
 
