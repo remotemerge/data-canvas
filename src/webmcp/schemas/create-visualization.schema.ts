@@ -1,60 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
-
-// Bin strategies accepted by visualization creation.
-const binStrategy = {
-  oneOf: [
-    {
-      type: 'object',
-      properties: {
-        kind: { const: 'equalWidth' },
-        binCount: { type: 'integer', minimum: 2, maximum: 100 },
-      },
-      required: ['kind', 'binCount'],
-      additionalProperties: false,
-      description: 'Splits the range into binCount buckets of equal width.',
-    },
-    {
-      type: 'object',
-      properties: {
-        kind: { const: 'equalWidthOf' },
-        width: { type: 'number', exclusiveMinimum: 0 },
-      },
-      required: ['kind', 'width'],
-      additionalProperties: false,
-      description: 'Buckets of a fixed width in column units, such as 10-year age bands.',
-    },
-    {
-      type: 'object',
-      properties: {
-        kind: { const: 'quantile' },
-        quantiles: { type: 'integer', minimum: 2, maximum: 20 },
-      },
-      required: ['kind', 'quantiles'],
-      additionalProperties: false,
-      description: 'Buckets holding equal row counts, such as 4 for quartiles.',
-    },
-    {
-      type: 'object',
-      properties: {
-        kind: { const: 'explicit' },
-        breaks: { type: 'array', items: { type: 'number' }, minItems: 1, maxItems: 100 },
-      },
-      required: ['kind', 'breaks'],
-      additionalProperties: false,
-      description: 'Buckets split at these exact boundary values.',
-    },
-    {
-      type: 'object',
-      properties: {
-        kind: { const: 'temporal' },
-        unit: { type: 'string', enum: ['day', 'week', 'month', 'quarter', 'year'] },
-      },
-      required: ['kind', 'unit'],
-      additionalProperties: false,
-      description: 'Truncates a date or timestamp column to this calendar unit.',
-    },
-  ],
-} as const;
+import { binStrategySchema } from '@/webmcp/schemas/bin-strategy.schema.ts';
 
 export const createVisualizationSchema = {
   type: 'object',
@@ -105,8 +50,8 @@ export const createVisualizationSchema = {
       description:
         'How yColumnIds are aggregated per x value. Defaults to sum. Ignored by scatter and histogram, which do not aggregate.',
     },
-    binX: { ...binStrategy, description: 'Buckets xColumnId. Required for a histogram, optional elsewhere.' },
-    binSeries: { ...binStrategy, description: 'Buckets groupByColumnId. Mainly useful for a heatmap.' },
+    binX: { ...binStrategySchema, description: 'Buckets xColumnId. Required for a histogram, optional elsewhere.' },
+    binSeries: { ...binStrategySchema, description: 'Buckets groupByColumnId. Mainly useful for a heatmap.' },
     expectedRevision: {
       type: 'integer',
       minimum: 0,
