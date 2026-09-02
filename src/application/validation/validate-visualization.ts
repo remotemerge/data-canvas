@@ -336,7 +336,7 @@ const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>)
 const validateHeatmapBin = (
   channel: 'binX' | 'binSeries',
   strategy: BinStrategy | undefined,
-  columnId: EntityId | undefined,
+  columnId: EntityId,
   columns: Map<EntityId, Column>,
 ): Result<void, DomainError> => {
   if (strategy === undefined) {
@@ -349,11 +349,11 @@ const validateHeatmapBin = (
     return validated;
   }
 
-  const column = columnId === undefined ? undefined : columns.get(columnId);
-
-  if (column === undefined) {
-    return ok(undefined);
-  }
+  /*
+   * Both heatmap axes are required above and `resolveBoundColumns` rejects any binding naming a
+   * column the dataset does not have, so every bound id resolves by this point.
+   */
+  const column = columns.get(columnId)!;
 
   const temporalStrategy = strategy.kind === 'temporal';
 

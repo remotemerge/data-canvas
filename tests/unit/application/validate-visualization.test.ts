@@ -177,6 +177,27 @@ describe('per-kind binding rules', () => {
     ).toBe(true);
   });
 
+  /*
+   * The bin check compares a strategy against a resolved column, so an unresolved one leaves it
+   * nothing to judge. Reporting a type mismatch here would mask the real problem, which reference
+   * validation reports against the binding itself.
+   */
+  test('a binned axis naming an unknown column is reported as a missing column', () => {
+    const result = check('heatmap', {
+      x: REGION,
+      series: 'col_missing',
+      y: [REVENUE],
+      binSeries: { kind: 'temporal', unit: 'month' },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    // Reference resolution runs first, so the absent column is named rather than blamed on the bin.
+    expect(result.error.code).toBe('COLUMN_NOT_FOUND');
+  });
+
   // Both heatmap axes may be binned, so the x channel is checked against its own column family too.
   test('a heatmap rejects a temporal bin over a category x column', () => {
     const result = check('heatmap', {
