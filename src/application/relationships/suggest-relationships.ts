@@ -86,6 +86,36 @@ const scorePair = (
   return undefined;
 };
 
+// Scores every column pair between two datasets, keeping the ones that look like a key match.
+const proposeForPair = (left: Dataset, right: Dataset): RelationshipSuggestion[] => {
+  const proposals: RelationshipSuggestion[] = [];
+
+  for (const leftColumn of left.columns) {
+    for (const rightColumn of right.columns) {
+      const scored = scorePair(leftColumn, rightColumn, right.name);
+
+      if (scored === undefined) {
+        continue;
+      }
+
+      proposals.push({
+        leftDatasetId: left.id,
+        rightDatasetId: right.id,
+        leftColumnId: leftColumn.id,
+        rightColumnId: rightColumn.id,
+        leftColumnName: leftColumn.name,
+        rightColumnName: rightColumn.name,
+        // Point from the foreign-key dataset to the lookup dataset.
+        kind: 'many_to_one',
+        confidence: scored.confidence,
+        reason: scored.reason,
+      });
+    }
+  }
+
+  return proposals;
+};
+
 // Proposes unconnected dataset pairs from schema names and types.
 export const suggestRelationships = (workspace: Workspace): RelationshipSuggestion[] => {
   const datasets = Object.values(workspace.datasets).filter((dataset) => dataset.importStatus === 'ready');
@@ -101,28 +131,7 @@ export const suggestRelationships = (workspace: Workspace): RelationshipSuggesti
         continue;
       }
 
-      for (const leftColumn of left.columns) {
-        for (const rightColumn of right.columns) {
-          const scored = scorePair(leftColumn, rightColumn, right.name);
-
-          if (scored === undefined) {
-            continue;
-          }
-
-          suggestions.push({
-            leftDatasetId: left.id,
-            rightDatasetId: right.id,
-            leftColumnId: leftColumn.id,
-            rightColumnId: rightColumn.id,
-            leftColumnName: leftColumn.name,
-            rightColumnName: rightColumn.name,
-            // Point from the foreign-key dataset to the lookup dataset.
-            kind: 'many_to_one',
-            confidence: scored.confidence,
-            reason: scored.reason,
-          });
-        }
-      }
+      suggestions.push(...proposeForPair(left, right));
     }
   }
 
@@ -135,7 +144,10 @@ const dedupe = (suggestions: readonly RelationshipSuggestion[]): RelationshipSug
 
   for (const suggestion of suggestions) {
     // Treat both directions of a dataset pair as the same proposal.
-    const key = [suggestion.leftDatasetId, suggestion.rightDatasetId].toSorted().join('|');
+    // Ordered by code unit rather than locale: the key is internal, so it must not shift with locale.
+    const key = [suggestion.leftDatasetId, suggestion.rightDatasetId]
+      .toSorted((left, right) => (left < right ? -1 : Number(left > right)))
+      .join('|');
     const current = best.get(key);
 
     if (current === undefined || suggestion.confidence > current.confidence) {

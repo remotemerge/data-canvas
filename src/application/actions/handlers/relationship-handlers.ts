@@ -58,13 +58,16 @@ export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = 
     createdBy: deps.actor,
   };
 
+  const columnLabel = keys.length === 1 ? 'key column' : 'key columns';
+  const warningSuffix = warning === undefined ? '' : ` ${warning}`;
+
   return ok({
     workspace: {
       ...workspace,
       relationships: { ...workspace.relationships, [relationship.id]: relationship },
     },
     changedEntityIds: [relationship.id],
-    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} key column${keys.length === 1 ? '' : 's'} using ${JOIN_KIND_PHRASE[relationship.join]}.${warning === undefined ? '' : ` ${warning}`}`,
+    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} ${columnLabel} using ${JOIN_KIND_PHRASE[relationship.join]}.${warningSuffix}`,
   });
 };
 

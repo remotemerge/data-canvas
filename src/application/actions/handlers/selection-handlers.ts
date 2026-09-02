@@ -181,12 +181,13 @@ export const handleExtendSelection: ActionHandler<ExtendSelectionInput> = (works
   }
 
   // Flatten repeated extensions so the compiler does not walk a deep chain of single-operand `or` nodes.
-  const operands =
-    existing.predicate?.kind === 'or'
-      ? [...existing.predicate.operands]
-      : existing.predicate === undefined
-        ? []
-        : [existing.predicate];
+  const collectOperands = (): FilterExpression[] => {
+    if (existing.predicate === undefined) {
+      return [];
+    }
+    return existing.predicate.kind === 'or' ? [...existing.predicate.operands] : [existing.predicate];
+  };
+  const operands = collectOperands();
   const extended: Selection = {
     ...existing,
     predicate: { kind: 'or', operands: [...operands, payload.predicate] },

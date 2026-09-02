@@ -23,6 +23,92 @@ export const MAX_METRIC_NAME_LENGTH = 80;
 // Aggregates that require numeric input.
 const NUMERIC_ONLY_AGGREGATES = new Set(['sum', 'avg', 'median', 'stddev']);
 
+/**
+ * Checks the aggregate against the column it summarizes.
+ *
+ * `explicitColumnId` is what the caller supplied, `columnId` the value after any inherited column is
+ * merged in. An update only conflicts when the caller passes a column alongside `count`, since a
+ * column inherited from a previous aggregate is dropped rather than rejected.
+ */
+const validateAggregateColumn = (
+  dataset: Dataset,
+  aggregate: string,
+  columnId: string | undefined,
+  explicitColumnId: string | undefined,
+): Result<void, DomainError> => {
+  if (aggregate === 'count') {
+    return explicitColumnId === undefined
+      ? ok(undefined)
+      : err(domainError('UNSUPPORTED_OPERATION', "Aggregate 'count' counts rows and takes no column.", { aggregate }));
+  }
+
+  if (columnId === undefined) {
+    return err(domainError('INCOMPATIBLE_COLUMN', `Aggregate '${aggregate}' requires a column.`, { aggregate }));
+  }
+
+  const column = resolveColumn(dataset, columnId);
+
+  if (!column.ok) {
+    return column;
+  }
+
+  if (NUMERIC_ONLY_AGGREGATES.has(aggregate) && !isNumericType(column.value.logicalType)) {
+    return err(
+      domainError(
+        'INCOMPATIBLE_COLUMN',
+        `Aggregate '${aggregate}' requires a numeric column; '${column.value.name}' is ${column.value.logicalType}.`,
+        { aggregate, columnId: column.value.id, logicalType: column.value.logicalType },
+      ),
+    );
+  }
+
+  return ok(undefined);
+};
+
+// A metric may only reference filters defined on its own dataset.
+const validateMetricFilters = (
+  workspace: Parameters<typeof resolveFilter>[0],
+  filterIds: readonly string[],
+  datasetId: string,
+): Result<void, DomainError> => {
+  for (const filterId of filterIds) {
+    const filter = resolveFilter(workspace, filterId);
+
+    if (!filter.ok) {
+      return filter;
+    }
+
+    if (filter.value.datasetId !== datasetId) {
+      return err(
+        domainError('INCOMPATIBLE_COLUMN', `Filter '${filterId}' belongs to a different dataset.`, {
+          filterId,
+          datasetId,
+        }),
+      );
+    }
+  }
+
+  return ok(undefined);
+};
+
+/*
+ * Modifiers that express their result as a proportion default to percent formatting, so a ratio is
+ * not displayed as a bare decimal. An explicit format always wins.
+ */
+const defaultFormat = (
+  format: Metric['format'] | undefined,
+  modifier: MetricModifier | undefined,
+): Pick<Metric, 'format'> | Record<string, never> => {
+  if (format !== undefined) {
+    return { format };
+  }
+
+  const isProportional =
+    modifier?.kind === 'percentOfTotal' || (modifier?.kind === 'timeComparison' && modifier.as === 'percentChange');
+
+  return isProportional ? { format: { style: 'percent' as const } } : {};
+};
+
 // Validates modifier references against the metric's dataset.
 const validateModifier = (dataset: Dataset, modifier: MetricModifier): Result<void, DomainError> => {
   if (modifier.kind === 'none' || modifier.kind === 'percentOfTotal') {
@@ -83,55 +169,16 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
     return dataset;
   }
 
-  if (payload.aggregate === 'count') {
-    if (payload.columnId !== undefined) {
-      return err(
-        domainError('UNSUPPORTED_OPERATION', "Aggregate 'count' counts rows and takes no column.", {
-          aggregate: payload.aggregate,
-        }),
-      );
-    }
-  } else {
-    if (payload.columnId === undefined) {
-      return err(
-        domainError('INCOMPATIBLE_COLUMN', `Aggregate '${payload.aggregate}' requires a column.`, {
-          aggregate: payload.aggregate,
-        }),
-      );
-    }
+  const aggregateColumn = validateAggregateColumn(dataset.value, payload.aggregate, payload.columnId, payload.columnId);
 
-    const column = resolveColumn(dataset.value, payload.columnId);
-
-    if (!column.ok) {
-      return column;
-    }
-
-    if (NUMERIC_ONLY_AGGREGATES.has(payload.aggregate) && !isNumericType(column.value.logicalType)) {
-      return err(
-        domainError(
-          'INCOMPATIBLE_COLUMN',
-          `Aggregate '${payload.aggregate}' requires a numeric column; '${column.value.name}' is ${column.value.logicalType}.`,
-          { aggregate: payload.aggregate, columnId: column.value.id, logicalType: column.value.logicalType },
-        ),
-      );
-    }
+  if (!aggregateColumn.ok) {
+    return aggregateColumn;
   }
 
-  for (const filterId of payload.filters ?? []) {
-    const filter = resolveFilter(workspace, filterId);
+  const filters = validateMetricFilters(workspace, payload.filters ?? [], dataset.value.id);
 
-    if (!filter.ok) {
-      return filter;
-    }
-
-    if (filter.value.datasetId !== dataset.value.id) {
-      return err(
-        domainError('INCOMPATIBLE_COLUMN', `Filter '${filterId}' belongs to a different dataset.`, {
-          filterId,
-          datasetId: dataset.value.id,
-        }),
-      );
-    }
+  if (!filters.ok) {
+    return filters;
   }
 
   if (payload.modifier !== undefined) {
@@ -149,12 +196,7 @@ export const handleCreateMetric: ActionHandler<CreateMetricInput> = (workspace, 
     aggregate: payload.aggregate,
     ...(payload.columnId === undefined ? {} : { columnId: payload.columnId }),
     filters: payload.filters ?? [],
-    ...(payload.format === undefined
-      ? payload.modifier?.kind === 'percentOfTotal' ||
-        (payload.modifier?.kind === 'timeComparison' && payload.modifier.as === 'percentChange')
-        ? { format: { style: 'percent' as const } }
-        : {}
-      : { format: payload.format }),
+    ...defaultFormat(payload.format, payload.modifier),
     ...(payload.modifier === undefined ? {} : { modifier: payload.modifier }),
     createdBy: deps.actor,
   };
@@ -193,50 +235,16 @@ export const handleUpdateMetric: ActionHandler<UpdateMetricInput> = (workspace, 
   const aggregate = payload.aggregate ?? existing.value.aggregate;
   const columnId = payload.columnId ?? existing.value.columnId;
 
-  if (aggregate === 'count') {
-    // Only an explicitly supplied column conflicts; a column inherited from the previous aggregate is dropped below.
-    if (payload.columnId !== undefined) {
-      return err(
-        domainError('UNSUPPORTED_OPERATION', "Aggregate 'count' counts rows and takes no column.", { aggregate }),
-      );
-    }
-  } else {
-    if (columnId === undefined) {
-      return err(domainError('INCOMPATIBLE_COLUMN', `Aggregate '${aggregate}' requires a column.`, { aggregate }));
-    }
+  const aggregateColumn = validateAggregateColumn(dataset.value, aggregate, columnId, payload.columnId);
 
-    const column = resolveColumn(dataset.value, columnId);
-
-    if (!column.ok) {
-      return column;
-    }
-
-    if (NUMERIC_ONLY_AGGREGATES.has(aggregate) && !isNumericType(column.value.logicalType)) {
-      return err(
-        domainError(
-          'INCOMPATIBLE_COLUMN',
-          `Aggregate '${aggregate}' requires a numeric column; '${column.value.name}' is ${column.value.logicalType}.`,
-          { aggregate, columnId: column.value.id, logicalType: column.value.logicalType },
-        ),
-      );
-    }
+  if (!aggregateColumn.ok) {
+    return aggregateColumn;
   }
 
-  for (const filterId of payload.filters ?? existing.value.filters) {
-    const filter = resolveFilter(workspace, filterId);
+  const filters = validateMetricFilters(workspace, payload.filters ?? existing.value.filters, dataset.value.id);
 
-    if (!filter.ok) {
-      return filter;
-    }
-
-    if (filter.value.datasetId !== dataset.value.id) {
-      return err(
-        domainError('INCOMPATIBLE_COLUMN', `Filter '${filterId}' belongs to a different dataset.`, {
-          filterId,
-          datasetId: dataset.value.id,
-        }),
-      );
-    }
+  if (!filters.ok) {
+    return filters;
   }
 
   if (payload.modifier !== undefined) {

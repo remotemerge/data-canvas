@@ -16,33 +16,57 @@ export const propagationPath = (
     return [];
   }
 
+  interface Step {
+    datasetId: EntityId;
+    path: Relationship[];
+  }
+
   const relationships = Object.values(workspace.relationships);
   const visited = new Set<EntityId>([fromDatasetId]);
-  let frontier: { datasetId: EntityId; path: Relationship[] }[] = [{ datasetId: fromDatasetId, path: [] }];
 
-  for (let depth = 0; depth < MAX_PROPAGATION_DEPTH && frontier.length > 0; depth += 1) {
-    const next: { datasetId: EntityId; path: Relationship[] }[] = [];
+  /*
+   * Expands one frontier entry. Returning the completed path signals that the target was reached, so
+   * the caller stops rather than exploring the rest of the level.
+   */
+  const stepFrom = (entry: Step): { found: Relationship[] } | { next: Step[] } => {
+    const next: Step[] = [];
 
-    for (const entry of frontier) {
-      for (const relationship of relationships) {
-        const neighbour = relatedDatasetId(relationship, entry.datasetId);
+    for (const relationship of relationships) {
+      const neighbour = relatedDatasetId(relationship, entry.datasetId);
 
-        if (neighbour === undefined || visited.has(neighbour)) {
-          continue;
-        }
-
-        const path = [...entry.path, relationship];
-
-        if (neighbour === toDatasetId) {
-          return path;
-        }
-
-        visited.add(neighbour);
-        next.push({ datasetId: neighbour, path });
+      if (neighbour === undefined || visited.has(neighbour)) {
+        continue;
       }
+
+      const path = [...entry.path, relationship];
+
+      if (neighbour === toDatasetId) {
+        return { found: path };
+      }
+
+      visited.add(neighbour);
+      next.push({ datasetId: neighbour, path });
     }
 
-    frontier = next;
+    return { next };
+  };
+
+  let frontier: Step[] = [{ datasetId: fromDatasetId, path: [] }];
+
+  for (let depth = 0; depth < MAX_PROPAGATION_DEPTH && frontier.length > 0; depth += 1) {
+    const expanded: Step[] = [];
+
+    for (const entry of frontier) {
+      const outcome = stepFrom(entry);
+
+      if ('found' in outcome) {
+        return outcome.found;
+      }
+
+      expanded.push(...outcome.next);
+    }
+
+    frontier = expanded;
   }
 
   return undefined;

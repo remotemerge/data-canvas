@@ -54,6 +54,7 @@ import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
+import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 import { workspaceStore } from '@/state/workspace-store.ts';
@@ -199,12 +200,17 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
         context.origin === 'undo'
           ? state.undoStack.slice(0, -1)
           : [...state.undoStack, actionId].slice(-HISTORY_STACK_LIMIT);
-      const redoStack =
-        context.origin === 'undo'
-          ? [...state.redoStack, actionId].slice(-HISTORY_STACK_LIMIT)
-          : context.origin === 'redo'
-            ? state.redoStack.slice(0, -1)
-            : [];
+      /*
+       * An undo makes the action redoable. A redo consumes the entry it replays. Any other origin is
+       * a new branch of history, which discards the redo stack.
+       */
+      const nextRedoStack = (): EntityId[] => {
+        if (context.origin === 'undo') {
+          return [...state.redoStack, actionId].slice(-HISTORY_STACK_LIMIT);
+        }
+        return context.origin === 'redo' ? state.redoStack.slice(0, -1) : [];
+      };
+      const redoStack = nextRedoStack();
 
       return {
         ...state,
