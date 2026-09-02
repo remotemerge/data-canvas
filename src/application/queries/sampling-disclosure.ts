@@ -42,16 +42,10 @@ export const describeSampling = (disclosure: SamplingDisclosure): DisclosureText
         explanation: `${temporalUnitLabel[strategy.from]} buckets would exceed the plotted-point budget, so this chart is grouped by ${strategy.to} instead. Every row was read, so each bucket's value is exact — but the axis shows ${strategy.to}s, not ${strategy.from}s.`,
       };
 
-    case 'reservoir':
+    case 'rowTruncation':
       return {
-        label: `${percent(strategy.rate)} sample`,
-        explanation: `This chart plots a uniform random sample of ${percent(strategy.rate)} of the matching rows. The overall shape is representative, but individual points are a subset and counts are not totals.`,
-      };
-
-    case 'tablesample':
-      return {
-        label: `Approximate (${percent(strategy.rate)})`,
-        explanation: `This value is estimated from a ${percent(strategy.rate)} sample of the rows and scaled up. Treat it as approximate, not as a measured total.`,
+        label: `First ${percent(strategy.rate)} of rows`,
+        explanation: `This chart plots more rows than the plotted-point budget allows, so it shows the first ${percent(strategy.rate)} of the matching rows in the order the engine read them. The points shown are exact, but they are not a random sample and the shape may not represent the whole result. Add a filter to narrow the rows plotted.`,
       };
   }
 };

@@ -98,6 +98,40 @@ test('human and agent visualization paths produce the same workspace', async () 
   expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
 });
 
+/*
+ * A scatter plot draws one mark per row, so its query must bind both channels as dimensions. If one
+ * adapter aggregated y instead, rows sharing an x value would collapse into a single point there.
+ */
+test('human and agent scatter paths produce the same row-level query', async () => {
+  const { human, agent, tool } = pair();
+  await human.dispatcher.execute(
+    {
+      type: 'visualization.create',
+      payload: {
+        datasetId: 'ds_sales',
+        title: 'Revenue by units',
+        kind: 'scatter',
+        binding: { x: 'col_units', y: ['col_revenue'] },
+      },
+    },
+    { actor: 'human' },
+  );
+  await tool('create_visualization').handler({
+    datasetId: 'ds_sales',
+    title: 'Revenue by units',
+    kind: 'scatter',
+    xColumnId: 'col_units',
+    yColumnIds: ['col_revenue'],
+    expectedRevision: 0,
+  });
+
+  const [chart] = Object.values(human.workspace().visualizations);
+
+  expect(chart?.query.measures).toEqual([]);
+  expect(chart?.query.dimensions).toEqual(['col_units', 'col_revenue']);
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
 test('human and agent selection paths produce the same workspace', async () => {
   const { human, agent, tool } = pair();
   const predicate = { kind: 'comparison' as const, columnId: 'col_region', operator: 'in' as const, value: ['Europe'] };

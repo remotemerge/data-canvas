@@ -16,10 +16,8 @@ export type SamplingStrategy =
   | { kind: 'binTruncation'; retained: number }
   // A temporal dimension widened to a coarser unit until it fits.
   | { kind: 'temporalWiden'; from: TemporalUnit; to: TemporalUnit }
-  // Uniform row sample for scatter-style queries.
-  | { kind: 'reservoir'; rate: number }
-  // Scanned-row sample under an aggregate, producing an estimate.
-  | { kind: 'tablesample'; rate: number };
+  // Leading rows of a row-level query, kept in the engine's scan order.
+  | { kind: 'rowTruncation'; rate: number };
 
 export interface SamplingDisclosure {
   strategy: SamplingStrategy;
@@ -145,19 +143,24 @@ export const planSampling = ({
   const deliverable = Math.min(budget, MAX_QUERY_LIMIT);
   const rate = clampRate(deliverable / estimatedRows);
 
+  /*
+   * A row-level query returns individual rows, so bounding it means keeping the leading rows the
+   * engine scans. The result is a subset in storage order, not a randomized sample; the disclosure
+   * must describe it that way.
+   */
   if (isRowLevel(query)) {
     return {
       query: { ...query, limit: deliverable },
-      disclosure: { strategy: { kind: 'reservoir', rate }, rate, estimatedRows },
+      disclosure: { strategy: { kind: 'rowTruncation', rate }, rate, estimatedRows },
     };
   }
 
-  // Without dimensions, the query already returns one aggregate row; only row sampling is available.
+  /*
+   * An aggregate without any grouping already returns a single row, so there is nothing to reduce.
+   * Approximating it would trade an exact headline value for an estimate with no benefit.
+   */
   if (query.dimensions.length === 0 && (query.binnedDimensions ?? []).length === 0) {
-    return {
-      query,
-      disclosure: { strategy: { kind: 'tablesample', rate }, rate, estimatedRows },
-    };
+    return exact;
   }
 
   /*

@@ -155,16 +155,24 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
               ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
               filters: [],
             }
-          : {
-              datasetId,
-              // Binned dimensions use the compiler's `binnedDimensions` shape.
-              dimensions: x === '' || temporalDimension ? [] : [x],
-              ...(x === '' || !temporalDimension
-                ? {}
-                : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
-              measures: y === '' ? [] : [{ columnId: y, aggregate }],
-              filters: [],
-            };
+          : // A scatter plot draws one mark per row, so both channels stay dimensions.
+            kind === 'scatter'
+            ? {
+                datasetId,
+                dimensions: [...(x === '' ? [] : [x]), ...(y === '' ? [] : [y])],
+                measures: [],
+                filters: [],
+              }
+            : {
+                datasetId,
+                // Binned dimensions use the compiler's `binnedDimensions` shape.
+                dimensions: x === '' || temporalDimension ? [] : [x],
+                ...(x === '' || !temporalDimension
+                  ? {}
+                  : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
+                measures: y === '' ? [] : [{ columnId: y, aggregate }],
+                filters: [],
+              };
 
     const result = await actions.createVisualization({
       datasetId,

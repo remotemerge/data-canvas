@@ -11,7 +11,12 @@ import { reachableDatasets } from '@/application/relationships/related-datasets.
 import { resolveDataset, resolveVisualization } from '@/application/validation/validate-entity-refs.ts';
 import { validateVisualization } from '@/application/validation/validate-visualization.ts';
 import type { AnalysisQuery } from '@/domain/analysis/analysis-query.ts';
-import type { VisualBinding, Visualization, VisualizationPresentation } from '@/domain/visualization/visualization.ts';
+import type {
+  VisualBinding,
+  Visualization,
+  VisualizationKind,
+  VisualizationPresentation,
+} from '@/domain/visualization/visualization.ts';
 import { DEFAULT_SELECTION_LINK_MODE } from '@/domain/visualization/selection-link-mode.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
@@ -26,7 +31,25 @@ const DEFAULT_PRESENTATION: VisualizationPresentation = {
 };
 
 // Builds the default `AnalysisQuery` from a visualization binding.
-const deriveQuery = (datasetId: string, binding: VisualBinding): AnalysisQuery => {
+const deriveQuery = (datasetId: string, binding: VisualBinding, kind?: VisualizationKind): AnalysisQuery => {
+  /*
+   * A scatter plot shows one mark per row, so both channels are dimensions. Aggregating y would
+   * collapse every row sharing an x value into a single point and destroy the relationship the
+   * chart exists to show.
+   */
+  if (kind === 'scatter') {
+    return {
+      datasetId,
+      dimensions: [
+        ...(binding.x === undefined ? [] : [binding.x]),
+        ...(binding.y ?? []),
+        ...(binding.series === undefined ? [] : [binding.series]),
+      ],
+      measures: [],
+      filters: [],
+    };
+  }
+
   // Binned channels must be grouped by bucket, not by their raw values.
   const binned = [
     ...(binding.x === undefined || binding.binX === undefined ? [] : [{ columnId: binding.x, strategy: binding.binX }]),
@@ -86,7 +109,7 @@ export const handleCreateVisualization: ActionHandler<CreateVisualizationInput> 
     datasetId: dataset.value.id,
     title: payload.title.trim(),
     kind: payload.kind,
-    query: payload.query ?? deriveQuery(dataset.value.id, payload.binding),
+    query: payload.query ?? deriveQuery(dataset.value.id, payload.binding, payload.kind),
     binding: payload.binding,
     presentation: { ...DEFAULT_PRESENTATION, ...payload.presentation },
     linkMode: payload.linkMode ?? DEFAULT_SELECTION_LINK_MODE,
@@ -149,9 +172,16 @@ export const handleUpdateVisualization: ActionHandler<UpdateVisualizationInput> 
     title: payload.title === undefined ? existing.value.title : payload.title.trim(),
     kind,
     binding,
-    // A changed binding invalidates the derived query, so rebuild it unless supplied explicitly.
+    /*
+     * A changed binding invalidates the derived query, so rebuild it unless supplied explicitly.
+     * A changed kind does too, because scatter derives row-level dimensions where the other kinds
+     * derive an aggregate measure.
+     */
     query:
-      payload.query ?? (payload.binding === undefined ? existing.value.query : deriveQuery(dataset.value.id, binding)),
+      payload.query ??
+      (payload.binding === undefined && payload.kind === undefined
+        ? existing.value.query
+        : deriveQuery(dataset.value.id, binding, kind)),
     presentation: { ...existing.value.presentation, ...payload.presentation },
     linkMode: payload.linkMode ?? existing.value.linkMode,
   };

@@ -64,6 +64,23 @@ const queryFrom = (
     };
   }
 
+  /*
+   * A scatter plot shows one mark per row, so both channels are dimensions. Aggregating y would
+   * collapse every row sharing an x value into a single point.
+   */
+  if (kind === 'scatter') {
+    return {
+      datasetId,
+      dimensions: [
+        ...(binding.x === undefined ? [] : [binding.x]),
+        ...(binding.y ?? []),
+        ...(binding.series === undefined ? [] : [binding.series]),
+      ],
+      measures: [],
+      filters: [],
+    };
+  }
+
   if (kind === 'boxplot') {
     const [measureId] = binding.y ?? [];
 

@@ -230,8 +230,8 @@ describe('adaptive sampling policy', () => {
     expect(plan.query.binnedDimensions?.[1]).toEqual(query.binnedDimensions?.[1] as never);
   });
 
-  // With no dimension to rank or bucket, only the scanned rows can be reduced.
-  test('samples scanned rows for an ungrouped aggregate', () => {
+  // An ungrouped aggregate already returns one row, so it stays exact rather than being estimated.
+  test('leaves an ungrouped aggregate exact', () => {
     const query: AnalysisQuery = {
       datasetId: 'ds_1' as EntityId,
       dimensions: [],
@@ -240,8 +240,7 @@ describe('adaptive sampling policy', () => {
     };
     const plan = planSampling({ query, kind: 'bar', estimatedRows: 6_000, budget: 100 });
 
-    expect(plan.disclosure?.strategy.kind).toBe('tablesample');
-    // Row sampling happens under the aggregate, so the query itself is unchanged.
+    expect(plan.disclosure).toBeNull();
     expect(plan.query).toEqual(query);
   });
 
@@ -278,7 +277,7 @@ describe('adaptive sampling policy', () => {
     expect(describeSampling(plan.disclosure!).explanation).not.toContain('categories');
   });
 
-  test('samples rows for a row-level scatter query', () => {
+  test('truncates rows for a row-level scatter query', () => {
     const scatter: AnalysisQuery = {
       datasetId: 'ds_1' as EntityId,
       dimensions: [columnId('x'), columnId('y')],
@@ -287,9 +286,18 @@ describe('adaptive sampling policy', () => {
     };
     const plan = planSampling({ query: scatter, kind: 'scatter', estimatedRows: 1_000_000, budget: 5_000 });
 
-    expect(plan.disclosure?.strategy.kind).toBe('reservoir');
+    expect(plan.disclosure?.strategy.kind).toBe('rowTruncation');
     // Use the compiler's row cap, not the nominal display budget.
     expect(plan.query.limit).toBe(Math.min(5_000, MAX_QUERY_LIMIT));
+  });
+
+  // The disclosure must not promise randomization the query never performs.
+  test('the row-truncation explanation does not claim a random sample', () => {
+    const text = describeSampling({ strategy: { kind: 'rowTruncation', rate: 0.005 }, rate: 0.005, estimatedRows: 10 });
+
+    expect(text.explanation).not.toContain('uniform random sample');
+    expect(text.explanation).toContain('not a random sample');
+    expect(text.explanation).toContain('order the engine read them');
   });
 });
 
@@ -300,8 +308,7 @@ describe('sampling disclosure', () => {
       { kind: 'topN' as const, retained: 99, otherBucket: true as const },
       { kind: 'binTruncation' as const, retained: 99 },
       { kind: 'temporalWiden' as const, from: 'day' as const, to: 'month' as const },
-      { kind: 'reservoir' as const, rate: 0.005 },
-      { kind: 'tablesample' as const, rate: 0.01 },
+      { kind: 'rowTruncation' as const, rate: 0.005 },
     ];
 
     for (const strategy of strategies) {
