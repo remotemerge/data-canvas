@@ -282,6 +282,11 @@ export interface ActionContext {
   actor: Actor;
   // Marks an action created by undo or redo.
   origin?: 'undo' | 'redo';
+  /*
+   * Non-invertible entries undo skipped past to reach this one. They are dropped from the stack with
+   * the entry being reversed, so the top keeps naming the next action that can actually be reversed.
+   */
+  skippedHistoryEntries?: number;
   // Optional optimistic-concurrency check against an observed workspace revision.
   expectedRevision?: number;
   signal?: AbortSignal;

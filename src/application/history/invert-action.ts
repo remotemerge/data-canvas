@@ -25,6 +25,9 @@ export const invertAction = (
         { visualizations: before.visualizations, annotations: before.annotations, layout: before.layout },
         changedEntityIds,
       );
+    // A link mode is visualization metadata, so restoring the prior visualizations reverses it.
+    case 'visualization.setLinkMode':
+      return restore({ visualizations: before.visualizations }, changedEntityIds);
     case 'selection.set':
     case 'selection.extend':
     case 'selection.clear':

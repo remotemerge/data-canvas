@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
+import { nextReversibleEntry } from '@/application/history/undo-redo.ts';
+import type { ReversibleEntry } from '@/application/history/undo-redo.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
@@ -11,14 +14,41 @@ const acceptsText = (target: EventTarget | null): boolean => {
   );
 };
 
+/*
+ * Explains what the control will reverse, or why it cannot. A blocked control names the action that
+ * actually blocks it rather than assuming a dataset import, which was only ever one of the causes.
+ */
+const historyControlTitle = (
+  label: 'Undo' | 'Redo',
+  target: ReversibleEntry | undefined,
+  stack: readonly string[],
+  history: readonly ActionHistoryEntry[],
+): string => {
+  if (target !== undefined) {
+    return `${label} ${target.entry.summary}`;
+  }
+
+  if (stack.length === 0) {
+    return `Nothing to ${label.toLowerCase()}`;
+  }
+
+  const blocking = history.findLast((entry) => entry.actionId === stack.at(-1));
+
+  return blocking === undefined
+    ? `Nothing to ${label.toLowerCase()}`
+    : `Cannot ${label.toLowerCase()}: ${blocking.summary}`;
+};
+
 export const UndoRedoControls = ({ onError }: { onError: (error: DomainError) => void }) => {
   const actions = useActions();
   const history = useWorkspace((state) => state.history);
   const undoStack = useWorkspace((state) => state.undoStack);
   const redoStack = useWorkspace((state) => state.redoStack);
-  const undoEntry = history.findLast((entry) => entry.actionId === undoStack.at(-1));
-  const canUndo = undoEntry?.undoable === true;
-  const canRedo = redoStack.length > 0;
+  // Undo reaches past entries that cannot be reversed, so the button follows the same resolution.
+  const undoTarget = nextReversibleEntry(history, undoStack);
+  const redoTarget = nextReversibleEntry(history, redoStack);
+  const canUndo = undoTarget !== undefined;
+  const canRedo = redoTarget !== undefined;
   const run = async (kind: 'undo' | 'redo') => {
     const result = await actions[kind]();
     if (!result.ok) {
@@ -41,12 +71,17 @@ export const UndoRedoControls = ({ onError }: { onError: (error: DomainError) =>
       <button
         type="button"
         disabled={!canUndo}
-        title={undoEntry !== undefined && !canUndo ? 'Dataset imports cannot be undone.' : 'Undo'}
+        title={historyControlTitle('Undo', undoTarget, undoStack, history)}
         onClick={() => void run('undo')}
       >
         Undo
       </button>
-      <button type="button" disabled={!canRedo} onClick={() => void run('redo')}>
+      <button
+        type="button"
+        disabled={!canRedo}
+        title={historyControlTitle('Redo', redoTarget, redoStack, history)}
+        onClick={() => void run('redo')}
+      >
         Redo
       </button>
     </div>

@@ -193,12 +193,15 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
       ...(context.origin === undefined ? {} : { origin: context.origin }),
     };
 
+    // Entries undo or redo walked past because they cannot be reversed, dropped with the one it uses.
+    const consumed = 1 + Math.max(context.skippedHistoryEntries ?? 0, 0);
+
     // Commit workspace and history together so subscribers never observe only one update.
     deps.store.setState((state) => {
       // An undo pops the entry it reverses; every other origin, including redo, pushes the new action.
       const undoStack =
         context.origin === 'undo'
-          ? state.undoStack.slice(0, -1)
+          ? state.undoStack.slice(0, Math.max(state.undoStack.length - consumed, 0))
           : [...state.undoStack, actionId].slice(-HISTORY_STACK_LIMIT);
       /*
        * An undo makes the action redoable. A redo consumes the entry it replays. Any other origin is
@@ -208,7 +211,9 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
         if (context.origin === 'undo') {
           return [...state.redoStack, actionId].slice(-HISTORY_STACK_LIMIT);
         }
-        return context.origin === 'redo' ? state.redoStack.slice(0, -1) : [];
+        return context.origin === 'redo'
+          ? state.redoStack.slice(0, Math.max(state.redoStack.length - consumed, 0))
+          : [];
       };
       const redoStack = nextRedoStack();
 
