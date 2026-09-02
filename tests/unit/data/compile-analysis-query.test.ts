@@ -616,6 +616,101 @@ describe('time comparison queries', () => {
     expect(result.value.resultColumns.map((column) => column.key)).toEqual(['d0', 'm0', 'm1']);
   });
 
+  /*
+   * A derived measure compiles to an expression carrying its own placeholders. The spine embeds that
+   * expression in its `bucketed` CTE, so those parameters have to be bound between the trunc unit and
+   * the filters. Omitting them leaves more placeholders than parameters and the statement fails.
+   */
+  test('binds a derived measure’s literals inside the date spine', () => {
+    const margin: DerivedColumn = {
+      id: 'derived_margin',
+      datasetId: temporalDataset.id,
+      name: 'Margin',
+      expression: {
+        kind: 'arithmetic',
+        op: 'sub',
+        left: { kind: 'column', columnId: 'col_value' },
+        right: { kind: 'literal', value: 7 },
+      },
+      logicalType: 'number',
+      typeVerified: true,
+      createdBy: 'human',
+    };
+
+    const result = compileAnalysisQuery(
+      {
+        datasetId: temporalDataset.id,
+        dimensions: [],
+        measures: [
+          {
+            columnId: 'derived_margin',
+            aggregate: 'sum',
+            alias: 'margin',
+            modifier: { kind: 'timeComparison', dateColumnId: 'col_date', unit: 'month', offset: 1, as: 'difference' },
+          },
+        ],
+        filters: [{ kind: 'comparison', columnId: 'col_value', operator: 'gt', value: 3 }],
+      },
+      { datasets: [temporalDataset], derivedColumns: { derived_margin: margin } },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.sql).toContain('SUM(("c1" - ?))');
+    // Statement order: trunc unit, the derived literal, the filter value, then the lag offset.
+    expect(result.value.parameters).toEqual(['month', 7, 3, 1]);
+    // Every placeholder must have exactly one bound parameter.
+    expect(result.value.sql.split('?').length - 1).toBe(result.value.parameters.length);
+  });
+
+  /*
+   * The spine projects one measure over its own generated axis, so anything else in the query would
+   * be dropped from the result without the caller being told.
+   */
+  test('rejects a time comparison combined with other measures or dimensions', () => {
+    const comparison = {
+      columnId: 'col_value',
+      aggregate: 'sum' as const,
+      modifier: {
+        kind: 'timeComparison' as const,
+        dateColumnId: 'col_date',
+        unit: 'month' as const,
+        offset: 1,
+        as: 'absolute' as const,
+      },
+    };
+
+    const withSecondMeasure = compileAnalysisQuery(
+      {
+        datasetId: temporalDataset.id,
+        dimensions: [],
+        measures: [comparison, { columnId: 'col_value', aggregate: 'avg' }],
+        filters: [],
+      },
+      temporalDataset,
+    );
+
+    const withDimension = compileAnalysisQuery(
+      {
+        datasetId: temporalDataset.id,
+        dimensions: ['col_name'],
+        measures: [comparison],
+        filters: [],
+      },
+      temporalDataset,
+    );
+
+    for (const result of [withSecondMeasure, withDimension]) {
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+      }
+    }
+  });
+
   test('a rejected spine, such as an out-of-range offset, fails the whole query', () => {
     const result = compileAnalysisQuery(
       {

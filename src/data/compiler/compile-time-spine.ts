@@ -47,6 +47,8 @@ export interface TimeSpineRequest {
   modifier: Extract<MetricModifier, { kind: 'timeComparison' }>;
   // Compiled aggregate, such as `SUM("c2")`.
   aggregate: string;
+  // Placeholders embedded in `aggregate`, such as a derived expression's literals.
+  aggregateParameters?: readonly unknown[];
   // Base FROM/JOIN fragment.
   from: string;
   // WHERE fragment without the keyword.
@@ -118,10 +120,14 @@ export const compileTimeSpine = (request: TimeSpineRequest): Result<CompiledTime
     .filter((fragment) => fragment !== '')
     .join(' ');
 
-  // Bind parameters in statement order: trunc unit, filters, then the lag offset.
+  /*
+   * Bind parameters in statement order: the trunc unit, any placeholders inside the aggregate
+   * expression, the filters, then the lag offset. A derived-column measure compiles to an
+   * expression carrying its own literals, so those bind before the WHERE clause that follows it.
+   */
   return ok({
     sql,
-    parameters: [truncUnit, ...request.whereParameters, modifier.offset],
+    parameters: [truncUnit, ...(request.aggregateParameters ?? []), ...request.whereParameters, modifier.offset],
     resultKeys: ['d0', 'm0', 'm1'],
   });
 };

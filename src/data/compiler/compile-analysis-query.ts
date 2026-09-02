@@ -277,11 +277,13 @@ export const compileAnalysisQuery = (
   }
 
   const measureAliases = new Map<string, string>();
-  const aggregateByMeasure = new Map<(typeof query.measures)[number], string>();
+  const aggregateByMeasure = new Map<(typeof query.measures)[number], { sql: string; parameters: unknown[] }>();
   for (const [index, measure] of query.measures.entries()) {
     const derived = measure.columnId === undefined ? undefined : derivedColumns[measure.columnId];
     let reference: string | undefined;
     let column: Column | undefined;
+    // Placeholders embedded in this measure's aggregate; the time-spine branch rebinds them.
+    const aggregateParameters: unknown[] = [];
 
     if (derived !== undefined) {
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
@@ -289,6 +291,7 @@ export const compileAnalysisQuery = (
         return compiled;
       }
       reference = compiled.value.sql;
+      aggregateParameters.push(...compiled.value.parameters);
       dimensionParameters.push(...compiled.value.parameters);
       // Preserve the derived type so aggregate validation matches physical columns.
       column = {
@@ -312,7 +315,7 @@ export const compileAnalysisQuery = (
     if (!aggregate.ok) {
       return aggregate;
     }
-    aggregateByMeasure.set(measure, aggregate.value);
+    aggregateByMeasure.set(measure, { sql: aggregate.value, parameters: aggregateParameters });
 
     // Time comparisons replace the query with a date spine below, so retain the base aggregate here.
     const modified =
@@ -403,9 +406,36 @@ export const compileAnalysisQuery = (
   const comparison = query.measures.find((measure) => measure.modifier?.kind === 'timeComparison');
 
   if (comparison !== undefined) {
+    /*
+     * The date spine projects exactly one measure over its own generated period axis, so it cannot
+     * carry additional measures, grouping dimensions, or a distribution summary. Reject those
+     * combinations instead of returning a result that silently omits what the caller asked for.
+     */
+    if (
+      query.measures.length > 1 ||
+      query.dimensions.length > 0 ||
+      (query.binnedDimensions ?? []).length > 0 ||
+      query.distribution !== undefined
+    ) {
+      return err(
+        domainError(
+          'UNSUPPORTED_OPERATION',
+          'A time comparison produces its own period axis, so it cannot be combined with other measures, dimensions, or a distribution.',
+          {
+            measures: query.measures.length,
+            dimensions: query.dimensions.length,
+            binnedDimensions: (query.binnedDimensions ?? []).length,
+            distribution: query.distribution !== undefined,
+          },
+        ),
+      );
+    }
+
+    const compiledAggregate = aggregateByMeasure.get(comparison) as { sql: string; parameters: unknown[] };
     const spine = compileTimeSpine({
       modifier: comparison.modifier as Extract<NonNullable<typeof comparison.modifier>, { kind: 'timeComparison' }>,
-      aggregate: aggregateByMeasure.get(comparison) as string,
+      aggregate: compiledAggregate.sql,
+      aggregateParameters: compiledAggregate.parameters,
       from: from.value.sql,
       where: where.join(' AND '),
       whereParameters,
