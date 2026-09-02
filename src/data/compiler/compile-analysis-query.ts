@@ -587,13 +587,16 @@ const buildSource = (
 const compileTimeComparison = (
   query: AnalysisQuery,
   comparison: AnalysisQuery['measures'][number],
-  aggregateByMeasure: Map<AnalysisQuery['measures'][number], { sql: string; parameters: unknown[] }>,
-  from: { sql: string },
-  where: string[],
-  whereParameters: unknown[],
-  resolve: ColumnReferenceResolver,
+  source: {
+    aggregateByMeasure: Map<AnalysisQuery['measures'][number], { sql: string; parameters: unknown[] }>;
+    from: { sql: string };
+    where: string[];
+    whereParameters: unknown[];
+    resolve: ColumnReferenceResolver;
+  },
   plan: JoinPlan,
 ): Result<CompiledQuery, DomainError> => {
+  const { aggregateByMeasure, from, where, whereParameters, resolve } = source;
   const combinable = checkTimeComparisonCombination(query);
 
   if (!combinable.ok) {
@@ -708,11 +711,7 @@ export const compileAnalysisQuery = (
     return compileTimeComparison(
       query,
       comparison,
-      aggregateByMeasure,
-      from.value,
-      where,
-      whereParameters,
-      resolve,
+      { aggregateByMeasure, from: from.value, where, whereParameters, resolve },
       plan.value,
     );
   }
