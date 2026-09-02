@@ -4,8 +4,12 @@ import { validateImportFile } from '@/data/import/import-dataset.ts';
 import type { ImportProgress } from '@/application/ports/data-engine-port.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
+import { useWorkspace } from '@/state/use-workspace.ts';
+import { selectDatasets } from '@/state/selectors/workspace-selectors.ts';
 import { selectEngineStatus, useEngineStatus } from '@/state/use-engine-status.ts';
 import { measureAsync } from '@/shared/perf/performance-marks.ts';
+import { Button } from '@/ui/components/ui/button.tsx';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/components/ui/dialog.tsx';
 
 interface DatasetImportButtonProps {
   onError: (error: DomainError | null) => void;
@@ -19,7 +23,10 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
+  // A chosen file that matches an existing dataset, held until the duplicate prompt is answered.
+  const [pendingDuplicate, setPendingDuplicate] = useState<{ file: File; existingName: string } | null>(null);
   const engineStatus = useEngineStatus(selectEngineStatus);
+  const datasets = useWorkspace(selectDatasets);
   const { beginDatasetImport, importDataset, failDatasetImport } = useActions();
 
   const runImport = async (file: File): Promise<void> => {
@@ -65,6 +72,14 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
     await failDatasetImport({ datasetId, reason: imported.error.message });
   };
 
+  const startImport = (file: File): void => {
+    setBusy(true);
+    void runImport(file).finally(() => {
+      setBusy(false);
+      setProgress(null);
+    });
+  };
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
 
@@ -75,11 +90,25 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
       return;
     }
 
-    setBusy(true);
-    void runImport(file).finally(() => {
-      setBusy(false);
-      setProgress(null);
-    });
+    /*
+     * A matching file name and byte size almost always means the same file. Re-importing is a valid
+     * choice, so this asks instead of blocking; without it an accidental double click silently loads
+     * a second copy of the data into the engine.
+     */
+    const duplicate = Object.values(datasets).find(
+      (dataset) =>
+        dataset.importStatus === 'ready' &&
+        dataset.source.fileName === file.name &&
+        dataset.source.byteSize === file.size,
+    );
+
+    if (duplicate === undefined) {
+      startImport(file);
+
+      return;
+    }
+
+    setPendingDuplicate({ file, existingName: duplicate.name });
   };
 
   const disabled = busy || engineStatus !== 'ready';
@@ -115,6 +144,33 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
       ) : (
         <ImportProgressReadout progress={progress} />
       )}
+
+      <Dialog open={pendingDuplicate !== null} onOpenChange={(open) => !open && setPendingDuplicate(null)}>
+        <DialogContent>
+          <DialogTitle>Import this file again?</DialogTitle>
+          <DialogDescription>
+            {pendingDuplicate === null
+              ? ''
+              : `'${pendingDuplicate.file.name}' looks like the dataset already imported as '${pendingDuplicate.existingName}'. Importing it again keeps both copies and uses more memory.`}
+          </DialogDescription>
+          <div className="workspace__dialog-actions">
+            <Button variant="outline" size="sm" onClick={() => setPendingDuplicate(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (pendingDuplicate !== null) {
+                  startImport(pendingDuplicate.file);
+                }
+                setPendingDuplicate(null);
+              }}
+            >
+              Import anyway
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
