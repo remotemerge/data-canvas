@@ -66,6 +66,78 @@ const workspaceWithPredicateSelection = (): Workspace => {
   return selected.value.workspace;
 };
 
+/*
+ * A predicate that does not match its column used to commit successfully and only fail later, while
+ * compiling every visualization query that propagated the selection. It is rejected at action time.
+ */
+describe('selection predicate validation', () => {
+  test('rejects a predicate whose value does not match the column type', () => {
+    expect(
+      failureCode(
+        setSelection(workspaceWithDataset(), {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: { kind: 'comparison', columnId: 'col_revenue', operator: 'eq', value: 'not-a-number' },
+          origin: 'agent',
+        }),
+      ),
+    ).toBe('INCOMPATIBLE_COLUMN');
+  });
+
+  test('rejects a predicate naming a column the dataset lacks', () => {
+    expect(
+      failureCode(
+        setSelection(workspaceWithDataset(), {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: { kind: 'comparison', columnId: 'col_missing', operator: 'eq', value: 'West' },
+          origin: 'agent',
+        }),
+      ),
+    ).toBe('COLUMN_NOT_FOUND');
+  });
+
+  test('validates every operand of a composed predicate', () => {
+    expect(
+      failureCode(
+        setSelection(workspaceWithDataset(), {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: {
+            kind: 'or',
+            operands: [WEST, { kind: 'comparison', columnId: 'col_revenue', operator: 'eq', value: 'text' }],
+          },
+          origin: 'agent',
+        }),
+      ),
+    ).toBe('INCOMPATIBLE_COLUMN');
+  });
+
+  test('rejects an invalid predicate when extending an existing selection', () => {
+    expect(
+      failureCode(
+        extendSelection(workspaceWithPredicateSelection(), {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: { kind: 'comparison', columnId: 'col_revenue', operator: 'eq', value: 'text' },
+          origin: 'agent',
+        }),
+      ),
+    ).toBe('INCOMPATIBLE_COLUMN');
+  });
+
+  test('accepts a well-typed predicate', () => {
+    const result = setSelection(workspaceWithDataset(), {
+      datasetId: 'ds_sales',
+      mode: 'predicate',
+      predicate: { kind: 'comparison', columnId: 'col_revenue', operator: 'gt', value: 100 },
+      origin: 'agent',
+    });
+
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe('handleSetSelection', () => {
   test('reports DATASET_NOT_FOUND for an unknown dataset', () => {
     expect(

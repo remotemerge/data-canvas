@@ -16,6 +16,32 @@ describe('invertAction', () => {
     });
   });
 
+  /*
+   * Extending a selection replaces `workspace.selections` exactly as setting one does, so restoring
+   * the prior collection inverts it. Omitting the case would silently mark the action non-undoable.
+   */
+  test('inverts an extended selection by restoring the prior selections', () => {
+    const workspace = workspaceWithDataset();
+    const inverse = invertAction(
+      {
+        type: 'selection.extend',
+        payload: {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: { kind: 'comparison', columnId: 'col_region', operator: 'eq', value: 'West' },
+          origin: 'chart',
+        },
+      },
+      workspace,
+      ['sel_1'],
+    );
+
+    expect(inverse).toEqual({
+      type: 'history.restore',
+      payload: { state: { selections: workspace.selections }, changedEntityIds: ['sel_1'] },
+    });
+  });
+
   test('marks dataset ingestion actions non-invertible', () => {
     expect(
       invertAction(

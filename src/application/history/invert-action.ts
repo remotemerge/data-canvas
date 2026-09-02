@@ -26,6 +26,7 @@ export const invertAction = (
         changedEntityIds,
       );
     case 'selection.set':
+    case 'selection.extend':
     case 'selection.clear':
       return restore({ selections: before.selections }, changedEntityIds);
     case 'metric.create':
