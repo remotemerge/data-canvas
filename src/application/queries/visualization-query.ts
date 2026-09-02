@@ -154,6 +154,9 @@ const resolveBinRanges = async (
   });
 };
 
+const chartPointBudget = (kind: Visualization['kind']): number | undefined =>
+  kind === 'donut' ? MAX_DONUT_SLICES : undefined;
+
 export const executeVisualizationQuery = async (
   visualization: Visualization,
   workspace: Workspace,
@@ -177,7 +180,7 @@ export const executeVisualizationQuery = async (
     : await estimateResultRows(engine, resolved);
 
   // A donut turns unreadable at a far lower group count than an axis-based chart.
-  const pointBudget = visualization.kind === 'donut' ? MAX_DONUT_SLICES : undefined;
+  const pointBudget = chartPointBudget(visualization.kind);
 
   const plan =
     estimatedRows === undefined
