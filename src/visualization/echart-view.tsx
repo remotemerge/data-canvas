@@ -168,10 +168,14 @@ export const EChart = ({
   const ref = useECharts(option, onClick, onBrush);
   return (
     <>
-      <div
+      {/*
+        ECharts renders a canvas into this element, so it cannot be an `img`. `role="img"` would
+        also misdescribe it: the chart accepts clicks and brush selections, so it is announced as a
+        labelled interactive group rather than a static image.
+      */}
+      <figure
         ref={ref}
         className="chart-panel__chart"
-        role="img"
         aria-label={`${visualization.title}. Select a chart mark to add an annotation.`}
       />
       {annotations.length === 0 ? null : (

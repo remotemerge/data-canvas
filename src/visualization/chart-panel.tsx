@@ -144,6 +144,37 @@ export const ChartPanel = ({
     }
   };
 
+  // KPI and table views render their own presentation; every other kind goes through ECharts.
+  const renderBody = (): React.ReactNode => {
+    if (result === null || result.rows.length === 0) {
+      return null;
+    }
+
+    if (visualization.kind === 'kpi') {
+      return <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>;
+    }
+
+    if (visualization.kind === 'table') {
+      return <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />;
+    }
+
+    return (
+      <ChartErrorBoundary
+        key={`${visualization.id}:${workspace.revision}`}
+        onError={() => {
+          onError({
+            code: 'UNSUPPORTED_OPERATION',
+            message: 'A chart failed to render. Its workspace card remains available for recovery.',
+          });
+        }}
+      >
+        <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
+          <EChart visualization={visualization} result={result} onError={onError} />
+        </Suspense>
+      </ChartErrorBoundary>
+    );
+  };
+
   return (
     <article className="chart-panel">
       <header className="chart-panel__header">
@@ -192,25 +223,7 @@ export const ChartPanel = ({
           <p className="chart-panel__empty">No data matches current filters.</p>
         ) : null}
         {loading && result === null && error === null ? <QuerySkeleton label={visualization.title} /> : null}
-        {result === null || result.rows.length === 0 ? null : visualization.kind === 'kpi' ? (
-          <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>
-        ) : visualization.kind === 'table' ? (
-          <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />
-        ) : (
-          <ChartErrorBoundary
-            key={`${visualization.id}:${workspace.revision}`}
-            onError={() => {
-              onError({
-                code: 'UNSUPPORTED_OPERATION',
-                message: 'A chart failed to render. Its workspace card remains available for recovery.',
-              });
-            }}
-          >
-            <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
-              <EChart visualization={visualization} result={result} onError={onError} />
-            </Suspense>
-          </ChartErrorBoundary>
-        )}
+        {renderBody()}
       </div>
     </article>
   );

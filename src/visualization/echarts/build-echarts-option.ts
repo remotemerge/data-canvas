@@ -181,16 +181,30 @@ export const buildEChartsOption = (
     };
   }
 
-  const baseSeries =
-    visualization.kind === 'histogram'
-      ? buildHistogramSeries(measureNames[0], xName)
-      : visualization.kind === 'scatter'
-        ? buildScatterSeries(measureNames, xName)
-        : visualization.kind === 'bar'
-          ? buildBarSeries(measureNames, xName, visualization.presentation.stacked)
-          : visualization.kind === 'area'
-            ? buildAreaSeries(measureNames, xName, visualization.presentation.stacked)
-            : buildLineSeries(measureNames, xName, visualization.presentation.stacked);
+  const { stacked } = visualization.presentation;
+  // Each chart kind emits its own series shape, so the union is what the caller spreads over.
+  type BaseSeries =
+    | ReturnType<typeof buildHistogramSeries>
+    | ReturnType<typeof buildScatterSeries>
+    | ReturnType<typeof buildBarSeries>
+    | ReturnType<typeof buildAreaSeries>
+    | ReturnType<typeof buildLineSeries>;
+
+  const buildBaseSeries = (): BaseSeries => {
+    switch (visualization.kind) {
+      case 'histogram':
+        return buildHistogramSeries(measureNames[0], xName);
+      case 'scatter':
+        return buildScatterSeries(measureNames, xName);
+      case 'bar':
+        return buildBarSeries(measureNames, xName, stacked);
+      case 'area':
+        return buildAreaSeries(measureNames, xName, stacked);
+      default:
+        return buildLineSeries(measureNames, xName, stacked);
+    }
+  };
+  const baseSeries = buildBaseSeries();
   const marks = buildAnnotationMarks(annotations, visualization, result);
   const series = baseSeries.map((item, index) => ({ ...item, ...(index === 0 ? marks : {}), ...emphasis }));
   const axisName = temporalAxisName(result);

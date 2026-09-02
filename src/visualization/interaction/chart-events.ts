@@ -15,7 +15,10 @@ export const categorySelectionFromClick = (
   if (columnId === undefined) {
     return null;
   }
-  const row = Array.isArray(event.data) ? event.data : Array.isArray(event.value) ? event.value : null;
+  // ECharts reports the clicked mark's row on `data` for most series and on `value` for the rest.
+  const rowCandidates = [event.data, event.value];
+  const row = rowCandidates.find((candidate) => Array.isArray(candidate)) ?? null;
+
   if (row === null) {
     return null;
   }
