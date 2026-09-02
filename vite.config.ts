@@ -62,9 +62,7 @@ export default defineConfig(({ command }) => {
       },
       extensions: ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
     },
-    /*
-     * DuckDB-Wasm ships prebuilt worker and Wasm artifacts that must stay whole.
-     */
+    // DuckDB-Wasm's prebuilt worker and Wasm artifacts must stay whole.
     optimizeDeps: {
       exclude: ['@duckdb/duckdb-wasm'],
     },
