@@ -148,10 +148,24 @@ const expressionNode = {
 export const createDerivedColumnSchema = {
   type: 'object',
   properties: {
-    datasetId: { type: 'string', minLength: 1, maxLength: 100 },
+    datasetId: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 100,
+      description: 'Dataset gaining the new column. Obtain from get_workspace.',
+    },
     name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display label for the new column.' },
-    expression: { $ref: '#/$defs/expression' },
-    expectedRevision: { type: 'integer', minimum: 0 },
+    expression: {
+      $ref: '#/$defs/expression',
+      description:
+        'Expression tree computing the column, built from column references, literals, arithmetic, case branches, date parts, bins, and casts. Compiled by the application; expression text is never accepted.',
+    },
+    expectedRevision: {
+      type: 'integer',
+      minimum: 0,
+      description:
+        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
+    },
   },
   required: ['datasetId', 'name', 'expression'],
   additionalProperties: false,
