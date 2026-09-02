@@ -99,6 +99,39 @@ const workspaceWithCountMetric = (): { workspace: Workspace; metricId: string } 
   return { workspace: created.value.workspace, metricId: created.value.changedEntityIds[0]! };
 };
 
+describe('metric format defaults', () => {
+  // A proportional modifier defaults to percent so a ratio is not shown as a bare decimal.
+  test('a percent-of-total metric defaults to percent formatting', () => {
+    const { workspace, metricId } = workspaceWithMetric();
+
+    expect(workspace.metrics[metricId]?.format).toEqual({ style: 'percent' });
+  });
+
+  test('an explicit format overrides the proportional default', () => {
+    const created = createMetric(workspaceWithFilter(), {
+      datasetId: 'ds_sales',
+      name: 'Share',
+      aggregate: 'sum',
+      columnId: NUMERIC_COLUMN,
+      modifier: { kind: 'percentOfTotal' },
+      format: { style: 'currency', currency: 'USD' },
+    });
+
+    expect(created.ok).toBe(true);
+    expect(created.ok && created.value.workspace.metrics[created.value.changedEntityIds[0]!]?.format).toEqual({
+      style: 'currency',
+      currency: 'USD',
+    });
+  });
+
+  // A metric with no proportional modifier carries no format, leaving rendering to the default.
+  test('a plain metric receives no format', () => {
+    const { workspace, metricId } = workspaceWithCountMetric();
+
+    expect(workspace.metrics[metricId]?.format).toBeUndefined();
+  });
+});
+
 describe('handleCreateMetric', () => {
   test('rejects a name that is blank once trimmed', () => {
     expect(
