@@ -49,9 +49,6 @@ export interface VisualizationPresentation {
   showLegend: boolean;
   showGrid: boolean;
   stacked: boolean;
-  // Chart-relative sizing hints.
-  colSpan?: number;
-  rowSpan?: number;
 }
 
 export interface Visualization {
