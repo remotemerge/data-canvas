@@ -1,4 +1,5 @@
 import { validateBinStrategy } from '@/application/validation/validate-bin-strategy.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { isNumericType, isTemporalType, isTextType } from '@/domain/logical-type.ts';
 import type { VisualBinding, VisualizationKind } from '@/domain/visualization/visualization.ts';
@@ -317,36 +318,51 @@ const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>)
     return err(wrongType('heatmap', 'y', measure, 'a numeric measure'));
   }
 
-  for (const [channel, strategy] of [
-    ['binX', binding.binX],
-    ['binSeries', binding.binSeries],
+  for (const [channel, strategy, columnId] of [
+    ['binX', binding.binX, binding.x],
+    ['binSeries', binding.binSeries, binding.series],
   ] as const) {
-    if (strategy === undefined) {
-      continue;
-    }
-
-    const validated = validateBinStrategy(strategy);
+    const validated = validateHeatmapBin(channel, strategy, columnId, columns);
 
     if (!validated.ok) {
       return validated;
     }
+  }
 
-    const columnId = channel === 'binX' ? binding.x : binding.series;
-    const column = columnId === undefined ? undefined : columns.get(columnId);
+  return ok(undefined);
+};
 
-    if (column === undefined) {
-      continue;
-    }
+// Checks one heatmap bin channel against the column it buckets.
+const validateHeatmapBin = (
+  channel: 'binX' | 'binSeries',
+  strategy: BinStrategy | undefined,
+  columnId: EntityId | undefined,
+  columns: Map<EntityId, Column>,
+): Result<void, DomainError> => {
+  if (strategy === undefined) {
+    return ok(undefined);
+  }
 
-    const temporalStrategy = strategy.kind === 'temporal';
+  const validated = validateBinStrategy(strategy);
 
-    if (temporalStrategy && !isTemporalType(column.logicalType)) {
-      return err(wrongType('heatmap', channel, column, 'a temporal column for temporal binning'));
-    }
+  if (!validated.ok) {
+    return validated;
+  }
 
-    if (!temporalStrategy && !isNumericType(column.logicalType)) {
-      return err(wrongType('heatmap', channel, column, 'a numeric column for numeric binning'));
-    }
+  const column = columnId === undefined ? undefined : columns.get(columnId);
+
+  if (column === undefined) {
+    return ok(undefined);
+  }
+
+  const temporalStrategy = strategy.kind === 'temporal';
+
+  if (temporalStrategy && !isTemporalType(column.logicalType)) {
+    return err(wrongType('heatmap', channel, column, 'a temporal column for temporal binning'));
+  }
+
+  if (!temporalStrategy && !isNumericType(column.logicalType)) {
+    return err(wrongType('heatmap', channel, column, 'a numeric column for numeric binning'));
   }
 
   return ok(undefined);

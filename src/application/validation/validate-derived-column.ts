@@ -51,8 +51,27 @@ const validateStructure = (expression: DerivedExpression): Result<void, DomainEr
   return ok(undefined);
 };
 
-// Rejects expression enum values the compiler cannot emit.
+// Rejects expression enum values the compiler cannot emit, then checks the operands recursively.
 const validateNodes = (expression: DerivedExpression): Result<void, DomainError> => {
+  const node = validateNode(expression);
+
+  if (!node.ok) {
+    return node;
+  }
+
+  for (const child of childExpressions(expression)) {
+    const result = validateNodes(child);
+
+    if (!result.ok) {
+      return result;
+    }
+  }
+
+  return ok(undefined);
+};
+
+// Checks one node's own enum values, ignoring its operands.
+const validateNode = (expression: DerivedExpression): Result<void, DomainError> => {
   switch (expression.kind) {
     case 'arithmetic':
       if (!ARITHMETIC_OPERATORS.includes(expression.op)) {
@@ -108,14 +127,6 @@ const validateNodes = (expression: DerivedExpression): Result<void, DomainError>
     case 'column':
     case 'literal':
       break;
-  }
-
-  for (const child of childExpressions(expression)) {
-    const result = validateNodes(child);
-
-    if (!result.ok) {
-      return result;
-    }
   }
 
   return ok(undefined);

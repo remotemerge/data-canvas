@@ -92,6 +92,54 @@ export const wouldCreateCycle = (
   return false;
 };
 
+// Resolves each key pair to its columns, requiring both sides to join on the same type class.
+const resolveKeyPairs = (
+  pairs: RelationshipCandidate['on'],
+  leftDataset: Dataset,
+  rightDataset: Dataset,
+): Result<ValidatedRelationship['keys'], DomainError> => {
+  const keys: ValidatedRelationship['keys'] = [];
+
+  for (const pair of pairs) {
+    const left = leftDataset.columns.find((column) => column.id === pair.leftColumnId);
+    const right = rightDataset.columns.find((column) => column.id === pair.rightColumnId);
+
+    if (left === undefined) {
+      return err(
+        domainError(
+          'COLUMN_NOT_FOUND',
+          `No column with id '${pair.leftColumnId}' exists in dataset '${leftDataset.name}'.`,
+          {
+            datasetId: leftDataset.id,
+            columnId: pair.leftColumnId,
+          },
+        ),
+      );
+    }
+
+    if (right === undefined) {
+      return err(
+        domainError(
+          'COLUMN_NOT_FOUND',
+          `No column with id '${pair.rightColumnId}' exists in dataset '${rightDataset.name}'.`,
+          {
+            datasetId: rightDataset.id,
+            columnId: pair.rightColumnId,
+          },
+        ),
+      );
+    }
+
+    if (joinTypeClass(left.logicalType) !== joinTypeClass(right.logicalType)) {
+      return err(incompatible(left, right));
+    }
+
+    keys.push({ left, right });
+  }
+
+  return ok(keys);
+};
+
 // Validates relationship structure without reading dataset rows.
 export const validateRelationship = (
   workspace: Workspace,
@@ -140,45 +188,13 @@ export const validateRelationship = (
     );
   }
 
-  const keys: ValidatedRelationship['keys'] = [];
+  const resolvedKeys = resolveKeyPairs(candidate.on, leftDataset.value, rightDataset.value);
 
-  for (const pair of candidate.on) {
-    const left = leftDataset.value.columns.find((column) => column.id === pair.leftColumnId);
-    const right = rightDataset.value.columns.find((column) => column.id === pair.rightColumnId);
-
-    if (left === undefined) {
-      return err(
-        domainError(
-          'COLUMN_NOT_FOUND',
-          `No column with id '${pair.leftColumnId}' exists in dataset '${leftDataset.value.name}'.`,
-          {
-            datasetId: leftDataset.value.id,
-            columnId: pair.leftColumnId,
-          },
-        ),
-      );
-    }
-
-    if (right === undefined) {
-      return err(
-        domainError(
-          'COLUMN_NOT_FOUND',
-          `No column with id '${pair.rightColumnId}' exists in dataset '${rightDataset.value.name}'.`,
-          {
-            datasetId: rightDataset.value.id,
-            columnId: pair.rightColumnId,
-          },
-        ),
-      );
-    }
-
-    if (joinTypeClass(left.logicalType) !== joinTypeClass(right.logicalType)) {
-      return err(incompatible(left, right));
-    }
-
-    keys.push({ left, right });
+  if (!resolvedKeys.ok) {
+    return resolvedKeys;
   }
 
+  const keys = resolvedKeys.value;
   const relationships = Object.values(workspace.relationships);
 
   // A second relationship over the same pair would make join-path resolution ambiguous.

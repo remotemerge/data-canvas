@@ -87,6 +87,106 @@ const comparable = (left: LogicalType, right: LogicalType): boolean => {
 
 const castType = (target: 'number' | 'string' | 'date'): LogicalType => target;
 
+// Narrows the expression union to the arm each helper handles.
+type CaseExpression = Extract<DerivedExpression, { kind: 'case' }>;
+type BinExpression = Extract<DerivedExpression, { kind: 'bin' }>;
+
+/*
+ * Every arm compares two operands and contributes a result type. The comparison operands only need
+ * to be comparable with each other, while all non-unknown result types must agree, since the case
+ * expression yields a single column type.
+ */
+const inferCaseType = (expression: CaseExpression, resolve: ColumnTypeResolver): Result<LogicalType, DomainError> => {
+  if (expression.when.length === 0) {
+    return err(domainError('UNSUPPORTED_OPERATION', 'A case expression needs at least one when arm.'));
+  }
+
+  const branches: LogicalType[] = [];
+
+  for (const arm of expression.when) {
+    const left = inferExpressionType(arm.left, resolve);
+
+    if (!left.ok) {
+      return left;
+    }
+
+    const right = inferExpressionType(arm.right, resolve);
+
+    if (!right.ok) {
+      return right;
+    }
+
+    if (!comparable(left.value, right.value)) {
+      return err(
+        domainError(
+          'INCOMPATIBLE_COLUMN',
+          `A case arm compares ${left.value} with ${right.value}, which are not comparable.`,
+          { left: left.value, right: right.value },
+        ),
+      );
+    }
+
+    const armResult = inferExpressionType(arm.result, resolve);
+
+    if (!armResult.ok) {
+      return armResult;
+    }
+
+    branches.push(armResult.value);
+  }
+
+  const otherwise = inferExpressionType(expression.otherwise, resolve);
+
+  if (!otherwise.ok) {
+    return otherwise;
+  }
+
+  branches.push(otherwise.value);
+
+  const known = [...new Set(branches.filter((type) => type !== 'unknown'))];
+
+  if (known.length > 1) {
+    return err(
+      domainError('INCOMPATIBLE_COLUMN', `Case branches return conflicting types: ${known.join(', ')}.`, {
+        types: known,
+      }),
+    );
+  }
+
+  return ok(known[0] ?? 'unknown');
+};
+
+// Temporal strategies bin a date column and return timestamps; the rest bin numbers into buckets.
+const inferBinType = (expression: BinExpression, resolve: ColumnTypeResolver): Result<LogicalType, DomainError> => {
+  const type = resolve(expression.columnId);
+
+  if (type === undefined) {
+    return err(unknownColumn(expression.columnId));
+  }
+
+  const temporal = expression.strategy.kind === 'temporal';
+
+  if (temporal && !isTemporalType(type)) {
+    return err(
+      domainError('INCOMPATIBLE_COLUMN', `Temporal binning requires a date or timestamp column; got ${type}.`, {
+        columnId: expression.columnId,
+        logicalType: type,
+      }),
+    );
+  }
+
+  if (!temporal && !isNumericType(type)) {
+    return err(
+      domainError('INCOMPATIBLE_COLUMN', `Numeric binning requires a numeric column; got ${type}.`, {
+        columnId: expression.columnId,
+        logicalType: type,
+      }),
+    );
+  }
+
+  return ok(temporal ? type : 'number');
+};
+
 // Infers the logical type produced by a validated derived-expression tree.
 export const inferExpressionType = (
   expression: DerivedExpression,
@@ -118,66 +218,8 @@ export const inferExpressionType = (
       return arithmeticType(expression.op, left.value, right.value);
     }
 
-    case 'case': {
-      if (expression.when.length === 0) {
-        return err(domainError('UNSUPPORTED_OPERATION', 'A case expression needs at least one when arm.'));
-      }
-
-      const branches: LogicalType[] = [];
-
-      for (const arm of expression.when) {
-        const left = inferExpressionType(arm.left, resolve);
-
-        if (!left.ok) {
-          return left;
-        }
-
-        const right = inferExpressionType(arm.right, resolve);
-
-        if (!right.ok) {
-          return right;
-        }
-
-        if (!comparable(left.value, right.value)) {
-          return err(
-            domainError(
-              'INCOMPATIBLE_COLUMN',
-              `A case arm compares ${left.value} with ${right.value}, which are not comparable.`,
-              { left: left.value, right: right.value },
-            ),
-          );
-        }
-
-        const armResult = inferExpressionType(arm.result, resolve);
-
-        if (!armResult.ok) {
-          return armResult;
-        }
-
-        branches.push(armResult.value);
-      }
-
-      const otherwise = inferExpressionType(expression.otherwise, resolve);
-
-      if (!otherwise.ok) {
-        return otherwise;
-      }
-
-      branches.push(otherwise.value);
-
-      // All non-unknown branches must agree on the result type.
-      const known = [...new Set(branches.filter((type) => type !== 'unknown'))];
-
-      if (known.length > 1) {
-        return err(
-          domainError('INCOMPATIBLE_COLUMN', `Case branches return conflicting types: ${known.join(', ')}.`, {
-            types: known,
-          }),
-        );
-      }
-
-      return ok(known[0] ?? 'unknown');
-    }
+    case 'case':
+      return inferCaseType(expression, resolve);
 
     case 'datePart': {
       const type = resolve(expression.columnId);
@@ -199,36 +241,8 @@ export const inferExpressionType = (
       return ok('number');
     }
 
-    case 'bin': {
-      const type = resolve(expression.columnId);
-
-      if (type === undefined) {
-        return err(unknownColumn(expression.columnId));
-      }
-
-      const temporal = expression.strategy.kind === 'temporal';
-
-      if (temporal && !isTemporalType(type)) {
-        return err(
-          domainError('INCOMPATIBLE_COLUMN', `Temporal binning requires a date or timestamp column; got ${type}.`, {
-            columnId: expression.columnId,
-            logicalType: type,
-          }),
-        );
-      }
-
-      if (!temporal && !isNumericType(type)) {
-        return err(
-          domainError('INCOMPATIBLE_COLUMN', `Numeric binning requires a numeric column; got ${type}.`, {
-            columnId: expression.columnId,
-            logicalType: type,
-          }),
-        );
-      }
-
-      // Temporal bins return timestamps; numeric bins return bucket numbers.
-      return ok(temporal ? type : 'number');
-    }
+    case 'bin':
+      return inferBinType(expression, resolve);
 
     case 'cast': {
       // Resolve the operand before applying the target type so unknown references still fail.
