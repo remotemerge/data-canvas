@@ -34,6 +34,14 @@ export const deltaTone = (value: number, format?: MetricFormat): DeltaTone => {
   return improving ? 'positive' : 'negative';
 };
 
+/*
+ * True when a value overrides Object's `toString` with a callable one, so stringifying it yields more
+ * than `[object Object]`. A null-prototype object has no `toString` at all and is excluded here,
+ * because calling it would throw on data the user imported.
+ */
+const describesItself = (value: object): value is { toString: () => string } =>
+  typeof (value as { toString?: unknown }).toString === 'function' && value.toString !== Object.prototype.toString;
+
 export const formatValue = (value: unknown): string => {
   if (value === null || value === undefined) {
     return '—';
@@ -49,13 +57,11 @@ export const formatValue = (value: unknown): string => {
   }
 
   /*
-   * A value carrying its own `toString` describes itself. Plain objects inherit Object's, which
-   * renders as `[object Object]`, so those are shown as JSON; the catch covers cyclic values.
+   * A value carrying a `toString` other than Object's describes itself. Values that inherit Object's
+   * would render as `[object Object]`, so those are shown as JSON; the catch covers cyclic values.
    */
-  const text = String(value);
-
-  if (text !== '[object Object]') {
-    return text;
+  if (describesItself(value)) {
+    return value.toString();
   }
 
   try {

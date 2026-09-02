@@ -40,6 +40,49 @@ describe('formatValue', () => {
   test('a boolean renders as its literal text', () => {
     expect(formatValue(false)).toBe('false');
   });
+
+  test('a string and a bigint render as their literal text', () => {
+    expect(formatValue('north')).toBe('north');
+    expect(formatValue(9007199254740993n)).toBe('9007199254740993');
+  });
+
+  // A value with its own `toString` describes itself better than JSON would.
+  test('a value carrying its own toString renders through it', () => {
+    expect(formatValue({ toString: () => 'custom' })).toBe('custom');
+  });
+
+  /*
+   * Values inheriting Object's `toString` would render as `[object Object]`, so they are shown as
+   * JSON instead.
+   */
+  test('a plain object renders as JSON rather than [object Object]', () => {
+    expect(formatValue({ region: 'north' })).toBe('{"region":"north"}');
+  });
+
+  // An array carries Array's own `toString`, so it joins rather than going through JSON.
+  test('an array renders as its joined text', () => {
+    expect(formatValue([1, 2])).toBe('1,2');
+  });
+
+  // A null-prototype object has no `toString` at all; calling one would throw on imported data.
+  test('a null-prototype object falls through to JSON without throwing', () => {
+    const value = Object.assign(Object.create(null) as object, { region: 'north' });
+
+    expect(formatValue(value)).toBe('{"region":"north"}');
+  });
+
+  test('a cyclic value renders as an em dash instead of throwing', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic['self'] = cyclic;
+
+    expect(formatValue(cyclic)).toBe('—');
+  });
+
+  // Functions and symbols carry their own `toString`, so they describe themselves.
+  test('a function and a symbol render through their own toString', () => {
+    expect(formatValue(Symbol('tag'))).toBe('Symbol(tag)');
+    expect(formatValue(() => 'noop')).toContain('noop');
+  });
 });
 
 describe('deltaTone', () => {
