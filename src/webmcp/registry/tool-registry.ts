@@ -66,6 +66,22 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
   const controllers = new Map<string, AbortController>();
   let executingCount = 0;
 
+  // Publishes the registered descriptors so the UI can show the same contract the agent host sees.
+  const publishRegistered = (): void => {
+    const registered = tools.filter((tool) => controllers.has(tool.name));
+
+    setToolStatus({
+      registeredCount: controllers.size,
+      tools: registered.map((tool) => ({
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        annotations: { ...tool.annotations },
+        inputSchema: tool.schema,
+      })),
+    });
+  };
+
   const register = async (tool: DataCanvasTool): Promise<void> => {
     if (controllers.has(tool.name)) {
       return;
@@ -94,13 +110,13 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
       // Keep v1 tools same-origin; omit cross-origin exposure.
       { signal: controller.signal },
     );
-    setToolStatus({ registeredCount: controllers.size });
+    publishRegistered();
   };
 
   const unregister = (tool: DataCanvasTool): void => {
     controllers.get(tool.name)?.abort();
     controllers.delete(tool.name);
-    setToolStatus({ registeredCount: controllers.size });
+    publishRegistered();
   };
 
   await Promise.all(tools.filter((candidate) => requiredDatasetCount(candidate) === 0).map(register));
@@ -124,7 +140,7 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
         controller.abort();
       }
       controllers.clear();
-      setToolStatus({ available: false, registeredCount: 0, executingCount: 0 });
+      setToolStatus({ available: false, registeredCount: 0, executingCount: 0, tools: [] });
     },
   };
 };
