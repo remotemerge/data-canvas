@@ -23,7 +23,7 @@ DuckDB-Wasm performs ingestion and analytical queries in the browser. The applic
 
 ## Technology stack
 
-Package versions below are the exact direct dependency versions recorded in `bun.lock`. The Bun row shows the supported runtime range from `package.json`.
+The application is built with the following core technologies and minimum supported versions.
 
 | Technology        | Version | Purpose                                                                                                               |
 | ----------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -73,9 +73,9 @@ Raw previews and dataset-derived labels are marked as untrusted content. Read re
 React UI ───────┐
                 ├──> application action dispatcher ──> Zustand workspace state
 WebMCP tools ───┘                    │
-                                    └──> DuckDB-Wasm data engine
+                                     └──> DuckDB-Wasm data engine
                                                   │
-                           bounded table and chart results
+                                     bounded table and chart results
 ```
 
 The dispatcher is the sole workspace mutation entry point. It serializes actions, validates expected revisions, records history, and commits normalized metadata to Zustand. DuckDB owns imported rows and analytical execution. React, TanStack, ECharts, and WebMCP remain adapters around project-owned domain types.
@@ -85,7 +85,7 @@ The dispatcher is the sole workspace mutation entry point. It serializes actions
 Requirements:
 
 - Git
-- Bun 1.4 or later, below 2.0
+- Bun 1.4 or later
 - a modern browser with Web Workers and WebAssembly support
 
 Clone, install, and run the development server:
