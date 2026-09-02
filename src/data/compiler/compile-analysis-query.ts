@@ -580,6 +580,78 @@ const buildSource = (
   };
 };
 
+/*
+ * Compiles the date-spine form of a query. A time comparison replaces the ordinary SELECT entirely,
+ * because each period must be paired with its offset counterpart over a generated series of dates.
+ */
+const compileTimeComparison = (
+  query: AnalysisQuery,
+  comparison: AnalysisQuery['measures'][number],
+  aggregateByMeasure: Map<AnalysisQuery['measures'][number], { sql: string; parameters: unknown[] }>,
+  from: { sql: string },
+  where: string[],
+  whereParameters: unknown[],
+  resolve: ColumnReferenceResolver,
+  plan: JoinPlan,
+): Result<CompiledQuery, DomainError> => {
+  const combinable = checkTimeComparisonCombination(query);
+
+  if (!combinable.ok) {
+    return combinable;
+  }
+
+  const compiledAggregate = aggregateByMeasure.get(comparison) as { sql: string; parameters: unknown[] };
+  const spine = compileTimeSpine({
+    modifier: comparison.modifier as Extract<NonNullable<typeof comparison.modifier>, { kind: 'timeComparison' }>,
+    aggregate: compiledAggregate.sql,
+    aggregateParameters: compiledAggregate.parameters,
+    from: from.sql,
+    where: where.join(' AND '),
+    whereParameters,
+    resolve,
+    limit: boundedLimit(query.limit),
+  });
+
+  if (!spine.ok) {
+    return spine;
+  }
+
+  return ok({
+    sql: spine.value.sql,
+    parameters: spine.value.parameters,
+    resultColumns: [
+      { key: 'd0', name: 'period', logicalType: 'timestamp' },
+      { key: 'm0', name: comparison.alias ?? comparison.aggregate, logicalType: 'number' },
+      { key: 'm1', name: 'comparison', logicalType: 'number' },
+    ],
+    datasetIds: plan.datasetIds,
+    joined: plan.steps.length > 0,
+  });
+};
+
+// Assembles the clauses of an ordinary aggregate query, dropping the ones that do not apply.
+const assembleSql = (
+  query: AnalysisQuery,
+  select: string[],
+  groupBy: string[],
+  orderBy: string[],
+  source: { sql: string; where: string[] },
+): string => {
+  const grouped = groupBy.length > 0 && (query.measures.length > 0 || query.distribution !== undefined);
+  const offset = Math.max(Math.trunc(query.offset ?? 0), 0);
+
+  return [
+    `SELECT ${select.join(', ')} FROM ${source.sql}`,
+    source.where.length === 0 ? '' : `WHERE ${source.where.join(' AND ')}`,
+    grouped ? `GROUP BY ${groupBy.join(', ')}` : '',
+    orderBy.length === 0 ? '' : `ORDER BY ${orderBy.join(', ')}`,
+    `LIMIT ${boundedLimit(query.limit)}`,
+    offset === 0 ? '' : `OFFSET ${offset}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
+
 // Compiles an `AnalysisQuery` to parameterized SQL.
 export const compileAnalysisQuery = (
   query: AnalysisQuery,
@@ -633,39 +705,16 @@ export const compileAnalysisQuery = (
   const comparison = query.measures.find((measure) => measure.modifier?.kind === 'timeComparison');
 
   if (comparison !== undefined) {
-    const combinable = checkTimeComparisonCombination(query);
-
-    if (!combinable.ok) {
-      return combinable;
-    }
-
-    const compiledAggregate = aggregateByMeasure.get(comparison) as { sql: string; parameters: unknown[] };
-    const spine = compileTimeSpine({
-      modifier: comparison.modifier as Extract<NonNullable<typeof comparison.modifier>, { kind: 'timeComparison' }>,
-      aggregate: compiledAggregate.sql,
-      aggregateParameters: compiledAggregate.parameters,
-      from: from.value.sql,
-      where: where.join(' AND '),
+    return compileTimeComparison(
+      query,
+      comparison,
+      aggregateByMeasure,
+      from.value,
+      where,
       whereParameters,
       resolve,
-      limit: boundedLimit(query.limit),
-    });
-
-    if (!spine.ok) {
-      return spine;
-    }
-
-    return ok({
-      sql: spine.value.sql,
-      parameters: spine.value.parameters,
-      resultColumns: [
-        { key: 'd0', name: 'period', logicalType: 'timestamp' },
-        { key: 'm0', name: comparison.alias ?? comparison.aggregate, logicalType: 'number' },
-        { key: 'm1', name: 'comparison', logicalType: 'number' },
-      ],
-      datasetIds: plan.value.datasetIds,
-      joined: plan.value.steps.length > 0,
-    });
+      plan.value,
+    );
   }
 
   const orderByClauses = buildOrderBy(query.orderBy ?? [], resolve, measureAliases);
@@ -674,27 +723,10 @@ export const compileAnalysisQuery = (
     return orderByClauses;
   }
 
-  const orderBy = orderByClauses.value;
-
-  const limit = boundedLimit(query.limit);
-  const offset = Math.max(Math.trunc(query.offset ?? 0), 0);
   const source = buildSource(from.value.sql, where, whereParameters, projected.value);
 
-  const sql = [
-    `SELECT ${select.join(', ')} FROM ${source.sql}`,
-    source.where.length === 0 ? '' : `WHERE ${source.where.join(' AND ')}`,
-    groupBy.length > 0 && (query.measures.length > 0 || query.distribution !== undefined)
-      ? `GROUP BY ${groupBy.join(', ')}`
-      : '',
-    orderBy.length === 0 ? '' : `ORDER BY ${orderBy.join(', ')}`,
-    `LIMIT ${limit}`,
-    offset === 0 ? '' : `OFFSET ${offset}`,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
   return ok({
-    sql,
+    sql: assembleSql(query, select, groupBy, orderByClauses.value, source),
     parameters: source.parameters,
     resultColumns,
     datasetIds: plan.value.datasetIds,
