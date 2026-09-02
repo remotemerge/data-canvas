@@ -47,6 +47,7 @@ import {
 import { appendHistoryEntry } from '@/application/history/action-history.ts';
 import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
 import { invertAction } from '@/application/history/invert-action.ts';
+import { HISTORY_STACK_LIMIT } from '@/application/history/undo-redo.ts';
 import type { DataEnginePort } from '@/application/ports/data-engine-port.ts';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
@@ -193,15 +194,14 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     // Commit workspace and history together so subscribers never observe only one update.
     deps.store.setState((state) => {
+      // An undo pops the entry it reverses; every other origin, including redo, pushes the new action.
       const undoStack =
         context.origin === 'undo'
           ? state.undoStack.slice(0, -1)
-          : context.origin === 'redo'
-            ? [...state.undoStack, actionId].slice(-100)
-            : [...state.undoStack, actionId].slice(-100);
+          : [...state.undoStack, actionId].slice(-HISTORY_STACK_LIMIT);
       const redoStack =
         context.origin === 'undo'
-          ? [...state.redoStack, actionId].slice(-100)
+          ? [...state.redoStack, actionId].slice(-HISTORY_STACK_LIMIT)
           : context.origin === 'redo'
             ? state.redoStack.slice(0, -1)
             : [];
