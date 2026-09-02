@@ -1,5 +1,9 @@
-// Stable opaque IDs for domain entities.
-export type EntityId = string;
+/*
+ * Stable opaque IDs for domain entities. The alias carries domain meaning that a bare `string` loses,
+ * so it is kept rather than inlined. Branding it instead would change every `Record<EntityId, T>` key
+ * across the domain, which is a deliberate architectural decision and not a naming cleanup.
+ */
+export type EntityId = string; // NOSONAR
 
 // Entity prefixes used in IDs and agent-facing payloads.
 export const ID_PREFIX = {
