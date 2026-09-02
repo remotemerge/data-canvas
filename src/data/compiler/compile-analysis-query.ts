@@ -213,7 +213,8 @@ export const compileAnalysisQuery = (
   // Window-function bins computed per row in a subquery, then grouped by the outer query.
   const quantileBins: { sql: string; alias: string; parameters: unknown[] }[] = [];
 
-  for (const columnId of query.dimensions) {
+  // Projects a plain dimension, following a derived reference to its compiled expression.
+  const projectDimension = (columnId: EntityId): Result<void, DomainError> => {
     const derived = derivedColumns[columnId];
 
     if (derived !== undefined) {
@@ -225,7 +226,7 @@ export const compileAnalysisQuery = (
       groupBySelectPosition();
       dimensionParameters.push(...compiled.value.parameters);
       resultColumns.push({ key: derived.id, name: derived.name, logicalType: derived.logicalType });
-      continue;
+      return ok(undefined);
     }
 
     const resolved = resolve(columnId);
@@ -239,9 +240,18 @@ export const compileAnalysisQuery = (
       name: resolved.column.name,
       logicalType: resolved.column.logicalType,
     });
-  }
 
-  for (const bin of query.binnedDimensions ?? []) {
+    return ok(undefined);
+  };
+
+  /*
+   * Projects a binned dimension. A quantile bin compiles to `NTILE(...) OVER (...)`; SQL forbids a
+   * window function in GROUP BY and forbids mixing one with an aggregate over the same level, so the
+   * bucket is computed per row in a subquery and the outer query groups by the resulting column.
+   */
+  const projectBinnedDimension = (
+    bin: NonNullable<AnalysisQuery['binnedDimensions']>[number],
+  ): Result<void, DomainError> => {
     const resolved = resolve(bin.columnId);
     if (resolved === undefined) {
       return err(missingColumn(bin.columnId));
@@ -252,11 +262,6 @@ export const compileAnalysisQuery = (
       return compiled;
     }
 
-    /*
-     * A quantile bin compiles to `NTILE(...) OVER (...)`. SQL forbids a window function in GROUP BY
-     * and forbids mixing one with an aggregate over the same level, so the bucket is computed per row
-     * in a subquery and the outer query groups by the resulting column.
-     */
     if (bin.strategy.kind === 'quantile') {
       const alias = `bin${quantileBins.length}`;
 
@@ -274,44 +279,77 @@ export const compileAnalysisQuery = (
       name: resolved.column.name,
       logicalType: bin.strategy.kind === 'temporal' ? resolved.column.logicalType : 'number',
     });
+
+    return ok(undefined);
+  };
+
+  for (const columnId of query.dimensions) {
+    const projected = projectDimension(columnId);
+    if (!projected.ok) {
+      return projected;
+    }
+  }
+
+  for (const bin of query.binnedDimensions ?? []) {
+    const projected = projectBinnedDimension(bin);
+    if (!projected.ok) {
+      return projected;
+    }
   }
 
   const measureAliases = new Map<string, string>();
   const aggregateByMeasure = new Map<(typeof query.measures)[number], { sql: string; parameters: unknown[] }>();
-  for (const [index, measure] of query.measures.entries()) {
+
+  // Resolves the column a measure aggregates over, which may be physical, derived, or absent.
+  const measureTarget = (
+    measure: (typeof query.measures)[number],
+  ): Result<{ reference?: string; column?: Column; parameters: unknown[] }, DomainError> => {
     const derived = measure.columnId === undefined ? undefined : derivedColumns[measure.columnId];
-    let reference: string | undefined;
-    let column: Column | undefined;
-    // Placeholders embedded in this measure's aggregate; the time-spine branch rebinds them.
-    const aggregateParameters: unknown[] = [];
 
     if (derived !== undefined) {
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
       if (!compiled.ok) {
         return compiled;
       }
-      reference = compiled.value.sql;
-      aggregateParameters.push(...compiled.value.parameters);
-      dimensionParameters.push(...compiled.value.parameters);
-      // Preserve the derived type so aggregate validation matches physical columns.
-      column = {
-        id: derived.id,
-        name: derived.name,
-        physicalName: '',
-        databaseType: '',
-        logicalType: derived.logicalType,
-        nullable: true,
-      };
-    } else if (measure.columnId !== undefined) {
-      const resolved = resolve(measure.columnId);
-      if (resolved === undefined) {
-        return err(missingColumn(measure.columnId));
-      }
-      reference = resolved.sql;
-      column = resolved.column;
+
+      return ok({
+        reference: compiled.value.sql,
+        // Preserve the derived type so aggregate validation matches physical columns.
+        column: {
+          id: derived.id,
+          name: derived.name,
+          physicalName: '',
+          databaseType: '',
+          logicalType: derived.logicalType,
+          nullable: true,
+        },
+        parameters: compiled.value.parameters,
+      });
     }
 
-    const aggregate = compileAggregate(measure.aggregate, column, reference);
+    if (measure.columnId === undefined) {
+      return ok({ parameters: [] });
+    }
+
+    const resolved = resolve(measure.columnId);
+    if (resolved === undefined) {
+      return err(missingColumn(measure.columnId));
+    }
+
+    return ok({ reference: resolved.sql, column: resolved.column, parameters: [] });
+  };
+
+  const projectMeasure = (measure: (typeof query.measures)[number], index: number): Result<void, DomainError> => {
+    const target = measureTarget(measure);
+    if (!target.ok) {
+      return target;
+    }
+
+    // Placeholders embedded in this measure's aggregate; the time-spine branch rebinds them.
+    const aggregateParameters = target.value.parameters;
+    dimensionParameters.push(...aggregateParameters);
+
+    const aggregate = compileAggregate(measure.aggregate, target.value.column, target.value.reference);
     if (!aggregate.ok) {
       return aggregate;
     }
@@ -337,19 +375,28 @@ export const compileAnalysisQuery = (
       name: measure.alias ?? measure.aggregate,
       logicalType: 'number',
     });
+
+    return ok(undefined);
+  };
+
+  for (const [index, measure] of query.measures.entries()) {
+    const projected = projectMeasure(measure, index);
+    if (!projected.ok) {
+      return projected;
+    }
   }
 
   // Box plots return the five-number summary consumed by ECharts.
-  if (query.distribution !== undefined) {
-    const target = resolve(query.distribution.columnId);
+  const projectDistribution = (distribution: NonNullable<AnalysisQuery['distribution']>): Result<void, DomainError> => {
+    const target = resolve(distribution.columnId);
     if (target === undefined) {
-      return err(missingColumn(query.distribution.columnId));
+      return err(missingColumn(distribution.columnId));
     }
 
-    if (query.distribution.categoryColumnId !== undefined) {
-      const category = resolve(query.distribution.categoryColumnId);
+    if (distribution.categoryColumnId !== undefined) {
+      const category = resolve(distribution.categoryColumnId);
       if (category === undefined) {
-        return err(missingColumn(query.distribution.categoryColumnId));
+        return err(missingColumn(distribution.categoryColumnId));
       }
       select.unshift(category.sql);
       // The category shifts existing SELECT positions by one.
@@ -376,6 +423,15 @@ export const compileAnalysisQuery = (
     for (const [key, expression] of summary) {
       select.push(`${expression} AS ${quoteIdentifier(key)}`);
       resultColumns.push({ key, name: key, logicalType: 'number' });
+    }
+
+    return ok(undefined);
+  };
+
+  if (query.distribution !== undefined) {
+    const projected = projectDistribution(query.distribution);
+    if (!projected.ok) {
+      return projected;
     }
   }
 
@@ -487,13 +543,14 @@ export const compileAnalysisQuery = (
    * outer query reads the bucket by alias. Parameter order follows the emitted text: the subquery's
    * bin and filter placeholders bind before the outer SELECT's remaining dimension placeholders.
    */
+  const binProjection = quantileBins.map((bin) => `${bin.sql} AS ${quoteIdentifier(bin.alias)}`).join(', ');
+  const whereClause = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
+
   const source =
     quantileBins.length === 0
       ? { sql: from.value.sql, parameters: [...dimensionParameters, ...whereParameters], where }
       : {
-          sql: `(SELECT *, ${quantileBins
-            .map((bin) => `${bin.sql} AS ${quoteIdentifier(bin.alias)}`)
-            .join(', ')} FROM ${from.value.sql}${where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`})`,
+          sql: `(SELECT *, ${binProjection} FROM ${from.value.sql}${whereClause})`,
           parameters: [...quantileBins.flatMap((bin) => bin.parameters), ...whereParameters, ...dimensionParameters],
           // Filters are applied inside the subquery, so the outer query must not repeat them.
           where: [] as string[],
