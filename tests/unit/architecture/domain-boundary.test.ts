@@ -22,9 +22,14 @@ const SPECIFIER_PATTERN = /(?:from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g;
 const collectSpecifiers = (source: string): string[] =>
   [...source.matchAll(SPECIFIER_PATTERN)].map(([, specifier]) => specifier ?? '');
 
+// Glob scanning yields backslash separators on Windows, so paths are normalized
+// before any comparison against the forward-slash directory literals used below.
+const scanPaths = (glob: string): string[] =>
+  [...new Bun.Glob(glob).scanSync('.')].map((file) => file.replaceAll('\\', '/'));
+
 describe('domain boundary', () => {
   test('no file under src/domain imports an adapter dependency', async () => {
-    const files = [...new Bun.Glob('src/domain/**/*.ts').scanSync('.')];
+    const files = scanPaths('src/domain/**/*.ts');
 
     // A trivially empty glob would make this test vacuously pass.
     expect(files.length).toBeGreaterThan(0);
@@ -60,9 +65,7 @@ describe('domain boundary', () => {
   });
 
   test('ECharts imports stay inside the visualization adapter', async () => {
-    const files = [...new Bun.Glob('src/**/*.{ts,tsx}').scanSync('.')].filter(
-      (file) => !file.startsWith('src/visualization/'),
-    );
+    const files = scanPaths('src/**/*.{ts,tsx}').filter((file) => !file.startsWith('src/visualization/'));
     const sources = await Promise.all(files.map(async (file) => [file, await Bun.file(file).text()] as const));
     const violations = sources.flatMap(([file, source]) =>
       collectSpecifiers(source)
@@ -81,7 +84,7 @@ const imports = (source: string): string[] =>
 const sourceFiles = async (pattern: string): Promise<{ path: string; source: string }[]> => {
   const files: { path: string; source: string }[] = [];
   for await (const path of new Bun.Glob(pattern).scan('.')) {
-    files.push({ path, source: await Bun.file(path).text() });
+    files.push({ path: path.replaceAll('\\', '/'), source: await Bun.file(path).text() });
   }
   return files;
 };

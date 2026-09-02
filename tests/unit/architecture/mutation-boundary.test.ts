@@ -11,12 +11,14 @@ const MUTATION_ALLOWLIST = [
 
 const SET_STATE_PATTERN = /\bsetState\s*\(/;
 
+// Glob scanning yields backslash separators on Windows, so paths are normalized
+// before any comparison against the forward-slash allowlist entries.
 const scan = async (glob: string): Promise<[string, string][]> => {
   const files = [...new Bun.Glob(glob).scanSync('.')];
 
-  return Promise.all(files.map(async (file) => [file, await Bun.file(file).text()] as const)) as Promise<
-    [string, string][]
-  >;
+  return Promise.all(
+    files.map(async (file) => [file.replaceAll('\\', '/'), await Bun.file(file).text()] as const),
+  ) as Promise<[string, string][]>;
 };
 
 describe('store mutation boundary', () => {
