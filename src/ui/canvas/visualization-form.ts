@@ -1,3 +1,4 @@
+import { MAX_BIN_COUNT, MIN_BIN_COUNT } from '@/domain/analysis/bin-strategy.ts';
 import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { isTemporalType } from '@/domain/logical-type.ts';
@@ -68,53 +69,72 @@ export const buildBinding = ({ kind, x, y, binStrategy, temporalDimension }: Cha
   };
 };
 
-/*
- * Distribution kinds use dedicated query shapes. Sharing this keeps an edited chart identical to an
- * equivalent new one, and both identical to what the matching WebMCP tool produces.
- */
-export const buildQuery = (
-  datasetId: string,
-  { kind, x, y, aggregate, binStrategy, temporalDimension }: ChannelSelection,
-) => {
-  if (kind === 'histogram') {
-    return {
-      datasetId,
-      dimensions: [],
-      ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
-      measures: [{ aggregate: 'count' as const }],
-      filters: [],
-    };
-  }
+// An unselected channel is an empty string, which contributes nothing to the query.
+const chosen = (columnId: string): boolean => columnId !== '';
 
-  if (kind === 'boxplot') {
-    return {
-      datasetId,
-      dimensions: [],
-      measures: [],
-      ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
-      filters: [],
-    };
-  }
+const histogramQuery = (datasetId: string, { x, binStrategy }: ChannelSelection) => ({
+  datasetId,
+  dimensions: [],
+  ...(chosen(x) ? { binnedDimensions: [{ columnId: x, strategy: binStrategy }] } : {}),
+  measures: [{ aggregate: 'count' as const }],
+  filters: [],
+});
 
-  // A scatter plot draws one mark per row, so both channels stay dimensions.
-  if (kind === 'scatter') {
-    return {
-      datasetId,
-      dimensions: [...(x === '' ? [] : [x]), ...(y === '' ? [] : [y])],
-      measures: [],
-      filters: [],
-    };
-  }
+const boxplotQuery = (datasetId: string, { x, y }: ChannelSelection) => ({
+  datasetId,
+  dimensions: [],
+  measures: [],
+  ...(chosen(y) ? { distribution: { columnId: y, ...(chosen(x) ? { categoryColumnId: x } : {}) } } : {}),
+  filters: [],
+});
+
+// A scatter plot draws one mark per row, so both channels stay dimensions.
+const scatterQuery = (datasetId: string, { x, y }: ChannelSelection) => ({
+  datasetId,
+  dimensions: [...(chosen(x) ? [x] : []), ...(chosen(y) ? [y] : [])],
+  measures: [],
+  filters: [],
+});
+
+const groupedQuery = (datasetId: string, { x, y, aggregate, temporalDimension }: ChannelSelection) => {
+  const binned = chosen(x) && temporalDimension;
 
   return {
     datasetId,
     // Binned dimensions use the compiler's `binnedDimensions` shape.
-    dimensions: x === '' || temporalDimension ? [] : [x],
-    ...(x === '' || !temporalDimension ? {} : { binnedDimensions: [{ columnId: x, strategy: DIMENSION_BIN }] }),
-    measures: y === '' ? [] : [{ columnId: y, aggregate }],
+    dimensions: chosen(x) && !temporalDimension ? [x] : [],
+    ...(binned ? { binnedDimensions: [{ columnId: x, strategy: DIMENSION_BIN }] } : {}),
+    measures: chosen(y) ? [{ columnId: y, aggregate }] : [],
     filters: [],
   };
 };
+
+/*
+ * Distribution kinds use dedicated query shapes. Sharing this keeps an edited chart identical to an
+ * equivalent new one, and both identical to what the matching WebMCP tool produces.
+ */
+export const buildQuery = (datasetId: string, selection: ChannelSelection) => {
+  if (selection.kind === 'histogram') {
+    return histogramQuery(datasetId, selection);
+  }
+
+  if (selection.kind === 'boxplot') {
+    return boxplotQuery(datasetId, selection);
+  }
+
+  if (selection.kind === 'scatter') {
+    return scatterQuery(datasetId, selection);
+  }
+
+  return groupedQuery(datasetId, selection);
+};
+
+/*
+ * Clamps typed bucket counts to the bounds that cap result sizes. A number input still yields
+ * arbitrary text, and an unparseable or zero entry falls back to the minimum rather than NaN.
+ */
+export const clampBinCount = (value: string): number =>
+  Math.min(Math.max(Math.trunc(Number(value)) || MIN_BIN_COUNT, MIN_BIN_COUNT), MAX_BIN_COUNT);
 
 // Numeric and temporal columns can be binned; a histogram offers exactly these.
 export const binnableColumns = (columns: readonly ScopedColumn[]): ScopedColumn[] =>

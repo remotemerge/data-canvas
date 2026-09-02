@@ -2,7 +2,7 @@ import { MAX_BIN_COUNT, MIN_BIN_COUNT } from '@/domain/analysis/bin-strategy.ts'
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import type { VisualizationKind } from '@/domain/visualization/visualization.ts';
 import { FIELD_HINT } from '@/ui/canvas/field-hints.ts';
-import { AGGREGATES, groupByDataset, type ScopedColumn } from '@/ui/canvas/visualization-form.ts';
+import { AGGREGATES, clampBinCount, groupByDataset, type ScopedColumn } from '@/ui/canvas/visualization-form.ts';
 
 // Options for one picker, grouped by dataset so provenance stays visible for joined columns.
 const ColumnOptions = ({ columns }: { columns: readonly ScopedColumn[] }): React.JSX.Element => (
@@ -68,14 +68,7 @@ export const DimensionField = ({
               min={MIN_BIN_COUNT}
               max={MAX_BIN_COUNT}
               value={binCount}
-              onChange={(event) =>
-                onBinCountChange(
-                  Math.min(
-                    Math.max(Math.trunc(Number(event.target.value)) || MIN_BIN_COUNT, MIN_BIN_COUNT),
-                    MAX_BIN_COUNT,
-                  ),
-                )
-              }
+              onChange={(event) => onBinCountChange(clampBinCount(event.target.value))}
             />
           </label>
         )}
