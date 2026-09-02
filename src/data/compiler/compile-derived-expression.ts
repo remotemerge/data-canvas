@@ -125,6 +125,112 @@ const compileCaseExpression = (
   });
 };
 
+const compileColumnExpression = (
+  expression: Extract<DerivedExpression, { kind: 'column' }>,
+  context: DerivedCompilerContext,
+  depth: number,
+): Result<CompiledExpression, DomainError> => {
+  // Inline derived definitions because sibling SELECT aliases are not valid in GROUP BY.
+  const derived = context.derivedColumns[expression.columnId];
+
+  if (derived !== undefined) {
+    return compileDerivedExpression(derived.expression, context, depth + 1);
+  }
+
+  const resolved = context.resolve(expression.columnId);
+
+  return resolved === undefined ? err(missingColumn(expression.columnId)) : ok({ sql: resolved.sql, parameters: [] });
+};
+
+const compileArithmeticExpression = (
+  expression: Extract<DerivedExpression, { kind: 'arithmetic' }>,
+  context: DerivedCompilerContext,
+  depth: number,
+): Result<CompiledExpression, DomainError> => {
+  const left = compileDerivedExpression(expression.left, context, depth + 1);
+
+  if (!left.ok) {
+    return left;
+  }
+
+  const right = compileDerivedExpression(expression.right, context, depth + 1);
+
+  if (!right.ok) {
+    return right;
+  }
+
+  const operator = ARITHMETIC_SQL[expression.op];
+
+  if (operator === undefined) {
+    return err(
+      domainError('UNSUPPORTED_OPERATION', 'That arithmetic operator is not supported.', { op: expression.op }),
+    );
+  }
+
+  // Return NULL for zero denominators so the query continues.
+  const denominator = expression.op === 'div' ? `NULLIF(${right.value.sql}, 0)` : right.value.sql;
+
+  return ok({
+    sql: `(${left.value.sql} ${operator} ${denominator})`,
+    parameters: [...left.value.parameters, ...right.value.parameters],
+  });
+};
+
+const compileDatePartExpression = (
+  expression: Extract<DerivedExpression, { kind: 'datePart' }>,
+  context: DerivedCompilerContext,
+): Result<CompiledExpression, DomainError> => {
+  const resolved = context.resolve(expression.columnId);
+
+  if (resolved === undefined) {
+    return err(missingColumn(expression.columnId));
+  }
+
+  const part = DATE_PART_SQL[expression.part];
+
+  if (part === undefined) {
+    return err(domainError('UNSUPPORTED_OPERATION', 'That date part is not supported.', { part: expression.part }));
+  }
+
+  return ok({ sql: `date_part('${part}', ${resolved.sql})`, parameters: [] });
+};
+
+const compileBinExpression = (
+  expression: Extract<DerivedExpression, { kind: 'bin' }>,
+  context: DerivedCompilerContext,
+): Result<CompiledExpression, DomainError> => {
+  const resolved = context.resolve(expression.columnId);
+
+  if (resolved === undefined) {
+    return err(missingColumn(expression.columnId));
+  }
+
+  const bin = compileBinStrategy(expression.strategy, resolved.sql, context.rangeFor?.(expression.columnId));
+
+  return bin.ok ? ok({ sql: bin.value.sql, parameters: bin.value.parameters }) : bin;
+};
+
+const compileCastExpression = (
+  expression: Extract<DerivedExpression, { kind: 'cast' }>,
+  context: DerivedCompilerContext,
+  depth: number,
+): Result<CompiledExpression, DomainError> => {
+  const operand = compileDerivedExpression(expression.expr, context, depth + 1);
+
+  if (!operand.ok) {
+    return operand;
+  }
+
+  const target = CAST_SQL[expression.to];
+
+  if (target === undefined) {
+    return err(domainError('UNSUPPORTED_OPERATION', 'That cast target is not supported.', { to: expression.to }));
+  }
+
+  // Invalid casts become NULL so they do not abort the query.
+  return ok({ sql: `TRY_CAST(${operand.value.sql} AS ${target})`, parameters: operand.value.parameters });
+};
+
 // Compiles a derived-expression tree to a parameterized SQL fragment.
 export const compileDerivedExpression = (
   expression: DerivedExpression,
@@ -136,100 +242,25 @@ export const compileDerivedExpression = (
   }
 
   switch (expression.kind) {
-    case 'column': {
-      // Inline derived definitions because sibling SELECT aliases are not valid in GROUP BY.
-      const derived = context.derivedColumns[expression.columnId];
-
-      if (derived !== undefined) {
-        return compileDerivedExpression(derived.expression, context, depth + 1);
-      }
-
-      const resolved = context.resolve(expression.columnId);
-
-      return resolved === undefined
-        ? err(missingColumn(expression.columnId))
-        : ok({ sql: resolved.sql, parameters: [] });
-    }
+    case 'column':
+      return compileColumnExpression(expression, context, depth);
 
     case 'literal':
       return ok({ sql: '?', parameters: [expression.value] });
 
-    case 'arithmetic': {
-      const left = compileDerivedExpression(expression.left, context, depth + 1);
-
-      if (!left.ok) {
-        return left;
-      }
-
-      const right = compileDerivedExpression(expression.right, context, depth + 1);
-
-      if (!right.ok) {
-        return right;
-      }
-
-      const operator = ARITHMETIC_SQL[expression.op];
-
-      if (operator === undefined) {
-        return err(
-          domainError('UNSUPPORTED_OPERATION', 'That arithmetic operator is not supported.', { op: expression.op }),
-        );
-      }
-
-      // Return NULL for zero denominators so the query continues.
-      const denominator = expression.op === 'div' ? `NULLIF(${right.value.sql}, 0)` : right.value.sql;
-
-      return ok({
-        sql: `(${left.value.sql} ${operator} ${denominator})`,
-        parameters: [...left.value.parameters, ...right.value.parameters],
-      });
-    }
+    case 'arithmetic':
+      return compileArithmeticExpression(expression, context, depth);
 
     case 'case':
       return compileCaseExpression(expression, context, depth);
 
-    case 'datePart': {
-      const resolved = context.resolve(expression.columnId);
+    case 'datePart':
+      return compileDatePartExpression(expression, context);
 
-      if (resolved === undefined) {
-        return err(missingColumn(expression.columnId));
-      }
+    case 'bin':
+      return compileBinExpression(expression, context);
 
-      const part = DATE_PART_SQL[expression.part];
-
-      if (part === undefined) {
-        return err(domainError('UNSUPPORTED_OPERATION', 'That date part is not supported.', { part: expression.part }));
-      }
-
-      return ok({ sql: `date_part('${part}', ${resolved.sql})`, parameters: [] });
-    }
-
-    case 'bin': {
-      const resolved = context.resolve(expression.columnId);
-
-      if (resolved === undefined) {
-        return err(missingColumn(expression.columnId));
-      }
-
-      const bin = compileBinStrategy(expression.strategy, resolved.sql, context.rangeFor?.(expression.columnId));
-
-      return bin.ok ? ok({ sql: bin.value.sql, parameters: bin.value.parameters }) : bin;
-    }
-
-    case 'cast': {
-      const operand = compileDerivedExpression(expression.expr, context, depth + 1);
-
-      if (!operand.ok) {
-        return operand;
-      }
-
-      const target = CAST_SQL[expression.to];
-
-      if (target === undefined) {
-        return err(domainError('UNSUPPORTED_OPERATION', 'That cast target is not supported.', { to: expression.to }));
-      }
-
-      // Invalid casts become NULL so they do not abort the query.
-      return ok({ sql: `TRY_CAST(${operand.value.sql} AS ${target})`, parameters: operand.value.parameters });
-    }
+    case 'cast':
+      return compileCastExpression(expression, context, depth);
   }
 };

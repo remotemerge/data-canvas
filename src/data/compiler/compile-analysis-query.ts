@@ -140,26 +140,15 @@ const buildFromClause = (
   return ok({ sql: fragments.join(' '), resolve });
 };
 
-// Compiles an `AnalysisQuery` to parameterized SQL.
-export const compileAnalysisQuery = (
-  query: AnalysisQuery,
-  context: QueryDataset | QueryContext,
-): Result<CompiledQuery, DomainError> => {
-  const { datasets, relationships = [], derivedColumns = {}, joinOrder } = normalizeContext(context);
-  const anchor = datasets.find((candidate) => candidate.id === query.datasetId);
-
-  if (anchor === undefined) {
-    return err(domainError('DATASET_NOT_FOUND', 'The query does not target the resolved dataset.'));
-  }
-
-  // Join resolution follows derived references to the physical columns they read.
+// Collects every column the query names, following derived references to the physical columns they read.
+const referencedColumnIds = (query: AnalysisQuery, derivedColumns: Record<EntityId, DerivedColumn>): EntityId[] => {
   const throughDerived = (columnId: EntityId): EntityId[] => {
     const derived = derivedColumns[columnId];
 
     return derived === undefined ? [columnId] : expressionColumnIds(derived.expression).flatMap(throughDerived);
   };
 
-  const referencedColumnIds = [
+  return [
     ...query.dimensions,
     ...(query.binnedDimensions ?? []).map((bin) => bin.columnId),
     ...query.measures.flatMap((measure) => (measure.columnId === undefined ? [] : [measure.columnId])),
@@ -172,17 +161,126 @@ export const compileAnalysisQuery = (
     ...(query.orderBy ?? []).flatMap((sort) => (sort.columnId === undefined ? [] : [sort.columnId])),
     ...query.filters.flatMap(collectFilterColumnIds),
   ].flatMap(throughDerived);
+};
 
-  const requiredDatasetIds = datasetIdsForColumns(referencedColumnIds, datasets);
+// Restricts the planner hint to required datasets so it cannot add or remove a join.
+const orderDatasetIds = (requiredDatasetIds: EntityId[], joinOrder: readonly EntityId[] | undefined): EntityId[] =>
+  joinOrder === undefined
+    ? requiredDatasetIds
+    : [
+        ...joinOrder.filter((datasetId) => requiredDatasetIds.includes(datasetId)),
+        ...requiredDatasetIds.filter((datasetId) => !joinOrder.includes(datasetId)),
+      ];
 
-  // Restrict the hint to required datasets so it cannot add or remove a join.
-  const orderedDatasetIds =
-    joinOrder === undefined
-      ? requiredDatasetIds
-      : [
-          ...joinOrder.filter((datasetId) => requiredDatasetIds.includes(datasetId)),
-          ...requiredDatasetIds.filter((datasetId) => !joinOrder.includes(datasetId)),
-        ];
+// Projects the anchor's own columns, used when the query names no dimension, measure, or distribution.
+const projectAnchorColumns = (
+  anchor: QueryDataset,
+  unjoined: boolean,
+  select: string[],
+  resultColumns: ResultColumn[],
+): void => {
+  for (const column of anchor.columns) {
+    select.push(
+      unjoined
+        ? quoteIdentifier(column.physicalName)
+        : `${quoteIdentifier(joinAlias(0))}.${quoteIdentifier(column.physicalName)}`,
+    );
+    resultColumns.push({ key: column.id, name: column.name, logicalType: column.logicalType });
+  }
+};
+
+// Compiles each filter into a parenthesized predicate, keeping placeholders in emitted order.
+const buildWhereClause = (
+  filters: AnalysisQuery['filters'],
+  resolve: ColumnReferenceResolver,
+): Result<{ clauses: string[]; parameters: unknown[] }, DomainError> => {
+  const clauses: string[] = [];
+  const parameters: unknown[] = [];
+
+  for (const filter of filters) {
+    const compiled = compileFilterExpression(filter, resolve);
+    if (!compiled.ok) {
+      return compiled;
+    }
+    clauses.push(`(${compiled.value.sql})`);
+    parameters.push(...compiled.value.parameters);
+  }
+
+  return ok({ clauses, parameters });
+};
+
+/*
+ * The date spine projects exactly one measure over its own generated period axis, so it cannot carry
+ * additional measures, grouping dimensions, or a distribution summary. Those combinations are rejected
+ * instead of returning a result that silently omits what the caller asked for.
+ */
+const checkTimeComparisonCombination = (query: AnalysisQuery): Result<void, DomainError> => {
+  const binnedDimensions = (query.binnedDimensions ?? []).length;
+
+  if (
+    query.measures.length > 1 ||
+    query.dimensions.length > 0 ||
+    binnedDimensions > 0 ||
+    query.distribution !== undefined
+  ) {
+    return err(
+      domainError(
+        'UNSUPPORTED_OPERATION',
+        'A time comparison produces its own period axis, so it cannot be combined with other measures, dimensions, or a distribution.',
+        {
+          measures: query.measures.length,
+          dimensions: query.dimensions.length,
+          binnedDimensions,
+          distribution: query.distribution !== undefined,
+        },
+      ),
+    );
+  }
+
+  return ok(undefined);
+};
+
+// Builds the ORDER BY terms, which sort either by a resolved column or by a projected measure alias.
+const buildOrderBy = (
+  sorts: NonNullable<AnalysisQuery['orderBy']>,
+  resolve: ColumnReferenceResolver,
+  measureAliases: ReadonlyMap<string, string>,
+): Result<string[], DomainError> => {
+  const orderBy: string[] = [];
+
+  for (const sort of sorts) {
+    if (sort.columnId !== undefined) {
+      const resolved = resolve(sort.columnId);
+      if (resolved === undefined) {
+        return err(missingColumn(sort.columnId));
+      }
+      orderBy.push(`${resolved.sql} ${sort.direction.toUpperCase()}`);
+    } else if (sort.measureAlias !== undefined && measureAliases.has(sort.measureAlias)) {
+      orderBy.push(
+        `${quoteIdentifier(measureAliases.get(sort.measureAlias) as string)} ${sort.direction.toUpperCase()}`,
+      );
+    } else {
+      return err(domainError('COLUMN_NOT_FOUND', 'The query sort target does not exist.'));
+    }
+  }
+
+  return ok(orderBy);
+};
+
+// Compiles an `AnalysisQuery` to parameterized SQL.
+export const compileAnalysisQuery = (
+  query: AnalysisQuery,
+  context: QueryDataset | QueryContext,
+): Result<CompiledQuery, DomainError> => {
+  const { datasets, relationships = [], derivedColumns = {}, joinOrder } = normalizeContext(context);
+  const anchor = datasets.find((candidate) => candidate.id === query.datasetId);
+
+  if (anchor === undefined) {
+    return err(domainError('DATASET_NOT_FOUND', 'The query does not target the resolved dataset.'));
+  }
+
+  const requiredDatasetIds = datasetIdsForColumns(referencedColumnIds(query, derivedColumns), datasets);
+  const orderedDatasetIds = orderDatasetIds(requiredDatasetIds, joinOrder);
 
   const plan = resolveJoinPath(anchor.id, orderedDatasetIds, relationships, query.relationshipIds);
 
@@ -436,55 +534,25 @@ export const compileAnalysisQuery = (
   }
 
   if (select.length === 0) {
-    // A bare projection selects only the anchor's columns.
-    for (const column of anchor.columns) {
-      select.push(
-        plan.value.steps.length === 0
-          ? quoteIdentifier(column.physicalName)
-          : `${quoteIdentifier(joinAlias(0))}.${quoteIdentifier(column.physicalName)}`,
-      );
-      resultColumns.push({ key: column.id, name: column.name, logicalType: column.logicalType });
-    }
+    projectAnchorColumns(anchor, plan.value.steps.length === 0, select, resultColumns);
   }
 
-  const whereParameters: unknown[] = [];
-  const where: string[] = [];
-  for (const filter of query.filters) {
-    const compiled = compileFilterExpression(filter, resolve);
-    if (!compiled.ok) {
-      return compiled;
-    }
-    where.push(`(${compiled.value.sql})`);
-    whereParameters.push(...compiled.value.parameters);
+  const compiledWhere = buildWhereClause(query.filters, resolve);
+
+  if (!compiledWhere.ok) {
+    return compiledWhere;
   }
+
+  const { clauses: where, parameters: whereParameters } = compiledWhere.value;
 
   // Time comparisons replace the ordinary SELECT with a generated date-spine query.
   const comparison = query.measures.find((measure) => measure.modifier?.kind === 'timeComparison');
 
   if (comparison !== undefined) {
-    /*
-     * The date spine projects exactly one measure over its own generated period axis, so it cannot
-     * carry additional measures, grouping dimensions, or a distribution summary. Reject those
-     * combinations instead of returning a result that silently omits what the caller asked for.
-     */
-    if (
-      query.measures.length > 1 ||
-      query.dimensions.length > 0 ||
-      (query.binnedDimensions ?? []).length > 0 ||
-      query.distribution !== undefined
-    ) {
-      return err(
-        domainError(
-          'UNSUPPORTED_OPERATION',
-          'A time comparison produces its own period axis, so it cannot be combined with other measures, dimensions, or a distribution.',
-          {
-            measures: query.measures.length,
-            dimensions: query.dimensions.length,
-            binnedDimensions: (query.binnedDimensions ?? []).length,
-            distribution: query.distribution !== undefined,
-          },
-        ),
-      );
+    const combinable = checkTimeComparisonCombination(query);
+
+    if (!combinable.ok) {
+      return combinable;
     }
 
     const compiledAggregate = aggregateByMeasure.get(comparison) as { sql: string; parameters: unknown[] };
@@ -516,22 +584,13 @@ export const compileAnalysisQuery = (
     });
   }
 
-  const orderBy: string[] = [];
-  for (const sort of query.orderBy ?? []) {
-    if (sort.columnId !== undefined) {
-      const resolved = resolve(sort.columnId);
-      if (resolved === undefined) {
-        return err(missingColumn(sort.columnId));
-      }
-      orderBy.push(`${resolved.sql} ${sort.direction.toUpperCase()}`);
-    } else if (sort.measureAlias !== undefined && measureAliases.has(sort.measureAlias)) {
-      orderBy.push(
-        `${quoteIdentifier(measureAliases.get(sort.measureAlias) as string)} ${sort.direction.toUpperCase()}`,
-      );
-    } else {
-      return err(domainError('COLUMN_NOT_FOUND', 'The query sort target does not exist.'));
-    }
+  const orderByClauses = buildOrderBy(query.orderBy ?? [], resolve, measureAliases);
+
+  if (!orderByClauses.ok) {
+    return orderByClauses;
   }
+
+  const orderBy = orderByClauses.value;
 
   const requestedLimit = query.limit ?? DEFAULT_QUERY_LIMIT;
   const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), MAX_QUERY_LIMIT);
