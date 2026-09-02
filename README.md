@@ -1,6 +1,6 @@
 # Data Canvas
 
-> The shared visual workspace where people and AI agents explore data together.
+> The shared visual analytics workspace where people and AI agents work on the same data together.
 
 [![Bun Version](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/remotemerge/data-canvas/main/package.json&query=$.engines.bun&label=Bun&logo=bun&style=flat)](https://github.com/remotemerge/data-canvas)
 [![Tests](https://img.shields.io/github/actions/workflow/status/remotemerge/data-canvas/test.yml?style=flat&logo=counterstrike&label=test)](https://github.com/remotemerge/data-canvas/actions/workflows/test.yml)
