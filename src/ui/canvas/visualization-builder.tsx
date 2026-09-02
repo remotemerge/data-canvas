@@ -139,46 +139,52 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   });
   const effectiveTitle = title.trim() === '' ? suggestedTitle : title;
 
+  const buildHistogramQuery = () => ({
+    datasetId,
+    dimensions: [],
+    ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
+    measures: [{ aggregate: 'count' as const }],
+    filters: [],
+  });
+
+  const buildBoxplotQuery = () => ({
+    datasetId,
+    dimensions: [],
+    measures: [],
+    ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
+    filters: [],
+  });
+
+  // A scatter plot draws one mark per row, so both channels stay dimensions.
+  const buildScatterQuery = () => ({
+    datasetId,
+    dimensions: [...(x === '' ? [] : [x]), ...(y === '' ? [] : [y])],
+    measures: [],
+    filters: [],
+  });
+
+  const buildGroupedQuery = () => ({
+    datasetId,
+    // Binned dimensions use the compiler's `binnedDimensions` shape.
+    dimensions: x === '' || temporalDimension ? [] : [x],
+    ...(x === '' || !temporalDimension ? {} : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
+    measures: y === '' ? [] : [{ columnId: y, aggregate }],
+    filters: [],
+  });
+
   // Distribution kinds use dedicated query shapes.
   const buildQuery = () => {
     if (kind === 'histogram') {
-      return {
-        datasetId,
-        dimensions: [],
-        ...(x === '' ? {} : { binnedDimensions: [{ columnId: x, strategy: binStrategy }] }),
-        measures: [{ aggregate: 'count' as const }],
-        filters: [],
-      };
+      return buildHistogramQuery();
     }
-
     if (kind === 'boxplot') {
-      return {
-        datasetId,
-        dimensions: [],
-        measures: [],
-        ...(y === '' ? {} : { distribution: { columnId: y, ...(x === '' ? {} : { categoryColumnId: x }) } }),
-        filters: [],
-      };
+      return buildBoxplotQuery();
     }
-
-    // A scatter plot draws one mark per row, so both channels stay dimensions.
     if (kind === 'scatter') {
-      return {
-        datasetId,
-        dimensions: [...(x === '' ? [] : [x]), ...(y === '' ? [] : [y])],
-        measures: [],
-        filters: [],
-      };
+      return buildScatterQuery();
     }
 
-    return {
-      datasetId,
-      // Binned dimensions use the compiler's `binnedDimensions` shape.
-      dimensions: x === '' || temporalDimension ? [] : [x],
-      ...(x === '' || !temporalDimension ? {} : { binnedDimensions: [{ columnId: x, strategy: dimensionBin }] }),
-      measures: y === '' ? [] : [{ columnId: y, aggregate }],
-      filters: [],
-    };
+    return buildGroupedQuery();
   };
 
   /*
