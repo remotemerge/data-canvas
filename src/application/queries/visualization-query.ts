@@ -59,7 +59,9 @@ export const resolveVisualizationQuery = (visualization: Visualization, workspac
 const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery): Promise<number | undefined> => {
   const binned = (query.binnedDimensions ?? []).map((bin) => ({ bin, bound: maxBinCardinality(bin.strategy) }));
 
-  if (query.dimensions.length === 0 && binned.length === 0) return undefined;
+  if (query.dimensions.length === 0 && binned.length === 0) {
+    return undefined;
+  }
 
   // Columns whose group count must come from the engine.
   const measured = [
@@ -70,7 +72,9 @@ const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery):
   // Product of the statically bounded bins; a chart with only bounded bins needs no engine round trip.
   const staticBound = binned.reduce<number>((product, entry) => product * (entry.bound ?? 1), 1);
 
-  if (measured.length === 0) return staticBound;
+  if (measured.length === 0) {
+    return staticBound;
+  }
 
   const estimate = await engine.executeAnalysis({
     datasetId: query.datasetId,
@@ -81,11 +85,15 @@ const estimateResultRows = async (engine: DataEnginePort, query: AnalysisQuery):
     limit: 1,
   });
 
-  if (!estimate.ok) return undefined;
+  if (!estimate.ok) {
+    return undefined;
+  }
 
   const row = estimate.value.rows[0];
 
-  if (row === undefined) return undefined;
+  if (row === undefined) {
+    return undefined;
+  }
 
   // Multiplying distinct counts overestimates safely; it can trigger sampling, but never under-sample.
   return row.reduce<number>((product, value) => product * Math.max(Number(value) || 0, 1), staticBound);
@@ -99,7 +107,9 @@ const resolveBinRanges = async (
     (bin) => bin.range === undefined && (bin.strategy.kind === 'equalWidth' || bin.strategy.kind === 'equalWidthOf'),
   );
 
-  if (unresolved.length === 0) return ok(query);
+  if (unresolved.length === 0) {
+    return ok(query);
+  }
 
   const rangeResult = await engine.executeAnalysis({
     datasetId: query.datasetId,
@@ -113,14 +123,18 @@ const resolveBinRanges = async (
     limit: 1,
   });
 
-  if (!rangeResult.ok) return err(rangeResult.error);
+  if (!rangeResult.ok) {
+    return err(rangeResult.error);
+  }
 
   const row = rangeResult.value.rows[0] ?? [];
   return ok({
     ...query,
     binnedDimensions: (query.binnedDimensions ?? []).map((bin) => {
       const index = unresolved.indexOf(bin);
-      if (index < 0) return bin;
+      if (index < 0) {
+        return bin;
+      }
 
       const min = Number(row[index * 2]);
       const max = Number(row[index * 2 + 1]);
@@ -144,7 +158,9 @@ export const executeVisualizationQuery = async (
   plotWidth?: number,
 ): Promise<Result<ChartResult, DomainError>> => {
   const resolvedResult = await resolveBinRanges(engine, resolveVisualizationQuery(visualization, workspace));
-  if (!resolvedResult.ok) return resolvedResult;
+  if (!resolvedResult.ok) {
+    return resolvedResult;
+  }
   const resolved = resolvedResult.value;
 
   // Scope supersession to this visualization so one chart's filter does not cancel another's query.
@@ -169,7 +185,9 @@ export const executeVisualizationQuery = async (
     engine.executeAnalysis(plan.query, scheduling),
   );
 
-  if (!result.ok) return result;
+  if (!result.ok) {
+    return result;
+  }
 
   // Preserve the stale marker so callers keep the previous chart while empty rows are ignored.
   if (result.value.stale === true) {

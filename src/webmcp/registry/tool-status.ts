@@ -15,5 +15,7 @@ export const subscribeToolStatus = (listener: () => void): (() => void) => {
 
 export const setToolStatus = (partial: Partial<ToolStatusSnapshot>): void => {
   snapshot = { ...snapshot, ...partial };
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    listener();
+  }
 };

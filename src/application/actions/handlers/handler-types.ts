@@ -34,7 +34,9 @@ export type ActionHandler<TPayload> = (
 export const omitKeys = <T>(record: Record<EntityId, T>, keys: readonly EntityId[]): Record<EntityId, T> => {
   const next: Record<EntityId, T> = { ...record };
 
-  for (const key of keys) delete next[key];
+  for (const key of keys) {
+    delete next[key];
+  }
 
   return next;
 };

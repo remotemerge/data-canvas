@@ -306,6 +306,15 @@ describe('entity reference resolution', () => {
 });
 
 describe('data engine port', () => {
+  test('a rejected begin-import stops before the engine action', async () => {
+    const harness = createHarness();
+    const { datasetId, result } = await importThroughDispatcher(harness, new Blob(['a\n1']), ' ');
+
+    expect(datasetId).toBeUndefined();
+    expect(result.ok ? null : result.error.code).toBe('IMPORT_FAILED');
+    expect(harness.workspace().revision).toBe(0);
+  });
+
   test('dataset.import fails with ENGINE_UNAVAILABLE while no engine is installed', async () => {
     const harness = createHarness();
     const { datasetId, result } = await importThroughDispatcher(harness, new Blob(['a,b\n1,2']));
@@ -385,7 +394,9 @@ describe('data engine port', () => {
 
     expect(result.ok).toBe(false);
 
-    if (datasetId === undefined) throw new Error('expected a placeholder dataset');
+    if (datasetId === undefined) {
+      throw new Error('expected a placeholder dataset');
+    }
 
     await harness.dispatcher.execute(
       { type: 'dataset.failImport', payload: { datasetId, reason: 'The file could not be parsed.' } },
@@ -408,6 +419,32 @@ describe('data engine port', () => {
     );
 
     expect(result.ok ? null : result.error.code).toBe('IMPORT_FAILED');
+  });
+
+  /*
+   * A rejected engine promise is a defect rather than a domain outcome, so it propagates instead of
+   * being folded into a result the caller would read as an ordinary failure.
+   */
+  test('an engine that throws rejects the dispatch rather than returning a failed result', async () => {
+    const harness = createHarness(
+      workspaceWithDataset(),
+      stubDataEngine(() => Promise.reject(new Error('engine exploded'))),
+    );
+    const started = await harness.dispatcher.execute(
+      { type: 'dataset.beginImport', payload: { name: 'Failing import', sourceKind: 'csv', byteSize: 1 } },
+      { actor: 'human' },
+    );
+
+    expect(started.ok).toBe(true);
+    if (!started.ok) {
+      return;
+    }
+
+    const datasetId = started.value.changedEntityIds[0]!;
+
+    await expect(
+      harness.dispatcher.execute({ type: 'dataset.import', payload: { datasetId, file: {} } }, { actor: 'human' }),
+    ).rejects.toThrow('engine exploded');
   });
 
   test('an import failure message carries no file contents', async () => {
@@ -461,7 +498,9 @@ describe('abort handling', () => {
 
     const datasetId = started.ok ? started.value.changedEntityIds[0] : undefined;
 
-    if (datasetId === undefined) throw new Error('expected a placeholder dataset');
+    if (datasetId === undefined) {
+      throw new Error('expected a placeholder dataset');
+    }
 
     const result = await harness.dispatcher.execute(
       { type: 'dataset.import', payload: { file: new Blob(['a\n1']), datasetId } },
@@ -488,7 +527,9 @@ describe('action results', () => {
 
     expect(result.ok).toBe(true);
 
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
 
     expect(result.value.actionId.startsWith('act_')).toBe(true);
     expect(result.value.revision).toBe(1);
@@ -510,7 +551,9 @@ describe('action results', () => {
 
     expect(result.ok).toBe(true);
 
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
 
     expect(result.value.summary).not.toContain(`${secret}`);
     expect(harness.history()[0]?.summary).not.toContain(`${secret}`);
@@ -541,7 +584,9 @@ describe('derived visualization queries', () => {
 
     expect(result.ok).toBe(true);
 
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
 
     const created = Object.values(harness.workspace().visualizations)[0];
 
@@ -569,7 +614,9 @@ describe('derived visualization queries', () => {
 
     expect(result.ok).toBe(true);
 
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
 
     const created = Object.values(harness.workspace().visualizations)[0];
 

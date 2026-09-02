@@ -38,7 +38,9 @@ export const handleUpdateLayout: ActionHandler<UpdateLayoutInput> = (workspace, 
     for (const item of payload.items) {
       const visualization = resolveVisualization(workspace, item.visualizationId);
 
-      if (!visualization.ok) return visualization;
+      if (!visualization.ok) {
+        return visualization;
+      }
 
       if (item.width < 1 || item.height < 1 || item.x < 0 || item.y < 0 || item.x + item.width > columns) {
         return err(

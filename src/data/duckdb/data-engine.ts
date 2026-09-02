@@ -75,6 +75,128 @@ interface DescribedColumn {
   null: unknown;
 }
 
+/*
+ * Aggregates profiled for one column. Extrema apply to ordered types only, and the distribution
+ * measures to numeric columns, so the alias positions shift with the column's logical type.
+ */
+const statisticsMeasures = (columnId: EntityId, numeric: boolean, extrema: boolean): AnalysisQuery['measures'] => [
+  { aggregate: 'count', alias: 'rows' },
+  { columnId, aggregate: 'count', alias: 'nonNull' },
+  { columnId, aggregate: 'count_distinct', alias: 'distinct' },
+  ...(extrema
+    ? ([
+        { columnId, aggregate: 'min' as const, alias: 'lo' },
+        { columnId, aggregate: 'max' as const, alias: 'hi' },
+        ...(numeric
+          ? [
+              { columnId, aggregate: 'avg' as const, alias: 'mean' },
+              { columnId, aggregate: 'median' as const, alias: 'median' },
+              { columnId, aggregate: 'stddev' as const, alias: 'stddev' },
+            ]
+          : []),
+      ] satisfies AnalysisQuery['measures'])
+    : []),
+];
+
+/*
+ * Reads the extrema pair from a statistics row. Numeric extrema are already numbers; temporal ones
+ * arrive as epoch values and are converted to ISO strings for the data-engine port, with a
+ * non-temporal value surfaced verbatim only when it has a faithful string form.
+ */
+const statisticsExtrema = (
+  row: readonly unknown[] | undefined,
+  logicalType: Column['logicalType'],
+): { min: number | string; max: number | string } => {
+  if (logicalType === 'number') {
+    return { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) };
+  }
+
+  const bound = (value: unknown): string => {
+    const date = new Date(typeof value === 'number' ? value : Number(value));
+
+    if (Number.isNaN(date.getTime())) {
+      return metadataText(value, '');
+    }
+
+    return logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
+  };
+
+  return { min: bound(row?.[3]), max: bound(row?.[4]) };
+};
+
+/*
+ * Assembles the profile from a statistics row. Alias positions shift with the column's logical type,
+ * matching the measures `statisticsMeasures` requested for the same column.
+ */
+const readColumnStatistics = (row: readonly unknown[] | undefined, column: Column): ColumnStatistics => {
+  const rowCount = Number(row?.[0] ?? 0);
+  const nonNull = Number(row?.[1] ?? 0);
+  const distinctCount = Number(row?.[2] ?? 0);
+  const numeric = column.logicalType === 'number';
+  const extrema = numeric || column.logicalType === 'date' || column.logicalType === 'timestamp';
+
+  return {
+    rowCount,
+    nullCount: Math.max(rowCount - nonNull, 0),
+    distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
+    distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
+    ...(extrema ? statisticsExtrema(row, column.logicalType) : {}),
+    ...(numeric
+      ? {
+          mean: Number(row?.[5] ?? 0),
+          median: Number(row?.[6] ?? 0),
+          stddev: Number(row?.[7] ?? 0),
+        }
+      : {}),
+  };
+};
+
+/*
+ * Resolves the profiled column, which may be physical or derived. A derived column has no physical
+ * counterpart, so it is described from its definition and only when it belongs to the target dataset.
+ */
+const resolveStatisticsColumn = (
+  relation: RelationEntry,
+  request: ColumnStatisticsRequest,
+  derivedColumns: Record<EntityId, DerivedColumn>,
+): Column | undefined => {
+  const physical = relation.columns.find((candidate) => candidate.id === request.columnId);
+
+  if (physical !== undefined) {
+    return physical;
+  }
+
+  const derived = derivedColumns[request.columnId];
+
+  if (derived?.datasetId !== request.datasetId) {
+    return undefined;
+  }
+
+  return {
+    id: derived.id,
+    name: derived.name,
+    physicalName: '',
+    databaseType: '',
+    logicalType: derived.logicalType,
+    nullable: true,
+  };
+};
+
+/*
+ * DuckDB metadata columns are declared `unknown` because the driver returns untyped Arrow values.
+ * Only genuine scalars have a faithful string form, so anything else falls back rather than
+ * stringifying to `[object Object]`.
+ */
+const metadataText = (value: unknown, fallback: string): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return fallback;
+};
+
 export interface DataEngine extends DataEnginePort {
   initialize(): Promise<Result<void, DomainError>>;
   dispose(): Promise<void>;
@@ -147,7 +269,7 @@ const buildColumns = async (
   const columns: Column[] = [];
 
   for (const [ordinal, entry] of described.entries()) {
-    const databaseType = String(entry.column_type ?? 'UNKNOWN');
+    const databaseType = metadataText(entry.column_type, 'UNKNOWN');
     const physicalName = createColumnName(ordinal);
     const baseType = normalizeLogicalType(databaseType);
 
@@ -165,7 +287,7 @@ const buildColumns = async (
       databaseType,
       logicalType,
       // Treat unexpected nullability metadata as nullable, the safe direction.
-      nullable: String(entry.null ?? 'YES').toUpperCase() !== 'NO',
+      nullable: metadataText(entry.null, 'YES').toUpperCase() !== 'NO',
     });
   }
 
@@ -187,7 +309,9 @@ const MAX_TOP_VALUES = 20;
 const MAX_STATISTIC_STRING_LENGTH = 200;
 
 export const describeQueryFanOut = (anchorRows: number, joinedRows: number): string | undefined => {
-  if (anchorRows <= 0 || joinedRows <= anchorRows * FAN_OUT_QUERY_TOLERANCE) return undefined;
+  if (anchorRows <= 0 || joinedRows <= anchorRows * FAN_OUT_QUERY_TOLERANCE) {
+    return undefined;
+  }
 
   return `This join produced about ${(joinedRows / anchorRows).toFixed(2)} rows per source row, so aggregate totals may be inflated by duplicate key matches.`;
 };
@@ -203,11 +327,15 @@ const executeCompiled = async (
   compiled: CompiledQuery,
   signal?: AbortSignal,
 ): Promise<ArrowRowSource> => {
-  if (signal?.aborted) throw new QueryAbortedError();
+  if (signal?.aborted) {
+    throw new QueryAbortedError();
+  }
 
   const statement = await connection.prepare(compiled.sql);
   try {
-    if (signal?.aborted) throw new QueryAbortedError();
+    if (signal?.aborted) {
+      throw new QueryAbortedError();
+    }
 
     return (await statement.query(...compiled.parameters)) as unknown as ArrowRowSource;
   } finally {
@@ -243,8 +371,12 @@ const readFileBytes = async (file: File, onProgress?: (progress: ImportProgress)
     // eslint-disable-next-line no-await-in-loop -- stream reads are sequential.
     const { done, value } = await reader.read();
 
-    if (done) break;
-    if (value === undefined) continue;
+    if (done) {
+      break;
+    }
+    if (value === undefined) {
+      continue;
+    }
 
     chunks.push(value);
     bytesRead += value.byteLength;
@@ -337,7 +469,7 @@ export const createDataEngine = (): DataEngine => {
 
       const staged = await describeRelation(connection, stagingName);
 
-      return staged.map((entry) => String(entry.column_name ?? ''));
+      return staged.map((entry) => metadataText(entry.column_name, ''));
     } finally {
       // Release the registered buffer so worker memory does not retain a second file copy.
       await handle?.database.dropFile(virtualPath).catch(() => undefined);
@@ -351,11 +483,15 @@ export const createDataEngine = (): DataEngine => {
   ): Promise<Result<ImportedRelation, DomainError>> => {
     const connectionResult = requireConnection();
 
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     const validated = validateImportFile(file);
 
-    if (!validated.ok) return validated;
+    if (!validated.ok) {
+      return validated;
+    }
 
     const connection = connectionResult.value;
     const relationName = createRelationName(datasetId);
@@ -425,7 +561,9 @@ export const createDataEngine = (): DataEngine => {
       context,
     );
 
-    if (!joined.ok || !anchor.ok) return undefined;
+    if (!joined.ok || !anchor.ok) {
+      return undefined;
+    }
 
     try {
       const joinedRows = readScalarCount(await executeCompiled(connection, joined.value));
@@ -448,7 +586,9 @@ export const createDataEngine = (): DataEngine => {
     options?: AnalysisExecutionOptions,
   ): Promise<Result<AnalysisResult, DomainError>> => {
     const connectionResult = requireConnection();
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
     const relation = relations.get(query.datasetId);
     if (relation === undefined) {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
@@ -458,7 +598,9 @@ export const createDataEngine = (): DataEngine => {
       ...queryContext(),
       ...(planned.joinOrder === undefined ? {} : { joinOrder: planned.joinOrder }),
     });
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
 
     const run = async (signal?: AbortSignal): Promise<AnalysisResult> => {
       const table = await executeCompiled(connectionResult.value, compiled.value, signal);
@@ -479,7 +621,12 @@ export const createDataEngine = (): DataEngine => {
     if (options?.key === undefined) {
       try {
         return ok(await run(options?.signal));
-      } catch {
+      } catch (error) {
+        // The caller cancelled this query; report it like supersession so it is not shown as a failure.
+        if (error instanceof QueryAbortedError) {
+          return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+        }
+
         return err(engineFailure('QUERY_FAILED'));
       }
     }
@@ -491,10 +638,14 @@ export const createDataEngine = (): DataEngine => {
       })
       .catch(() => null);
 
-    if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
+    if (scheduled === null) {
+      return err(engineFailure('QUERY_FAILED'));
+    }
 
     // Superseded analysis is normal interaction; callers keep the previous result.
-    if (scheduled.stale) return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+    if (scheduled.stale) {
+      return ok({ rows: [], columns: compiled.value.resultColumns, stale: true });
+    }
 
     return ok(scheduled.value);
   };
@@ -502,7 +653,9 @@ export const createDataEngine = (): DataEngine => {
   // Measures duplicate join keys in a bounded sample.
   const measureKeyQuality = async (request: KeyQualityRequest): Promise<Result<KeyQualityResult, DomainError>> => {
     const connectionResult = requireConnection();
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     const relation = relations.get(request.datasetId);
     if (relation === undefined) {
@@ -525,7 +678,8 @@ export const createDataEngine = (): DataEngine => {
     const sampleRows = Math.min(Math.max(Math.trunc(request.sampleRows) || 0, 1), 100_000);
 
     try {
-      const sample = `(SELECT ${identifiers.join(', ')} FROM ${quoteIdentifier(relation.relationName)} WHERE ${identifiers.map((identifier) => `${identifier} IS NOT NULL`).join(' AND ')} LIMIT ${sampleRows})`;
+      const notNull = identifiers.map((identifier) => `${identifier} IS NOT NULL`).join(' AND ');
+      const sample = `(SELECT ${identifiers.join(', ')} FROM ${quoteIdentifier(relation.relationName)} WHERE ${notNull} LIMIT ${sampleRows})`;
       const counted = await connectionResult.value.query(
         `SELECT count(*) AS ${quoteIdentifier('sampled')}, count(DISTINCT (${identifiers.join(', ')})) AS ${quoteIdentifier('distinct_keys')} FROM ${sample}`,
       );
@@ -548,7 +702,9 @@ export const createDataEngine = (): DataEngine => {
     }
 
     const connectionResult = requireConnection();
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     await dropRelation(connectionResult.value, relation.relationName);
     statisticsCache.invalidateDataset(
@@ -564,7 +720,9 @@ export const createDataEngine = (): DataEngine => {
   const fetchTableWindow = async (request: TableWindowRequest): Promise<Result<TableWindow, DomainError>> => {
     const connectionResult = requireConnection();
 
-    if (!connectionResult.ok) return connectionResult;
+    if (!connectionResult.ok) {
+      return connectionResult;
+    }
 
     const relation = relations.get(request.datasetId);
 
@@ -574,7 +732,11 @@ export const createDataEngine = (): DataEngine => {
 
     const limit = Math.min(Math.max(Math.trunc(request.limit) || 0, 0), MAX_TABLE_WINDOW_ROWS);
     const offset = Math.max(Math.trunc(request.offset) || 0, 0);
-    const filters = enabledExpressions(request.filters);
+    // The selection predicate narrows the same rows as the filters, so it joins them in the WHERE clause.
+    const filters = [
+      ...enabledExpressions(request.filters),
+      ...(request.selectionPredicate === undefined ? [] : [request.selectionPredicate]),
+    ];
     // Derived columns are virtual, so add their metadata before compiling the full projection.
     const derivedColumns = Object.values(derivedColumnDefinitions).filter(
       (column) => column.datasetId === request.datasetId,
@@ -602,7 +764,9 @@ export const createDataEngine = (): DataEngine => {
       },
       queryContext(),
     );
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
     const countKey = {
       datasetId: request.datasetId,
       datasetRevision: relation.revision,
@@ -626,7 +790,9 @@ export const createDataEngine = (): DataEngine => {
               },
               queryDataset(request.datasetId, relation),
             );
-            if (!count.ok) throw new Error('Count compilation failed');
+            if (!count.ok) {
+              throw new Error('Count compilation failed');
+            }
             totalRowCount = readScalarCount(await executeCompiled(connectionResult.value, count.value));
             countCache.set(countKey, totalRowCount);
           }
@@ -646,7 +812,9 @@ export const createDataEngine = (): DataEngine => {
       )
       .catch(() => null);
 
-    if (scheduled === null) return err(engineFailure('QUERY_FAILED'));
+    if (scheduled === null) {
+      return err(engineFailure('QUERY_FAILED'));
+    }
 
     const columnIds = projectedColumns.map((column) => column.id);
 
@@ -673,7 +841,9 @@ export const createDataEngine = (): DataEngine => {
     if (relation !== undefined && request.filters.length === 0) {
       const cached = statisticsCache.columnStatistics(request.columnId, relation.revision);
 
-      if (cached?.min !== undefined && cached.max !== undefined) return ok({ min: cached.min, max: cached.max });
+      if (cached?.min !== undefined && cached.max !== undefined) {
+        return ok({ min: cached.min, max: cached.max });
+      }
     }
 
     const result = await executeAnalysis({
@@ -687,7 +857,9 @@ export const createDataEngine = (): DataEngine => {
       limit: 1,
     });
 
-    if (!result.ok) return result;
+    if (!result.ok) {
+      return result;
+    }
 
     const [row] = result.value.rows;
     const min = Number(row?.[0] ?? 0);
@@ -721,19 +893,7 @@ export const createDataEngine = (): DataEngine => {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
 
-    const derived = derivedColumnDefinitions[request.columnId];
-    const column =
-      relation.columns.find((candidate) => candidate.id === request.columnId) ??
-      (derived?.datasetId === request.datasetId
-        ? {
-            id: derived.id,
-            name: derived.name,
-            physicalName: '',
-            databaseType: '',
-            logicalType: derived.logicalType,
-            nullable: true,
-          }
-        : undefined);
+    const column = resolveStatisticsColumn(relation, request, derivedColumnDefinitions);
 
     if (column === undefined) {
       return err(domainError('COLUMN_NOT_FOUND', 'The statistics request references a column that does not exist.'));
@@ -743,24 +903,7 @@ export const createDataEngine = (): DataEngine => {
     const numeric = column.logicalType === 'number';
     const temporal = column.logicalType === 'date' || column.logicalType === 'timestamp';
     const extrema = numeric || temporal;
-    const measures: AnalysisQuery['measures'] = [
-      { aggregate: 'count', alias: 'rows' },
-      { columnId: column.id, aggregate: 'count', alias: 'nonNull' },
-      { columnId: column.id, aggregate: 'count_distinct', alias: 'distinct' },
-      ...(extrema
-        ? ([
-            { columnId: column.id, aggregate: 'min' as const, alias: 'lo' },
-            { columnId: column.id, aggregate: 'max' as const, alias: 'hi' },
-            ...(numeric
-              ? [
-                  { columnId: column.id, aggregate: 'avg' as const, alias: 'mean' },
-                  { columnId: column.id, aggregate: 'median' as const, alias: 'median' },
-                  { columnId: column.id, aggregate: 'stddev' as const, alias: 'stddev' },
-                ]
-              : []),
-          ] satisfies AnalysisQuery['measures'])
-        : []),
-    ];
+    const measures = statisticsMeasures(column.id, numeric, extrema);
 
     const summary = await executeAnalysis({
       datasetId: request.datasetId,
@@ -770,45 +913,26 @@ export const createDataEngine = (): DataEngine => {
       limit: 1,
     });
 
-    if (!summary.ok) return summary;
+    if (!summary.ok) {
+      return summary;
+    }
 
     const [row] = summary.value.rows;
-    const rowCount = Number(row?.[0] ?? 0);
-    const nonNull = Number(row?.[1] ?? 0);
-    const distinctCount = Number(row?.[2] ?? 0);
-    // Convert temporal extrema to ISO strings for the data-engine port.
-    const temporalBound = (value: unknown): string => {
-      const date = new Date(typeof value === 'number' ? value : Number(value));
-      if (Number.isNaN(date.getTime())) return String(value ?? '');
-      return column.logicalType === 'date' ? date.toISOString().slice(0, 10) : date.toISOString();
-    };
+    const statistics = readColumnStatistics(row, column);
 
-    // Cache exact statistics for this dataset revision.
+    // Cache exact statistics for this dataset revision, preserving a numeric extent cached elsewhere.
+    const cached = statisticsCache.columnStatistics(column.id, relation.revision);
+
     statisticsCache.setColumnStatistics(column.id, relation.revision, {
-      distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
-      distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
-      ...(numeric ? { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) } : {}),
+      distinctCount: statistics.distinctCount,
+      distinctCountCapped: statistics.distinctCountCapped,
+      ...(numeric
+        ? { min: Number(row?.[3] ?? 0), max: Number(row?.[4] ?? 0) }
+        : {
+            ...(cached?.min === undefined ? {} : { min: cached.min }),
+            ...(cached?.max === undefined ? {} : { max: cached.max }),
+          }),
     });
-
-    const statistics: ColumnStatistics = {
-      rowCount,
-      nullCount: Math.max(rowCount - nonNull, 0),
-      distinctCount: Math.min(distinctCount, DISTINCT_COUNT_CAP),
-      distinctCountCapped: distinctCount > DISTINCT_COUNT_CAP,
-      ...(extrema
-        ? {
-            min: numeric ? Number(row?.[3] ?? 0) : temporalBound(row?.[3]),
-            max: numeric ? Number(row?.[4] ?? 0) : temporalBound(row?.[4]),
-            ...(numeric
-              ? {
-                  mean: Number(row?.[5] ?? 0),
-                  median: Number(row?.[6] ?? 0),
-                  stddev: Number(row?.[7] ?? 0),
-                }
-              : {}),
-          }
-        : {}),
-    };
 
     if (!numeric) {
       const limit = Math.min(Math.max(Math.trunc(request.topValueLimit ?? 10), 1), MAX_TOP_VALUES);
@@ -842,7 +966,9 @@ export const createDataEngine = (): DataEngine => {
       orderBy: [{ measureAlias: 'count', direction: 'desc' }],
       limit: limit + 1,
     });
-    if (!result.ok) return result;
+    if (!result.ok) {
+      return result;
+    }
     return ok({
       values: result.value.rows.slice(0, limit).map((row) => ({ value: row[0] ?? null, count: Number(row[1] ?? 0) })),
       truncated: result.value.rows.length > limit,
@@ -850,7 +976,9 @@ export const createDataEngine = (): DataEngine => {
   };
 
   const initialize = (): Promise<Result<void, DomainError>> => {
-    if (handle !== null) return Promise.resolve(ok(undefined));
+    if (handle !== null) {
+      return Promise.resolve(ok(undefined));
+    }
 
     // Share initialization so the tab owns one worker and Wasm heap.
     initializing ??= openDuckDB()
@@ -884,7 +1012,9 @@ export const createDataEngine = (): DataEngine => {
     handle = null;
     initializing = null;
 
-    if (opened !== null) await closeDuckDB(opened);
+    if (opened !== null) {
+      await closeDuckDB(opened);
+    }
   };
 
   return {
@@ -900,7 +1030,9 @@ export const createDataEngine = (): DataEngine => {
     dispose,
     setRelationships: (relationships) => {
       relationshipGraph.clear();
-      for (const relationship of Object.values(relationships)) relationshipGraph.set(relationship.id, relationship);
+      for (const relationship of Object.values(relationships)) {
+        relationshipGraph.set(relationship.id, relationship);
+      }
     },
     setDerivedColumns: (columns) => {
       derivedColumnDefinitions = columns;

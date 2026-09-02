@@ -44,7 +44,9 @@ export const resolveDatasetColumn = (
 ): Result<{ dataset: Dataset; column: Column }, DomainError> => {
   const dataset = resolveDataset(workspace, datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const column = resolveColumn(dataset.value, columnId);
 

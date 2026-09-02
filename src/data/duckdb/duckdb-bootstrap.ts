@@ -35,9 +35,6 @@ const SECURITY_STATEMENTS: readonly string[] = [
   'SET allow_community_extensions = false',
 ];
 
-// JSON import avoids extensions because loading one would make a network request.
-const REQUIRED_EXTENSIONS: readonly string[] = [];
-
 // Opens the in-memory analytical database.
 export const openDuckDB = async (): Promise<DuckDBHandle> => {
   const bundle = await duckdb.selectBundle(BUNDLES);
@@ -63,9 +60,9 @@ export const openDuckDB = async (): Promise<DuckDBHandle> => {
 
   const connection = await database.connect();
 
-  // Apply settings sequentially so a failure stops configuration on this connection.
-  // Security settings precede any explicit extension operation.
-  for (const statement of [...SECURITY_STATEMENTS, ...REQUIRED_EXTENSIONS.map((name) => `LOAD ${name}`)]) {
+  // Apply settings sequentially so a failure stops configuration on this connection. No extension
+  // is loaded here: JSON import stays extension-free because loading one would make a network request.
+  for (const statement of SECURITY_STATEMENTS) {
     // eslint-disable-next-line no-await-in-loop -- connection settings are sequential.
     await connection.query(statement);
   }

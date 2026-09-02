@@ -1,6 +1,6 @@
 import { quoteIdentifier } from '@/data/duckdb/identifier-safety.ts';
 import type { Column } from '@/domain/dataset/dataset.ts';
-import { isNumericType, isTemporalType } from '@/domain/logical-type.ts';
+import { isNumericType } from '@/domain/logical-type.ts';
 import type { AggregateFunction } from '@/domain/metric/metric.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
@@ -16,12 +16,15 @@ export const compileAggregate = (
   column?: Column,
   reference?: string,
 ): Result<string, DomainError> => {
-  if (aggregate === 'count') return ok('COUNT(*)');
-  if (column === undefined) return err(domainError('COLUMN_NOT_FOUND', 'This aggregate requires a column.'));
+  if (aggregate === 'count') {
+    return ok('COUNT(*)');
+  }
+  if (column === undefined) {
+    return err(domainError('COLUMN_NOT_FOUND', 'This aggregate requires a column.'));
+  }
 
-  // Min and max also accept date and timestamp columns.
-  const temporalExtrema = (aggregate === 'min' || aggregate === 'max') && isTemporalType(column.logicalType);
-  if (NUMERIC_ONLY.has(aggregate) && !isNumericType(column.logicalType) && !temporalExtrema) {
+  // `min` and `max` are absent from NUMERIC_ONLY so they also accept date and timestamp columns.
+  if (NUMERIC_ONLY.has(aggregate) && !isNumericType(column.logicalType)) {
     return err(
       domainError('INCOMPATIBLE_COLUMN', `Aggregate '${aggregate}' requires a numeric column.`, {
         columnId: column.id,
@@ -31,8 +34,12 @@ export const compileAggregate = (
   }
 
   const identifier = reference ?? quoteIdentifier(column.physicalName);
-  if (aggregate === 'count_distinct') return ok(`COUNT(DISTINCT ${identifier})`);
+  if (aggregate === 'count_distinct') {
+    return ok(`COUNT(DISTINCT ${identifier})`);
+  }
   // Use the explicit sample-estimator name so the generated SQL states the intended definition.
-  if (aggregate === 'stddev') return ok(`stddev_samp(${identifier})`);
+  if (aggregate === 'stddev') {
+    return ok(`stddev_samp(${identifier})`);
+  }
   return ok(`${aggregate.toUpperCase()}(${identifier})`);
 };

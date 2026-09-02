@@ -23,21 +23,49 @@ const outOfRange = (field: string, value: number, min: number, max: number): Dom
 const notFinite = (field: string): DomainError =>
   domainError('UNSUPPORTED_OPERATION', `${field} must be a finite number.`, { field });
 
+// Validates a whole-number count against its inclusive bounds.
+const validateCount = (field: string, value: number, min: number, max: number): Result<void, DomainError> => {
+  if (!Number.isInteger(value)) {
+    return err(domainError('UNSUPPORTED_OPERATION', `${field} must be a whole number.`, { field }));
+  }
+
+  return value < min || value > max ? err(outOfRange(field, value, min, max)) : ok(undefined);
+};
+
+// Explicit breaks must be finite and strictly ascending so the compiled CASE bounds are unambiguous.
+const validateExplicitBreaks = (breaks: readonly number[]): Result<void, DomainError> => {
+  if (breaks.length < 1 || breaks.length > MAX_EXPLICIT_BREAKS) {
+    return err(outOfRange('breaks', breaks.length, 1, MAX_EXPLICIT_BREAKS));
+  }
+
+  if (breaks.some((value) => !Number.isFinite(value))) {
+    return err(notFinite('breaks'));
+  }
+
+  for (let index = 1; index < breaks.length; index += 1) {
+    if ((breaks[index] as number) <= (breaks[index - 1] as number)) {
+      return err(
+        domainError('UNSUPPORTED_OPERATION', 'Bin breaks must be strictly ascending.', {
+          field: 'breaks',
+          index,
+        }),
+      );
+    }
+  }
+
+  return ok(undefined);
+};
+
 // Validates bin-strategy bounds before compilation.
 export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainError> => {
   switch (strategy.kind) {
-    case 'equalWidth': {
-      if (!Number.isInteger(strategy.binCount)) {
-        return err(domainError('UNSUPPORTED_OPERATION', 'binCount must be a whole number.', { field: 'binCount' }));
-      }
-
-      return strategy.binCount < MIN_BIN_COUNT || strategy.binCount > MAX_BIN_COUNT
-        ? err(outOfRange('binCount', strategy.binCount, MIN_BIN_COUNT, MAX_BIN_COUNT))
-        : ok(undefined);
-    }
+    case 'equalWidth':
+      return validateCount('binCount', strategy.binCount, MIN_BIN_COUNT, MAX_BIN_COUNT);
 
     case 'equalWidthOf': {
-      if (!Number.isFinite(strategy.width)) return err(notFinite('width'));
+      if (!Number.isFinite(strategy.width)) {
+        return err(notFinite('width'));
+      }
 
       // The compiler checks the range-dependent bucket count; this check only validates the width.
       return strategy.width <= 0
@@ -45,39 +73,11 @@ export const validateBinStrategy = (strategy: BinStrategy): Result<void, DomainE
         : ok(undefined);
     }
 
-    case 'quantile': {
-      if (!Number.isInteger(strategy.quantiles)) {
-        return err(domainError('UNSUPPORTED_OPERATION', 'quantiles must be a whole number.', { field: 'quantiles' }));
-      }
+    case 'quantile':
+      return validateCount('quantiles', strategy.quantiles, MIN_QUANTILE_COUNT, MAX_QUANTILE_COUNT);
 
-      return strategy.quantiles < MIN_QUANTILE_COUNT || strategy.quantiles > MAX_QUANTILE_COUNT
-        ? err(outOfRange('quantiles', strategy.quantiles, MIN_QUANTILE_COUNT, MAX_QUANTILE_COUNT))
-        : ok(undefined);
-    }
-
-    case 'explicit': {
-      const { breaks } = strategy;
-
-      if (breaks.length < 1 || breaks.length > MAX_EXPLICIT_BREAKS) {
-        return err(outOfRange('breaks', breaks.length, 1, MAX_EXPLICIT_BREAKS));
-      }
-
-      if (breaks.some((value) => !Number.isFinite(value))) return err(notFinite('breaks'));
-
-      // Strict ordering makes the compiled CASE bounds unambiguous.
-      for (let index = 1; index < breaks.length; index += 1) {
-        if ((breaks[index] as number) <= (breaks[index - 1] as number)) {
-          return err(
-            domainError('UNSUPPORTED_OPERATION', 'Bin breaks must be strictly ascending.', {
-              field: 'breaks',
-              index,
-            }),
-          );
-        }
-      }
-
-      return ok(undefined);
-    }
+    case 'explicit':
+      return validateExplicitBreaks(strategy.breaks);
 
     case 'temporal':
       return TEMPORAL_UNITS.includes(strategy.unit)

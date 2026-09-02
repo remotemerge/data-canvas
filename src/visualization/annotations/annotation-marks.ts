@@ -19,14 +19,20 @@ export const buildAnnotationMarks = (
   const area: unknown[] = [];
   for (const annotation of annotations) {
     const resolved = resolveAnnotationAnchor(annotation, visualization, result);
-    if (resolved === null) continue;
+    if (resolved === null) {
+      continue;
+    }
     const label = {
       show: true,
       formatter: annotation.createdBy === 'agent' ? `agent · ${annotation.text}` : annotation.text,
     };
-    if (annotation.anchor.kind === 'point') point.push({ coord: resolved.coordinates, label });
-    else if (annotation.anchor.kind === 'data') line.push({ xAxis: resolved.coordinates[0], label });
-    else area.push([{ xAxis: resolved.coordinates[0], label }, { xAxis: resolved.coordinates[1] }]);
+    if (annotation.anchor.kind === 'point') {
+      point.push({ coord: resolved.coordinates, label });
+    } else if (annotation.anchor.kind === 'data') {
+      line.push({ xAxis: resolved.coordinates[0], label });
+    } else {
+      area.push([{ xAxis: resolved.coordinates[0], label }, { xAxis: resolved.coordinates[1] }]);
+    }
   }
   return {
     ...(point.length === 0 ? {} : { markPoint: { data: point } }),

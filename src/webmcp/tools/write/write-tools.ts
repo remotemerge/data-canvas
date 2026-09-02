@@ -26,7 +26,9 @@ const dispatch = async (
   extra: (changedIds: string[]) => Record<string, unknown> = () => ({}),
 ): Promise<string> => {
   const result = await deps.dispatcher.execute(action, { actor: 'agent', expectedRevision });
-  if (!result.ok) return failure(result.error);
+  if (!result.ok) {
+    return failure(result.error);
+  }
   return success({
     revision: result.value.revision,
     summary: result.value.summary,
@@ -62,6 +64,23 @@ const queryFrom = (
     };
   }
 
+  /*
+   * A scatter plot shows one mark per row, so both channels are dimensions. Aggregating y would
+   * collapse every row sharing an x value into a single point.
+   */
+  if (kind === 'scatter') {
+    return {
+      datasetId,
+      dimensions: [
+        ...(binding.x === undefined ? [] : [binding.x]),
+        ...(binding.y ?? []),
+        ...(binding.series === undefined ? [] : [binding.series]),
+      ],
+      measures: [],
+      filters: [],
+    };
+  }
+
   if (kind === 'boxplot') {
     const [measureId] = binding.y ?? [];
 
@@ -81,6 +100,11 @@ const queryFrom = (
     };
   }
 
+  return groupedQuery(datasetId, input, binding);
+};
+
+// Builds the grouped query shared by every kind that aggregates measures over dimensions.
+const groupedQuery = (datasetId: string, input: ReturnType<typeof asInput>, binding: VisualBinding): AnalysisQuery => {
   const binned = [
     ...(binding.x === undefined || binding.binX === undefined ? [] : [{ columnId: binding.x, strategy: binding.binX }]),
     ...(binding.series === undefined || binding.binSeries === undefined

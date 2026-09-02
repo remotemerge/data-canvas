@@ -22,7 +22,9 @@ export const getColumnProfile = async (
 ): Promise<Result<ColumnProfile, DomainError>> => {
   const resolved = resolveDatasetColumn(workspace, datasetId, columnId);
 
-  if (!resolved.ok) return resolved;
+  if (!resolved.ok) {
+    return resolved;
+  }
 
   const filters = Object.values(workspace.filters).filter((filter) => filter.datasetId === datasetId && filter.enabled);
 
@@ -33,7 +35,9 @@ export const getColumnProfile = async (
     ...(topValueLimit === undefined ? {} : { topValueLimit }),
   });
 
-  if (!statistics.ok) return statistics;
+  if (!statistics.ok) {
+    return statistics;
+  }
 
   return ok({
     ...statistics.value,

@@ -26,15 +26,29 @@ const FILTER_OPERATOR_LABEL: Readonly<Record<FilterOperator, string>> = {
 };
 
 const parseValue = (raw: string, operator: FilterOperator, logicalType: string): unknown => {
-  if (NULLARY_FILTER_OPERATORS.includes(operator)) return undefined;
+  if (NULLARY_FILTER_OPERATORS.includes(operator)) {
+    return undefined;
+  }
   const entries =
     operator === 'between' || operator === 'in' || operator === 'not_in'
       ? raw.split(',').map((part) => part.trim())
       : [raw];
-  const converted = entries.map((entry) =>
-    logicalType === 'number' ? Number(entry) : logicalType === 'boolean' ? entry === 'true' : entry,
-  );
+  const convert = (entry: string): unknown => {
+    if (logicalType === 'number') {
+      return Number(entry);
+    }
+    return logicalType === 'boolean' ? entry === 'true' : entry;
+  };
+  const converted = entries.map(convert);
   return operator === 'between' || operator === 'in' || operator === 'not_in' ? converted : converted[0];
+};
+
+// Maps a column's logical type to the matching native input control.
+const inputType = (logicalType: string | undefined): 'number' | 'date' | 'text' => {
+  if (logicalType === 'number') {
+    return 'number';
+  }
+  return logicalType === 'date' ? 'date' : 'text';
 };
 
 export const FilterEditor = ({
@@ -82,10 +96,17 @@ export const FilterEditor = ({
       className="filter-editor"
       onSubmit={(event) => {
         event.preventDefault();
-        if (column === undefined) return;
+        if (column === undefined) {
+          return;
+        }
         const form = new FormData(event.currentTarget);
-        const operator = String(form.get('operator')) as FilterOperator;
-        const value = parseValue(String(form.get('value') ?? ''), operator, column.logicalType);
+        // Both fields are text controls, so `FormData` yields strings rather than files.
+        const readField = (name: string): string => {
+          const entry = form.get(name);
+          return typeof entry === 'string' ? entry : '';
+        };
+        const operator = readField('operator') as FilterOperator;
+        const value = parseValue(readField('value'), operator, column.logicalType);
         void applyFilter({
           datasetId: dataset.id,
           columnId: column.id,
@@ -95,7 +116,7 @@ export const FilterEditor = ({
       }}
     >
       <label>
-        Column
+        Column{' '}
         <select name="column" value={column?.id ?? ''} onChange={(event) => setColumnId(event.target.value)}>
           {dataset.columns.map((item) => (
             <option key={item.id} value={item.id}>
@@ -105,7 +126,7 @@ export const FilterEditor = ({
         </select>
       </label>
       <label>
-        Operator
+        Operator{' '}
         <select name="operator">
           {operators.map((operator) => (
             <option key={operator} value={operator}>
@@ -115,11 +136,11 @@ export const FilterEditor = ({
         </select>
       </label>
       <label>
-        Value
+        Value{' '}
         <input
           name="value"
           list={suggestions.length > 0 ? 'filter-value-suggestions' : undefined}
-          type={column?.logicalType === 'number' ? 'number' : column?.logicalType === 'date' ? 'date' : 'text'}
+          type={inputType(column?.logicalType)}
           aria-describedby="filter-value-help"
         />
       </label>

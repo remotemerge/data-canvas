@@ -24,7 +24,9 @@ import { err, ok } from '@/shared/result/result.ts';
 export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = async (workspace, payload, deps) => {
   const validated = validateRelationship(workspace, payload);
 
-  if (!validated.ok) return validated;
+  if (!validated.ok) {
+    return validated;
+  }
 
   const { leftDataset, rightDataset, keys } = validated.value;
 
@@ -56,13 +58,16 @@ export const handleCreateRelationship: ActionHandler<CreateRelationshipInput> = 
     createdBy: deps.actor,
   };
 
+  const columnLabel = keys.length === 1 ? 'key column' : 'key columns';
+  const warningSuffix = warning === undefined ? '' : ` ${warning}`;
+
   return ok({
     workspace: {
       ...workspace,
       relationships: { ...workspace.relationships, [relationship.id]: relationship },
     },
     changedEntityIds: [relationship.id],
-    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} key column${keys.length === 1 ? '' : 's'} using ${JOIN_KIND_PHRASE[relationship.join]}.${warning === undefined ? '' : ` ${warning}`}`,
+    summary: `Related '${leftDataset.name}' to '${rightDataset.name}' on ${keys.length} ${columnLabel} using ${JOIN_KIND_PHRASE[relationship.join]}.${warningSuffix}`,
   });
 };
 
@@ -96,6 +101,7 @@ interface DatasetDependents {
   selectionIds: EntityId[];
   relationshipIds: EntityId[];
   annotationIds: EntityId[];
+  derivedColumnIds: EntityId[];
 }
 
 // Collects direct and transitive dependents of a dataset.
@@ -121,6 +127,10 @@ const collectDependents = (workspace: Workspace, datasetId: EntityId): DatasetDe
     annotationIds: Object.values(workspace.annotations)
       .filter((annotation) => visualizationIds.includes(annotation.visualizationId))
       .map((annotation) => annotation.id),
+    // Removing every derived column of the dataset also breaks any chain built on top of them.
+    derivedColumnIds: Object.values(workspace.derivedColumns)
+      .filter((derived) => derived.datasetId === datasetId)
+      .map((derived) => derived.id),
   };
 };
 
@@ -131,7 +141,9 @@ const dependentCount = (dependents: DatasetDependents): number =>
 export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (workspace, payload, deps) => {
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const dependents = collectDependents(workspace, dataset.value.id);
   const total = dependentCount(dependents);
@@ -156,7 +168,9 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
   // Drop the relation before committing metadata so a failure leaves a queryable dataset in place.
   const dropped = await deps.dataEngine.dropDataset(dataset.value.id);
 
-  if (!dropped.ok) return dropped;
+  if (!dropped.ok) {
+    return dropped;
+  }
 
   const { activeDatasetId, ...rest } = workspace;
   // Keep the canvas populated by selecting a surviving dataset when the active one is removed.
@@ -178,6 +192,7 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
       metrics: omitKeys(workspace.metrics, dependents.metricIds),
       selections: omitKeys(workspace.selections, dependents.selectionIds),
       annotations: omitKeys(workspace.annotations, dependents.annotationIds),
+      derivedColumns: omitKeys(workspace.derivedColumns, dependents.derivedColumnIds),
       tableSorts,
       layout: {
         ...workspace.layout,
@@ -192,6 +207,7 @@ export const handleRemoveDataset: ActionHandler<RemoveDatasetInput> = async (wor
       ...dependents.metricIds,
       ...dependents.selectionIds,
       ...dependents.annotationIds,
+      ...dependents.derivedColumnIds,
     ],
     summary:
       total === 0

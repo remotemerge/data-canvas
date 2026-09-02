@@ -11,12 +11,16 @@ import { ok } from '@/shared/result/result.ts';
 export const handleApplyFilter: ActionHandler<ApplyFilterInput> = (workspace, payload, deps) => {
   const resolved = resolveDatasetColumn(workspace, payload.datasetId, payload.columnId);
 
-  if (!resolved.ok) return resolved;
+  if (!resolved.ok) {
+    return resolved;
+  }
 
   const { dataset, column } = resolved.value;
   const compatible = validateFilter(column, payload.operator, payload.value);
 
-  if (!compatible.ok) return compatible;
+  if (!compatible.ok) {
+    return compatible;
+  }
 
   const existing = Object.values(workspace.filters).find(
     (candidate) =>
@@ -45,7 +49,9 @@ export const handleApplyFilter: ActionHandler<ApplyFilterInput> = (workspace, pa
 export const handleRemoveFilter: ActionHandler<RemoveFilterInput> = (workspace, payload) => {
   const filter = resolveFilter(workspace, payload.filterId);
 
-  if (!filter.ok) return filter;
+  if (!filter.ok) {
+    return filter;
+  }
 
   return ok({
     workspace: { ...workspace, filters: omitKeys(workspace.filters, [filter.value.id]) },
@@ -67,7 +73,9 @@ export const handleClearFilters: ActionHandler<ClearFiltersInput> = (workspace, 
 
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   const cleared = Object.values(workspace.filters)
     .filter((filter) => filter.datasetId === dataset.value.id)

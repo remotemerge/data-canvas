@@ -16,7 +16,9 @@ export const orderJoinTargets = (
   const rowCountOf = new Map<EntityId, number>();
 
   for (const entry of cardinalities) {
-    if (entry.rowCount !== undefined) rowCountOf.set(entry.datasetId, entry.rowCount);
+    if (entry.rowCount !== undefined) {
+      rowCountOf.set(entry.datasetId, entry.rowCount);
+    }
   }
 
   const known = requiredDatasetIds.filter((datasetId) => rowCountOf.has(datasetId));

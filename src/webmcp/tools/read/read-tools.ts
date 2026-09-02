@@ -90,7 +90,9 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const input = asInput(raw);
       const workspace = deps.getWorkspace();
       const dataset = workspace.datasets[input.datasetId as string];
-      if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${String(input.datasetId)}' does not exist.`);
+      if (!dataset) {
+        return invalidEntity('DATASET_NOT_FOUND', `Dataset '${String(input.datasetId)}' does not exist.`);
+      }
 
       const offset = Math.trunc((input.offset as number | undefined) ?? 0);
       const limit = Math.trunc((input.limit as number | undefined) ?? 5);
@@ -113,9 +115,11 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
               }))
           : [];
 
+      const relatedSuffix = related.length === 0 ? '' : `, and is related to ${related.length} other datasets`;
+
       return success({
         revision: workspace.revision,
-        summary: `${dataset.name} has ${dataset.columns.length} columns and ${dataset.rowCount ?? 0} rows${related.length === 0 ? '' : `, and is related to ${related.length} other datasets`}.`,
+        summary: `${dataset.name} has ${dataset.columns.length} columns and ${dataset.rowCount ?? 0} rows${relatedSuffix}.`,
         datasetId: dataset.id,
         name: dataset.name,
         rowCount: dataset.rowCount,
@@ -145,17 +149,22 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const input = asInput(raw);
       const datasetId = input.datasetId as string;
       const dataset = deps.getWorkspace().datasets[datasetId];
-      if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
+      if (!dataset) {
+        return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
+      }
       const requested = input.columnIds as string[] | undefined;
-      if (requested?.some((id) => !dataset.columns.some((column) => column.id === id)))
+      if (requested?.some((id) => !dataset.columns.some((column) => column.id === id))) {
         return invalidEntity('COLUMN_NOT_FOUND', 'One or more requested columns do not exist in the dataset.');
+      }
       const result = await deps.fetchTableWindow({
         datasetId,
         offset: 0,
         limit: Math.min((input.limit as number | undefined) ?? 20, 100),
         filters: filtersFor(deps, datasetId),
       });
-      if (!result.ok) return failure(result.error);
+      if (!result.ok) {
+        return failure(result.error);
+      }
       const indexes =
         requested?.map((id) => result.value.columnIds.indexOf(id)) ?? result.value.columnIds.map((_, index) => index);
       const rows = result.value.rows.map((row) => indexes.map((index) => boundedCell(row[index] ?? null)));
@@ -186,7 +195,9 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const datasetId = input.datasetId as string;
       const workspace = deps.getWorkspace();
       const dataset = workspace.datasets[datasetId];
-      if (!dataset) return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
+      if (!dataset) {
+        return invalidEntity('DATASET_NOT_FOUND', `Dataset '${datasetId}' does not exist.`);
+      }
       const dimensionInputs =
         (input.dimensions as
           | (string | { columnId: string; timeGrain: 'day' | 'week' | 'month' | 'quarter' | 'year' })[]
@@ -208,8 +219,9 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       const known = new Set(
         Object.values(workspace.datasets).flatMap((candidate) => candidate.columns.map((column) => column.id)),
       );
-      if (columnIds.some((id) => !known.has(id)))
+      if (columnIds.some((id) => !known.has(id))) {
         return invalidEntity('COLUMN_NOT_FOUND', 'One or more analysis columns do not exist in this workspace.');
+      }
 
       const relationshipIds = input.relationshipIds as string[] | undefined;
       const query: AnalysisQuery = {
@@ -222,10 +234,14 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         limit: Math.min((input.limit as number | undefined) ?? 50, 200),
       };
       const result = await deps.executeAnalysis(query);
-      if (!result.ok) return failure(result.error);
+      if (!result.ok) {
+        return failure(result.error);
+      }
+      const warningSuffix = result.value.warning === undefined ? '' : ` ${result.value.warning}`;
+
       return success({
         revision: deps.getWorkspace().revision,
-        summary: `Returned ${result.value.rows.length} aggregate rows.${result.value.warning === undefined ? '' : ` ${result.value.warning}`}`,
+        summary: `Returned ${result.value.rows.length} aggregate rows.${warningSuffix}`,
         columns: result.value.columns,
         rows: result.value.rows.map((row) => row.map(boundedCell)),
       });

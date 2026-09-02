@@ -30,12 +30,17 @@ export const compileBinStrategy = (
 ): Result<CompiledBin, DomainError> => {
   switch (strategy.kind) {
     case 'equalWidth': {
-      if (range === undefined) return err(missingRange(strategy.kind));
+      if (range === undefined) {
+        return err(missingRange(strategy.kind));
+      }
 
       const width = (range.max - range.min) / strategy.binCount;
 
-      // A constant column has no range to divide; place every row in one bucket.
-      if (!(width > 0)) return ok({ sql: '?', parameters: [range.min] });
+      // A constant column has no range to divide; place every row in one bucket. A non-finite
+      // width (an all-null column yields NaN bounds) takes the same single-bucket path.
+      if (!Number.isFinite(width) || width <= 0) {
+        return ok({ sql: '?', parameters: [range.min] });
+      }
 
       return ok({
         sql: `(FLOOR((${reference} - ?) / ?) * ? + ?)`,
@@ -44,7 +49,9 @@ export const compileBinStrategy = (
     }
 
     case 'equalWidthOf': {
-      if (range === undefined) return err(missingRange(strategy.kind));
+      if (range === undefined) {
+        return err(missingRange(strategy.kind));
+      }
 
       const buckets = Math.ceil((range.max - range.min) / strategy.width);
 
@@ -70,16 +77,26 @@ export const compileBinStrategy = (
       return ok({ sql: `NTILE(?) OVER (ORDER BY ${reference})`, parameters: [strategy.quantiles] });
 
     case 'explicit': {
+      /*
+       * Each bucket is labelled with its lower boundary. The bucket below the first break is
+       * open-ended, so it borrows the spacing of the next bucket for a finite label: a non-finite
+       * label would reach the UI as `null` (see `convertArrowValue`) and render as a gap rather
+       * than a bucket. A single break has no spacing to borrow, so the label steps down by one.
+       */
+      const first = strategy.breaks[0] as number;
+      const second = strategy.breaks[1];
+      const openEndedLabel = first - (second === undefined ? 1 : second - first);
+
       // The validator orders breaks, so the searched CASE arms are non-overlapping.
       const arms = strategy.breaks.map(() => `WHEN ${reference} < ? THEN ?`).join(' ');
       const parameters = strategy.breaks.flatMap((value, index) => [
         value,
-        index === 0 ? Number.NEGATIVE_INFINITY : (strategy.breaks[index - 1] as number),
+        index === 0 ? openEndedLabel : (strategy.breaks[index - 1] as number),
       ]);
 
       return ok({
         sql: `CASE ${arms} ELSE ? END`,
-        parameters: [...parameters, strategy.breaks[strategy.breaks.length - 1] as number],
+        parameters: [...parameters, strategy.breaks.at(-1) as number],
       });
     }
 

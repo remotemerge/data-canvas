@@ -5,6 +5,7 @@
 ### Build directories
 /.bs-data/playwright-profile/
 /.playwright-*/
+/coverage/
 /dist/
 
 ### JetBrains

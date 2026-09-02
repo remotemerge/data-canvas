@@ -5,8 +5,12 @@ import type { EntityId } from '@/shared/ids/entity-id.ts';
 
 // Returns every column ID named by a filter tree.
 export const filterColumnIds = (expression: FilterExpression): EntityId[] => {
-  if (expression.kind === 'comparison') return [expression.columnId];
-  if (expression.kind === 'not') return filterColumnIds(expression.operand);
+  if (expression.kind === 'comparison') {
+    return [expression.columnId];
+  }
+  if (expression.kind === 'not') {
+    return filterColumnIds(expression.operand);
+  }
 
   return expression.operands.flatMap(filterColumnIds);
 };
@@ -23,12 +27,16 @@ export const canPushDown = (
     const owner = ownerOf(columnId);
 
     // Leave unknown columns for the compiler to report.
-    if (owner === undefined) return false;
+    if (owner === undefined) {
+      return false;
+    }
 
     owners.add(owner);
   }
 
-  if (owners.size !== 1) return false;
+  if (owners.size !== 1) {
+    return false;
+  }
 
   const [owner] = [...owners];
 
@@ -77,7 +85,9 @@ const mergeRanges = (operands: readonly FilterExpression[]): FilterExpression[] 
         ? value > existing.value || (value === existing.value && operand.operator === 'gt')
         : value < existing.value || (value === existing.value && operand.operator === 'lt');
 
-    if (tighter) ranges.set(key, candidate);
+    if (tighter) {
+      ranges.set(key, candidate);
+    }
   }
 
   return [...passthrough, ...order.flatMap((key) => (ranges.has(key) ? [ranges.get(key) as FilterExpression] : []))];
@@ -85,7 +95,9 @@ const mergeRanges = (operands: readonly FilterExpression[]): FilterExpression[] 
 
 // Normalizes a filter tree without changing its truth value.
 export const simplifyFilter = (expression: FilterExpression): FilterExpression => {
-  if (expression.kind === 'comparison') return expression;
+  if (expression.kind === 'comparison') {
+    return expression;
+  }
 
   if (expression.kind === 'not') {
     const operand = simplifyFilter(expression.operand);
@@ -101,7 +113,9 @@ export const simplifyFilter = (expression: FilterExpression): FilterExpression =
 
   const merged = expression.kind === 'and' ? mergeRanges(flattened) : flattened;
 
-  if (merged.length === 1) return merged[0] as FilterExpression;
+  if (merged.length === 1) {
+    return merged[0] as FilterExpression;
+  }
 
   return { kind: expression.kind, operands: merged };
 };

@@ -45,7 +45,9 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
 
     const datasetId = started.value.changedEntityIds[0];
 
-    if (datasetId === undefined) return;
+    if (datasetId === undefined) {
+      return;
+    }
 
     const imported = await measureAsync('dataset-import', () =>
       importDataset({ file, datasetId, onProgress: setProgress }),
@@ -69,7 +71,9 @@ export const DatasetImportButton = ({ onError, emphasis = 'primary' }: DatasetIm
     // Clear the input so choosing the same file fires change again.
     event.target.value = '';
 
-    if (file === undefined) return;
+    if (file === undefined) {
+      return;
+    }
 
     setBusy(true);
     void runImport(file).finally(() => {

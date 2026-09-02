@@ -11,7 +11,9 @@ export interface QueryCacheKey {
 }
 
 const stableValue = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(stableValue);
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
@@ -72,14 +74,20 @@ export interface QueryCache<T> {
 const evictionScore = (entry: CacheEntry<unknown>): number =>
   entry.usedAt + Math.max(entry.cost.computeMs, 1) / Math.max(entry.cost.size, 1);
 
+const normalizeCost = (cost: CacheEntryCost): CacheEntryCost => ({
+  size: Number.isFinite(cost.size) && cost.size > 0 ? cost.size : 1,
+  computeMs: Number.isFinite(cost.computeMs) && cost.computeMs >= 0 ? cost.computeMs : 1,
+});
+
 export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): QueryCache<T> => {
+  const normalizedCapacity = Number.isFinite(capacity) ? Math.max(Math.trunc(capacity), 0) : 0;
   const entries = new Map<string, CacheEntry<T>>();
   let clock = 0;
   let hits = 0;
   let misses = 0;
 
   const evict = (): void => {
-    while (entries.size > capacity) {
+    while (entries.size > normalizedCapacity) {
       let victimKey: string | undefined;
       let victimScore = Number.POSITIVE_INFINITY;
 
@@ -92,9 +100,7 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
         }
       }
 
-      if (victimKey === undefined) return;
-
-      entries.delete(victimKey);
+      entries.delete(victimKey as string);
     }
   };
 
@@ -134,8 +140,12 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
       const offset = key.offset ?? 0;
 
       for (const entry of entries.values()) {
-        if (entry.resultSetKey !== resultSetKey) continue;
-        if (entry.offset > offset || entry.offset + entry.limit < offset + key.limit) continue;
+        if (entry.resultSetKey !== resultSetKey) {
+          continue;
+        }
+        if (entry.offset > offset || entry.offset + entry.limit < offset + key.limit) {
+          continue;
+        }
 
         entry.usedAt = clock;
         hits += 1;
@@ -148,7 +158,9 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
       return undefined;
     },
     set(key, value, cost) {
-      if (key.limit > maximumResultSize) return;
+      if (key.limit > maximumResultSize) {
+        return;
+      }
 
       clock += 1;
 
@@ -156,7 +168,7 @@ export const createQueryCache = <T>(capacity = 50, maximumResultSize = 500): Que
 
       entries.set(serialized, {
         value,
-        cost: cost ?? { size: key.limit, computeMs: 1 },
+        cost: normalizeCost(cost ?? { size: key.limit, computeMs: 1 }),
         usedAt: clock,
         resultSetKey: createResultSetKey(key),
         limit: key.limit,

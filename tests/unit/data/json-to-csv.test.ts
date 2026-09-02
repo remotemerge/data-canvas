@@ -83,6 +83,13 @@ describe('jsonToCsvBytes', () => {
     ['unparseable text', '{{{not json at all'],
     ['a truncated document', '{"a": 1,'],
     ['an array with a non-record member', '[{"a":1},5]'],
+    /*
+     * These fall through to the NDJSON reader because the document as a whole is not valid JSON. Each
+     * line parses on its own, so only the per-line record check can reject them.
+     */
+    ['NDJSON whose lines are scalars', '1\n2'],
+    ['NDJSON mixing a record with a scalar', '{"a":1}\n5'],
+    ['NDJSON whose lines are arrays', '[1]\n[2]'],
   ];
 
   test.each(rejected)('rejects %s', (_label, text) => {

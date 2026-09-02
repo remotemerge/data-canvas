@@ -31,7 +31,9 @@ export const LinkModeControl = ({
   const change = async (next: SelectionLinkMode): Promise<void> => {
     const outcome = await actions.setVisualizationLinkMode({ visualizationId, linkMode: next });
 
-    if (!outcome.ok) onError(outcome.error);
+    if (!outcome.ok) {
+      onError(outcome.error);
+    }
   };
 
   return (

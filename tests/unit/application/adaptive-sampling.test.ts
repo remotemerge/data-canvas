@@ -97,7 +97,9 @@ describe('adaptive sampling policy', () => {
     const strategy = plan.disclosure?.strategy;
 
     expect(strategy?.kind).toBe('topN');
-    if (strategy?.kind !== 'topN') return;
+    if (strategy?.kind !== 'topN') {
+      return;
+    }
 
     expect(plan.query.limit).toBe(strategy.retained);
     expect(strategy.retained).toBeLessThanOrEqual(MAX_QUERY_LIMIT);
@@ -133,6 +135,20 @@ describe('adaptive sampling policy', () => {
 
     expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'month' });
     expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'month' });
+  });
+
+  test('truncates a yearly series that is already at the coarsest temporal unit', () => {
+    const query = temporalQuery();
+    query.binnedDimensions = [{ columnId: columnId('date'), strategy: { kind: 'temporal', unit: 'year' } }];
+    const plan = planSampling({ query, kind: 'line', estimatedRows: 250, budget: 100 });
+
+    expect(plan.disclosure).toEqual({
+      strategy: { kind: 'binTruncation', retained: 100 },
+      rate: 0.4,
+      estimatedRows: 250,
+    });
+    expect(plan.query.limit).toBe(100);
+    expect(plan.query.binnedDimensions?.[0]?.strategy).toEqual({ kind: 'temporal', unit: 'year' });
   });
 
   // A daily year-and-a-half series fits the hard cap but exceeds a 900px readable target.
@@ -192,6 +208,56 @@ describe('adaptive sampling policy', () => {
     expect(widenTemporalUnit('year', 100, 10)).toBe('year');
   });
 
+  // A unit outside the ordered scale has no wider neighbour to move to.
+  test('widening leaves an unrecognized unit as it is', () => {
+    expect(widenTemporalUnit('fortnight' as never, 1_000, 100) as unknown).toBe('fortnight');
+  });
+
+  test('widens only the temporal bin, leaving a companion value bin untouched', () => {
+    const query: AnalysisQuery = {
+      datasetId: 'ds_1' as EntityId,
+      dimensions: [],
+      binnedDimensions: [
+        { columnId: columnId('date'), strategy: { kind: 'temporal', unit: 'day' } },
+        { columnId: columnId('sales'), strategy: { kind: 'equalWidth', binCount: 2 } },
+      ],
+      measures: [{ columnId: columnId('revenue'), aggregate: 'sum', alias: 'revenue' }],
+      filters: [],
+    };
+    const plan = planSampling({ query, kind: 'line', estimatedRows: 6_000, budget: 100, readableBudget: 80 });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'temporalWiden', from: 'day', to: 'quarter' });
+    expect(plan.query.binnedDimensions?.[1]).toEqual(query.binnedDimensions?.[1] as never);
+  });
+
+  // An ungrouped aggregate already returns one row, so it stays exact rather than being estimated.
+  test('leaves an ungrouped aggregate exact', () => {
+    const query: AnalysisQuery = {
+      datasetId: 'ds_1' as EntityId,
+      dimensions: [],
+      measures: [{ aggregate: 'count' }],
+      filters: [],
+    };
+    const plan = planSampling({ query, kind: 'bar', estimatedRows: 6_000, budget: 100 });
+
+    expect(plan.disclosure).toBeNull();
+    expect(plan.query).toEqual(query);
+  });
+
+  // Ranking needs an alias the ORDER BY can name, so an unaliased measure keeps the query's own order.
+  test('top-N over an unaliased measure retains the leading groups without a sort', () => {
+    const query: AnalysisQuery = {
+      datasetId: 'ds_1' as EntityId,
+      dimensions: [columnId('region')],
+      measures: [{ columnId: columnId('revenue'), aggregate: 'sum' }],
+      filters: [],
+    };
+    const plan = planSampling({ query, kind: 'bar', estimatedRows: 6_000, budget: 1 });
+
+    expect(plan.disclosure?.strategy).toEqual({ kind: 'topN', retained: 1, otherBucket: true });
+    expect(plan.query.orderBy).toBeUndefined();
+  });
+
   /*
    * A histogram groups by bucket, so a categorical `Other` row would put a synthetic category on a
    * continuous axis and describe the chart as top-N categories. The bucket bound normally keeps this
@@ -211,7 +277,7 @@ describe('adaptive sampling policy', () => {
     expect(describeSampling(plan.disclosure!).explanation).not.toContain('categories');
   });
 
-  test('samples rows for a row-level scatter query', () => {
+  test('truncates rows for a row-level scatter query', () => {
     const scatter: AnalysisQuery = {
       datasetId: 'ds_1' as EntityId,
       dimensions: [columnId('x'), columnId('y')],
@@ -220,9 +286,18 @@ describe('adaptive sampling policy', () => {
     };
     const plan = planSampling({ query: scatter, kind: 'scatter', estimatedRows: 1_000_000, budget: 5_000 });
 
-    expect(plan.disclosure?.strategy.kind).toBe('reservoir');
+    expect(plan.disclosure?.strategy.kind).toBe('rowTruncation');
     // Use the compiler's row cap, not the nominal display budget.
     expect(plan.query.limit).toBe(Math.min(5_000, MAX_QUERY_LIMIT));
+  });
+
+  // The disclosure must not promise randomization the query never performs.
+  test('the row-truncation explanation does not claim a random sample', () => {
+    const text = describeSampling({ strategy: { kind: 'rowTruncation', rate: 0.005 }, rate: 0.005, estimatedRows: 10 });
+
+    expect(text.explanation).not.toContain('uniform random sample');
+    expect(text.explanation).toContain('not a random sample');
+    expect(text.explanation).toContain('order the engine read them');
   });
 });
 
@@ -233,8 +308,7 @@ describe('sampling disclosure', () => {
       { kind: 'topN' as const, retained: 99, otherBucket: true as const },
       { kind: 'binTruncation' as const, retained: 99 },
       { kind: 'temporalWiden' as const, from: 'day' as const, to: 'month' as const },
-      { kind: 'reservoir' as const, rate: 0.005 },
-      { kind: 'tablesample' as const, rate: 0.01 },
+      { kind: 'rowTruncation' as const, rate: 0.005 },
     ];
 
     for (const strategy of strategies) {
@@ -243,6 +317,22 @@ describe('sampling disclosure', () => {
       expect(text.label.length).toBeGreaterThan(0);
       expect(text.explanation.length).toBeGreaterThan(0);
     }
+  });
+
+  /*
+   * A tiny fraction of a very large result would round to "0.0%", reading as though nothing was
+   * plotted. The floor keeps the badge honest about a small but non-empty sample.
+   */
+  test('a rate below a hundredth of a percent reports a floor rather than rounding to zero', () => {
+    const text = describeSampling({
+      strategy: { kind: 'rowTruncation', rate: 0.00005 },
+      rate: 0.00005,
+      estimatedRows: 20_000_000,
+    });
+
+    expect(text.label).toBe('First <0.01% of rows');
+    expect(text.explanation).toContain('<0.01%');
+    expect(text.label).not.toContain('0.0%');
   });
 
   test('the widening explanation names the granularity actually used', () => {

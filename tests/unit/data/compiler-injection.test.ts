@@ -18,7 +18,9 @@ describe('compiler injection boundaries', () => {
         compilerDataset,
       );
       expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      if (!result.ok) {
+        return;
+      }
       expect(result.value.sql).not.toContain(hostile);
       expect(result.value.parameters).toContain(hostile);
     },
@@ -73,7 +75,9 @@ describe('compiler injection boundaries', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).not.toContain(hostile);
     expect(result.value.parameters).toContain(hostile);
   });
@@ -125,7 +129,9 @@ describe('compiler injection boundaries', () => {
       );
 
       expect(result.ok).toBe(true);
-      if (!result.ok) continue;
+      if (!result.ok) {
+        continue;
+      }
 
       expect(result.value.sql).not.toContain(String(marker));
       expect(result.value.parameters).toContain(marker);
@@ -145,7 +151,9 @@ describe('compiler injection boundaries', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) {
+      return;
+    }
     expect(result.value.sql).toContain('quantile_cont');
     expect(result.value.sql).not.toContain('FILTER');
     // The summary columns are fixed names this module chooses, never caller text.

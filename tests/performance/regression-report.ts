@@ -31,7 +31,9 @@ export const BASELINE_SCHEMA_VERSION = 1;
 export const REGRESSION_THRESHOLD = 0.2;
 
 const median = (values: readonly number[]): number => {
-  if (values.length === 0) return 0;
+  if (values.length === 0) {
+    return 0;
+  }
 
   const sorted = [...values].toSorted((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
@@ -93,7 +95,9 @@ export const findRegressions = (
   for (const [tier, measurement] of Object.entries(current)) {
     const previous = baseline[tier];
 
-    if (previous === undefined || previous.medianMs <= 0) continue;
+    if (previous === undefined || previous.medianMs <= 0) {
+      continue;
+    }
 
     const change = (measurement.medianMs - previous.medianMs) / previous.medianMs;
 
@@ -110,7 +114,9 @@ export const formatReport = (regressions: readonly Regression[], comparedTiers: 
     return 'No baseline tiers to compare against. Record one with --record before expecting a comparison.';
   }
 
-  if (regressions.length === 0) return `No regressions across ${comparedTiers} tier(s).`;
+  if (regressions.length === 0) {
+    return `No regressions across ${comparedTiers} tier(s).`;
+  }
 
   const lines = regressions.map(
     (entry) =>
@@ -161,6 +167,8 @@ if (import.meta.main) {
     // eslint-disable-next-line no-console -- a CLI prints its report.
     console.log(formatReport(regressions, Object.keys(baseline.tiers ?? {}).length));
 
-    if (regressions.length > 0) process.exit(1);
+    if (regressions.length > 0) {
+      process.exit(1);
+    }
   }
 }

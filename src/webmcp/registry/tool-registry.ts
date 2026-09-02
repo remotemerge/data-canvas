@@ -67,7 +67,9 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
   let executingCount = 0;
 
   const register = async (tool: DataCanvasTool): Promise<void> => {
-    if (controllers.has(tool.name)) return;
+    if (controllers.has(tool.name)) {
+      return;
+    }
     const controller = new AbortController();
     controllers.set(tool.name, controller);
 
@@ -111,11 +113,15 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
       );
       const unsatisfied = tools.filter((candidate) => requiredDatasetCount(candidate) > count);
 
-      for (const tool of unsatisfied) unregister(tool);
+      for (const tool of unsatisfied) {
+        unregister(tool);
+      }
       await Promise.all(satisfied.map(register));
     },
     dispose: () => {
-      for (const controller of controllers.values()) controller.abort();
+      for (const controller of controllers.values()) {
+        controller.abort();
+      }
       controllers.clear();
       setToolStatus({ available: false, registeredCount: 0, executingCount: 0 });
     },

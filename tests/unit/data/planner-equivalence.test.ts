@@ -141,7 +141,9 @@ describe('planner equivalence', () => {
 
       expect(unplanned.ok).toBe(true);
       expect(compiled.ok).toBe(true);
-      if (!unplanned.ok || !compiled.ok) return;
+      if (!unplanned.ok || !compiled.ok) {
+        return;
+      }
 
       expect(compiled.value.sql).toBe(unplanned.value.sql);
       expect(compiled.value.parameters).toEqual(unplanned.value.parameters);
@@ -153,7 +155,9 @@ describe('planner equivalence', () => {
   test('a right-side filter across a left join is never pushed, so the statement is unchanged', () => {
     const query = FIXTURES.find((fixture) => fixture.name === 'left join with a right-side filter');
 
-    if (query === undefined) throw new Error('fixture missing');
+    if (query === undefined) {
+      throw new Error('fixture missing');
+    }
 
     const { unplanned, compiled, applied } = bothForms(query.query, ...query.relationships);
 
@@ -196,7 +200,9 @@ describe('planner equivalence', () => {
 
     expect(applied).toContain('projection-pruning');
     expect(unplanned.ok && compiled.ok).toBe(true);
-    if (!unplanned.ok || !compiled.ok) return;
+    if (!unplanned.ok || !compiled.ok) {
+      return;
+    }
 
     // Pruning changes selected columns, not filters.
     expect(compiled.value.resultColumns.length).toBeLessThan(unplanned.value.resultColumns.length);
@@ -219,7 +225,9 @@ describe('planner equivalence', () => {
     const plain = compileAnalysisQuery(query, compilerContext(ordersToCustomers, customersToProducts));
 
     expect(hinted.ok && plain.ok).toBe(true);
-    if (!hinted.ok || !plain.ok) return;
+    if (!hinted.ok || !plain.ok) {
+      return;
+    }
     expect(hinted.value.sql).toBe(plain.value.sql);
     expect(hinted.value.datasetIds).not.toContain('ds_products' as EntityId);
   });

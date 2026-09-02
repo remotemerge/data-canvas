@@ -11,11 +11,17 @@ const normalize = (value: unknown): unknown => {
   const ids = new Map<string, string>();
   const visit = (item: unknown): unknown => {
     if (typeof item === 'string' && /^(flt|viz|sel|mtr)_[\w-]+$/u.test(item)) {
-      if (!ids.has(item)) ids.set(item, `generated_${ids.size}`);
+      if (!ids.has(item)) {
+        ids.set(item, `generated_${ids.size}`);
+      }
       return ids.get(item);
     }
-    if (Array.isArray(item)) return item.map(visit);
-    if (typeof item !== 'object' || item === null) return item;
+    if (Array.isArray(item)) {
+      return item.map(visit);
+    }
+    if (typeof item !== 'object' || item === null) {
+      return item;
+    }
     return Object.fromEntries(
       Object.entries(item).map(([key, nested]) => [
         visit(key),

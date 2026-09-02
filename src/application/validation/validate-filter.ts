@@ -165,7 +165,9 @@ const validateEquality = (column: Column, operator: FilterOperator, value: unkno
 
 // Validates a filter against its resolved column.
 export const validateFilter = (column: Column, operator: FilterOperator, value: unknown): Result<void, DomainError> => {
-  if (NULLARY_FILTER_OPERATORS.includes(operator)) return validateNullary(column, operator, value);
+  if (NULLARY_FILTER_OPERATORS.includes(operator)) {
+    return validateNullary(column, operator, value);
+  }
 
   switch (operator) {
     case 'between':
@@ -192,7 +194,9 @@ export const validateFilter = (column: Column, operator: FilterOperator, value: 
 
 export const getCompatibleFilterOperators = (column: Column): FilterOperator[] =>
   FILTER_OPERATORS.filter((operator) => {
-    if (operator === 'contains') return isTextType(column.logicalType);
+    if (operator === 'contains') {
+      return isTextType(column.logicalType);
+    }
     if (operator === 'gt' || operator === 'gte' || operator === 'lt' || operator === 'lte' || operator === 'between') {
       return isNumericType(column.logicalType) || isTemporalType(column.logicalType);
     }

@@ -16,7 +16,9 @@ export const compileMetricModifier = (
   aggregate: string,
   resolve: ColumnReferenceResolver,
 ): Result<CompiledModifier, DomainError> => {
-  if (modifier === undefined || modifier.kind === 'none') return ok({ sql: aggregate, parameters: [] });
+  if (modifier === undefined || modifier.kind === 'none') {
+    return ok({ sql: aggregate, parameters: [] });
+  }
 
   switch (modifier.kind) {
     case 'percentOfTotal':

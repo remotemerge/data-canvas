@@ -6,7 +6,9 @@ const toNumber = (value: Cell): number => (typeof value === 'number' ? value : N
 const positionOf = (list: string[], value: string): number => {
   const existing = list.indexOf(value);
 
-  if (existing !== -1) return existing;
+  if (existing !== -1) {
+    return existing;
+  }
 
   list.push(value);
 

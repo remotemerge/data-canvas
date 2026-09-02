@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_FILTER_VALUE_LIST_LENGTH, validateFilter } from '@/application/validation/validate-filter.ts';
+import {
+  MAX_FILTER_VALUE_LIST_LENGTH,
+  getCompatibleFilterOperators,
+  validateFilter,
+} from '@/application/validation/validate-filter.ts';
 import { FILTER_OPERATORS } from '@/domain/filter/filter.ts';
 import type { FilterOperator } from '@/domain/filter/filter.ts';
 import { LOGICAL_TYPES } from '@/domain/logical-type.ts';
@@ -105,7 +109,9 @@ describe('filter operator and column type matrix', () => {
 
       expect(result.ok).toBe(false);
 
-      if (result.ok) return;
+      if (result.ok) {
+        return;
+      }
 
       expect(result.error.code).toBe('INCOMPATIBLE_COLUMN');
       expect(result.error.message).toContain('probe');
@@ -196,10 +202,43 @@ describe('value shape rules', () => {
     expect(validateFilter(numeric, 'gt', Number.POSITIVE_INFINITY).ok).toBe(false);
   });
 
+  // The operator arrives as unknown from a tool payload, so anything outside the closed set is refused.
+  test('an operator outside the closed set is refused as unsupported', () => {
+    const result = validateFilter(numeric, 'exceeds' as FilterOperator, 1);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+  });
+
   test('an unclassified column defers type judgement but still rejects an absent value', () => {
     const unclassified = column('col_x', 'mystery', 'unknown');
 
     expect(validateFilter(unclassified, 'eq', 'anything').ok).toBe(true);
     expect(validateFilter(unclassified, 'eq', null).ok).toBe(false);
   });
+});
+
+describe('operator suggestions', () => {
+  test('text columns are offered substring matching', () => {
+    expect(getCompatibleFilterOperators(column('col_notes', 'notes', 'string'))).toContain('contains');
+  });
+
+  test('numeric columns are offered range operators', () => {
+    expect(getCompatibleFilterOperators(column('col_revenue', 'revenue', 'number'))).toContain('between');
+  });
+
+  // The picker must not offer an operator that validation would then reject.
+  test.each(LOGICAL_TYPES.map((logicalType) => [logicalType] as const))(
+    'every operator suggested for a %s column also validates',
+    (logicalType) => {
+      const target = column('col_probe', 'probe', logicalType);
+
+      for (const operator of getCompatibleFilterOperators(target)) {
+        expect(isCompatible[operator][logicalType]).toBe(true);
+      }
+    },
+  );
 });

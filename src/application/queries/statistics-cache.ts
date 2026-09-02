@@ -37,7 +37,9 @@ const readForRevision = <T>(
 ): T | undefined => {
   const entry = store.get(id);
 
-  if (entry === undefined) return undefined;
+  if (entry === undefined) {
+    return undefined;
+  }
   if (entry.revision !== revision) {
     store.delete(id);
 
@@ -62,7 +64,9 @@ export const createStatisticsCache = (): StatisticsCache => {
     },
     invalidateDataset: (datasetId, columnIds) => {
       datasets.delete(datasetId);
-      for (const columnId of columnIds) columns.delete(columnId);
+      for (const columnId of columnIds) {
+        columns.delete(columnId);
+      }
     },
     clear: () => {
       datasets.clear();

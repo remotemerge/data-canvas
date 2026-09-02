@@ -14,7 +14,9 @@ let stopEngineSync: (() => void) | null = null;
 export const startEngine = async (): Promise<void> => {
   const { status } = engineStore.getState();
 
-  if (status === 'ready' || status === 'starting') return;
+  if (status === 'ready' || status === 'starting') {
+    return;
+  }
 
   setEngineStarting();
 

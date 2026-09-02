@@ -25,7 +25,9 @@ const readyDatasetCount = (): number =>
     .length;
 
 export const installTestHooks = (deps: ToolDependencies): void => {
-  if (!import.meta.env.DEV) return;
+  if (!import.meta.env.DEV) {
+    return;
+  }
   installNetworkRecorder();
   const tools = createToolDefinitions(deps);
   const availableTools = (): string[] =>
@@ -36,7 +38,7 @@ export const installTestHooks = (deps: ToolDependencies): void => {
   };
   updateStatus();
   workspaceStore.subscribe(() => updateStatus());
-  // eslint-disable-next-line no-underscore-dangle -- required by the browser verification API.
+  // oxlint-disable-next-line no-underscore-dangle -- the browser verification API requires this name.
   window.__dataCanvas = {
     normalizedState: () => structuredClone(workspaceStore.getState().workspace),
     revision: () => workspaceStore.getState().workspace.revision,
@@ -46,7 +48,9 @@ export const installTestHooks = (deps: ToolDependencies): void => {
     tools: () => availableTools(),
     executeTool: async (name, input) => {
       const tool = tools.find((candidate) => candidate.name === name);
-      if (tool === undefined) throw new Error(`Unknown Data Canvas tool: ${name}`);
+      if (tool === undefined) {
+        throw new Error(`Unknown Data Canvas tool: ${name}`);
+      }
       return executeTool(tool, input);
     },
   };

@@ -14,7 +14,12 @@ export interface DisclosureText {
 const percent = (rate: number): string => {
   const value = rate * 100;
 
-  return value < 0.01 ? '<0.01%' : `${value < 1 ? value.toFixed(2) : value.toFixed(1)}%`;
+  if (value < 0.01) {
+    return '<0.01%';
+  }
+
+  // Sub-one-percent rates keep a second decimal so they do not all render as "0.0%".
+  return `${value < 1 ? value.toFixed(2) : value.toFixed(1)}%`;
 };
 
 export const describeSampling = (disclosure: SamplingDisclosure): DisclosureText => {
@@ -42,16 +47,10 @@ export const describeSampling = (disclosure: SamplingDisclosure): DisclosureText
         explanation: `${temporalUnitLabel[strategy.from]} buckets would exceed the plotted-point budget, so this chart is grouped by ${strategy.to} instead. Every row was read, so each bucket's value is exact — but the axis shows ${strategy.to}s, not ${strategy.from}s.`,
       };
 
-    case 'reservoir':
+    case 'rowTruncation':
       return {
-        label: `${percent(strategy.rate)} sample`,
-        explanation: `This chart plots a uniform random sample of ${percent(strategy.rate)} of the matching rows. The overall shape is representative, but individual points are a subset and counts are not totals.`,
-      };
-
-    case 'tablesample':
-      return {
-        label: `Approximate (${percent(strategy.rate)})`,
-        explanation: `This value is estimated from a ${percent(strategy.rate)} sample of the rows and scaled up. Treat it as approximate, not as a measured total.`,
+        label: `First ${percent(strategy.rate)} of rows`,
+        explanation: `This chart plots more rows than the plotted-point budget allows, so it shows the first ${percent(strategy.rate)} of the matching rows in the order the engine read them. The points shown are exact, but they are not a random sample and the shape may not represent the whole result. Add a filter to narrow the rows plotted.`,
       };
   }
 };
@@ -80,14 +79,18 @@ export const foldOtherBucket = (
     const measureIndex = index - measureStartIndex;
     const total = populationTotals[measureIndex];
 
-    if (additiveByMeasure[measureIndex] !== true || typeof total !== 'number') continue;
+    if (additiveByMeasure[measureIndex] !== true || typeof total !== 'number') {
+      continue;
+    }
 
     let retainedSum = 0;
 
     for (const row of rows) {
       const value = row[index];
 
-      if (typeof value === 'number') retainedSum += value;
+      if (typeof value === 'number') {
+        retainedSum += value;
+      }
     }
 
     // Clamp floating-point residue so `Other` cannot become a negative bar.

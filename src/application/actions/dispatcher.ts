@@ -47,12 +47,14 @@ import {
 import { appendHistoryEntry } from '@/application/history/action-history.ts';
 import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
 import { invertAction } from '@/application/history/invert-action.ts';
+import { HISTORY_STACK_LIMIT } from '@/application/history/undo-redo.ts';
 import type { DataEnginePort } from '@/application/ports/data-engine-port.ts';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { createEntityId, ID_PREFIX } from '@/shared/ids/entity-id.ts';
+import type { EntityId } from '@/shared/ids/entity-id.ts';
 import { err, ok } from '@/shared/result/result.ts';
 import type { Result } from '@/shared/result/result.ts';
 import { workspaceStore } from '@/state/workspace-store.ts';
@@ -147,7 +149,9 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
   let queue: Promise<unknown> = Promise.resolve();
 
   const run = async (action: ApplicationAction, context: ActionContext): Promise<Result<ActionResult, DomainError>> => {
-    if (isAborted(context)) return err(abortedError());
+    if (isAborted(context)) {
+      return err(abortedError());
+    }
 
     const workspace = deps.store.getState().workspace;
 
@@ -164,10 +168,14 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     const outcome = await runHandler(workspace, action, { dataEngine: deps.dataEngine, actor: context.actor });
 
-    if (!outcome.ok) return outcome;
+    if (!outcome.ok) {
+      return outcome;
+    }
 
     // Handlers may await the engine. Check cancellation again before committing their result.
-    if (isAborted(context)) return err(abortedError());
+    if (isAborted(context)) {
+      return err(abortedError());
+    }
 
     const actionId = createEntityId(ID_PREFIX.action);
     const revision = workspace.revision + 1;
@@ -187,18 +195,22 @@ export const createDispatcher = (deps: DispatcherDeps): ApplicationActions => {
 
     // Commit workspace and history together so subscribers never observe only one update.
     deps.store.setState((state) => {
+      // An undo pops the entry it reverses; every other origin, including redo, pushes the new action.
       const undoStack =
         context.origin === 'undo'
           ? state.undoStack.slice(0, -1)
-          : context.origin === 'redo'
-            ? [...state.undoStack, actionId].slice(-100)
-            : [...state.undoStack, actionId].slice(-100);
-      const redoStack =
-        context.origin === 'undo'
-          ? [...state.redoStack, actionId].slice(-100)
-          : context.origin === 'redo'
-            ? state.redoStack.slice(0, -1)
-            : [];
+          : [...state.undoStack, actionId].slice(-HISTORY_STACK_LIMIT);
+      /*
+       * An undo makes the action redoable. A redo consumes the entry it replays. Any other origin is
+       * a new branch of history, which discards the redo stack.
+       */
+      const nextRedoStack = (): EntityId[] => {
+        if (context.origin === 'undo') {
+          return [...state.redoStack, actionId].slice(-HISTORY_STACK_LIMIT);
+        }
+        return context.origin === 'redo' ? state.redoStack.slice(0, -1) : [];
+      };
+      const redoStack = nextRedoStack();
 
       return {
         ...state,

@@ -159,7 +159,7 @@ export const WorkspacePage = (): React.JSX.Element => {
             <div className="workspace__empty">
               <LuDatabase className="workspace__empty-icon" size={28} aria-hidden="true" />
               <p className="workspace__empty-title">Import a dataset</p>
-              <p>CSV, TSV, JSON, and NDJSON are supported.</p>
+              {/* The import button carries the supported-format hint, so the empty state does not repeat it. */}
               <DatasetImportButton onError={setActionError} />
             </div>
           ) : (

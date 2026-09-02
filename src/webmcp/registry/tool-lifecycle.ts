@@ -20,7 +20,9 @@ export const startToolLifecycle = async (deps: ToolLifecycleDependencies): Promi
     const next = Object.values(deps.getWorkspace().datasets).filter(
       (dataset) => dataset.importStatus === 'ready',
     ).length;
-    if (next === readyCount) return;
+    if (next === readyCount) {
+      return;
+    }
     readyCount = next;
     void registry.setReadyDatasetCount(next);
   };

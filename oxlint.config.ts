@@ -31,6 +31,9 @@ export default defineConfig({
     'sort-keys': 'off',
     'switch-case-braces': 'off',
     'no-map-spread': 'off',
+
+    // Custom rules
+    curly: ['error', 'all'],
   },
   ignorePatterns: ['dist/**', 'node_modules/**', 'public/**'],
 });

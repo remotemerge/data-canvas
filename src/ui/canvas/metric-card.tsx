@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react';
 import { registeredDataEngine } from '@/application/ports/engine-registry.ts';
 import type { Metric } from '@/domain/metric/metric.ts';
+import type { TimeComparisonOutput } from '@/domain/metric/metric-modifier.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
 import { selectFilters, selectRevision } from '@/state/selectors/workspace-selectors.ts';
 import { deltaTone, formatNumber, formatValue } from '@/visualization/formatting.ts';
 import { MetricEditor } from '@/ui/canvas/metric-editor.tsx';
 import { Provenance } from '@/ui/workspace/provenance.tsx';
+
+/*
+ * Reduces the current and prior period to the metric's configured comparison. A percent change
+ * against a zero prior has no defined value, so it is reported as missing rather than infinite.
+ */
+const compareToPrior = (as: TimeComparisonOutput, current: number, prior: number): number | null => {
+  if (as === 'absolute') {
+    return prior;
+  }
+  if (as === 'difference') {
+    return current - prior;
+  }
+  return prior === 0 ? null : (current - prior) / prior;
+};
 
 export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (error: DomainError) => void }) => {
   const filterRecord = useWorkspace(selectFilters);
@@ -59,7 +74,9 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
         limit: metric.modifier?.kind === 'timeComparison' ? 200 : 1,
       })
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         if (!result.ok) {
           setValue(null);
           onError(result.error);
@@ -76,15 +93,7 @@ export const MetricCard = ({ metric, onError }: { metric: Metric; onError: (erro
             setValue(null);
             return;
           }
-          setValue(
-            metric.modifier.as === 'absolute'
-              ? prior
-              : metric.modifier.as === 'difference'
-                ? current - prior
-                : prior === 0
-                  ? null
-                  : (current - prior) / prior,
-          );
+          setValue(compareToPrior(metric.modifier.as, current, prior));
           return;
         }
 

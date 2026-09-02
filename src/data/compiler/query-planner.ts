@@ -31,11 +31,17 @@ const nullExtendedDatasets = (relationships: readonly Relationship[], anchorId: 
   const extended = new Set<EntityId>();
 
   for (const relationship of relationships) {
-    if (relationship.join !== 'left') continue;
+    if (relationship.join !== 'left') {
+      continue;
+    }
 
     // The FROM anchor is preserved by definition.
-    if (relationship.leftDatasetId !== anchorId) extended.add(relationship.leftDatasetId);
-    if (relationship.rightDatasetId !== anchorId) extended.add(relationship.rightDatasetId);
+    if (relationship.leftDatasetId !== anchorId) {
+      extended.add(relationship.leftDatasetId);
+    }
+    if (relationship.rightDatasetId !== anchorId) {
+      extended.add(relationship.rightDatasetId);
+    }
   }
 
   return extended;
@@ -63,8 +69,11 @@ export const partitionFilters = (
   const retained: FilterExpression[] = [];
 
   for (const filter of filters) {
-    if (canPushDown(filter, extended, ownerOf)) pushable.push(filter);
-    else retained.push(filter);
+    if (canPushDown(filter, extended, ownerOf)) {
+      pushable.push(filter);
+    } else {
+      retained.push(filter);
+    }
   }
 
   return { pushable, retained };
@@ -85,7 +94,9 @@ export const planQuery = (query: AnalysisQuery, context: PlannerContext): Planne
   // Record the classification; the compiler emits one WHERE conjunction.
   const partition = partitionFilters(planned.filters, context, query.datasetId);
 
-  if (partition.pushable.length > 0) applied.push('filter-pushdown');
+  if (partition.pushable.length > 0) {
+    applied.push('filter-pushdown');
+  }
 
   const required = referencedColumnIds(planned, context.derivedColumns ?? {});
   const pruned = prunedProjection(planned, required);

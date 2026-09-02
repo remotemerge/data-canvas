@@ -17,11 +17,15 @@ const convertBigInt = (value: bigint): CellValue =>
 
 // Normalizes DuckDB temporal values to a `Date`, or `null` when the value is invalid.
 const toDate = (value: unknown): Date | null => {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
 
   const epochMs = typeof value === 'bigint' ? Number(value) : value;
 
-  if (typeof epochMs !== 'number' || !Number.isFinite(epochMs)) return null;
+  if (typeof epochMs !== 'number' || !Number.isFinite(epochMs)) {
+    return null;
+  }
 
   const date = new Date(epochMs);
 
@@ -46,46 +50,85 @@ const decodeHugeInt = (view: ArrayBufferView): bigint => {
 
 // Converts one Arrow cell to a JSON-safe scalar.
 export const convertArrowValue = (value: unknown): CellValue => {
-  if (value === null || value === undefined) return null;
-
-  const valueType = typeof value;
-
-  if (valueType === 'boolean' || valueType === 'string') return value as boolean | string;
-
-  // NaN and infinities have no JSON representation or useful axis position.
-  if (valueType === 'number') return Number.isFinite(value) ? (value as number) : null;
-
-  if (valueType === 'bigint') return convertBigInt(value as bigint);
-
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
-
-  if (ArrayBuffer.isView(value)) {
-    if (value.byteLength === 16) {
-      return convertBigInt(decodeHugeInt(value));
-    }
-    if (value.byteLength === 8) {
-      const i64 = new BigInt64Array(value.buffer, value.byteOffset, 1)[0]!;
-      return convertBigInt(i64);
-    }
-    // 32-bit integer types that DuckDB may emit for aggregate results fitting within INT32.
-    if (value.byteLength === 4) {
-      const i32 = new Int32Array(value.buffer, value.byteOffset, 1)[0]!;
-      return Number(i32);
-    }
+  if (value === null || value === undefined) {
     return null;
   }
 
-  return String(value);
+  const valueType = typeof value;
+
+  if (valueType === 'boolean' || valueType === 'string') {
+    return value as boolean | string;
+  }
+
+  // NaN and infinities have no JSON representation or useful axis position.
+  if (valueType === 'number') {
+    return Number.isFinite(value) ? (value as number) : null;
+  }
+
+  if (valueType === 'bigint') {
+    return convertBigInt(value as bigint);
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return convertBufferView(value);
+  }
+
+  return convertObject(value);
+};
+
+// DuckDB emits wide integer types as raw buffers, sized by the type's width.
+const convertBufferView = (value: ArrayBufferView): CellValue => {
+  if (value.byteLength === 16) {
+    return convertBigInt(decodeHugeInt(value));
+  }
+  if (value.byteLength === 8) {
+    return convertBigInt(new BigInt64Array(value.buffer, value.byteOffset, 1)[0]!);
+  }
+  // 32-bit integer types that DuckDB may emit for aggregate results fitting within INT32.
+  if (value.byteLength === 4) {
+    return Number(new Int32Array(value.buffer, value.byteOffset, 1)[0]!);
+  }
+
+  return null;
+};
+
+/*
+ * A value carrying its own `toString` describes itself, so that form is preferred. Nested DuckDB
+ * values (STRUCT, LIST, MAP) inherit Object's, which yields `[object Object]` and hides the
+ * contents, so those are serialized as JSON instead.
+ */
+const convertObject = (value: unknown): CellValue => {
+  const text = String(value);
+
+  if (text !== '[object Object]') {
+    return text;
+  }
+
+  try {
+    return (
+      JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry)) ?? null
+    );
+  } catch {
+    return null;
+  }
 };
 
 // Converts a cell using its logical type, including temporal epoch values.
 export const convertArrowCell = (value: unknown, logicalType: string): CellValue => {
   if (logicalType === 'date' || logicalType === 'timestamp') {
-    if (value === null || value === undefined) return null;
+    if (value === null || value === undefined) {
+      return null;
+    }
 
     const date = toDate(value);
 
-    if (date === null) return convertArrowValue(value);
+    if (date === null) {
+      return convertArrowValue(value);
+    }
 
     return logicalType === 'date' ? toDateString(date) : date.toISOString();
   }
@@ -126,7 +169,9 @@ export const readArrowRows = (
 
 // Reads a scalar from a one-row, one-column result.
 export const readScalarCount = (table: ArrowRowSource): number => {
-  if (table.numRows === 0) return 0;
+  if (table.numRows === 0) {
+    return 0;
+  }
 
   const value = convertArrowValue(table.getChildAt(0)?.get(0));
 

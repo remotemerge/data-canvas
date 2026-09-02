@@ -11,29 +11,38 @@ export const reachableDatasets = (workspace: Workspace, anchorId: EntityId): Dat
   const relationships = Object.values(workspace.relationships);
   const found: Dataset[] = [];
   const visited = new Set<EntityId>([anchorId]);
-  let frontier: EntityId[] = [anchorId];
 
-  for (let depth = 0; depth < MAX_REACHABLE_DEPTH && frontier.length > 0; depth += 1) {
-    const next: EntityId[] = [];
+  /*
+   * Collects the unvisited datasets one hop from `datasetId`. Only datasets that finished importing
+   * continue the walk, so an in-flight import does not bridge two otherwise unrelated datasets.
+   */
+  const stepFrom = (datasetId: EntityId): EntityId[] => {
+    const reached: EntityId[] = [];
 
-    for (const datasetId of frontier) {
-      for (const relationship of relationships) {
-        const neighbour = relatedDatasetId(relationship, datasetId);
+    for (const relationship of relationships) {
+      const neighbour = relatedDatasetId(relationship, datasetId);
 
-        if (neighbour === undefined || visited.has(neighbour)) continue;
+      if (neighbour === undefined || visited.has(neighbour)) {
+        continue;
+      }
 
-        visited.add(neighbour);
+      visited.add(neighbour);
 
-        const dataset = workspace.datasets[neighbour];
+      const dataset = workspace.datasets[neighbour];
 
-        if (dataset !== undefined && dataset.importStatus === 'ready') {
-          found.push(dataset);
-          next.push(neighbour);
-        }
+      if (dataset?.importStatus === 'ready') {
+        found.push(dataset);
+        reached.push(neighbour);
       }
     }
 
-    frontier = next;
+    return reached;
+  };
+
+  let frontier: EntityId[] = [anchorId];
+
+  for (let depth = 0; depth < MAX_REACHABLE_DEPTH && frontier.length > 0; depth += 1) {
+    frontier = frontier.flatMap(stepFrom);
   }
 
   return found;

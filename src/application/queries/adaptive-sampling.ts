@@ -16,10 +16,8 @@ export type SamplingStrategy =
   | { kind: 'binTruncation'; retained: number }
   // A temporal dimension widened to a coarser unit until it fits.
   | { kind: 'temporalWiden'; from: TemporalUnit; to: TemporalUnit }
-  // Uniform row sample for scatter-style queries.
-  | { kind: 'reservoir'; rate: number }
-  // Scanned-row sample under an aggregate, producing an estimate.
-  | { kind: 'tablesample'; rate: number };
+  // Leading rows of a row-level query, kept in the engine's scan order.
+  | { kind: 'rowTruncation'; rate: number };
 
 export interface SamplingDisclosure {
   strategy: SamplingStrategy;
@@ -63,13 +61,17 @@ const PERIODS_PER_YEAR: Readonly<Record<TemporalUnit, number>> = {
 export const widenTemporalUnit = (from: TemporalUnit, estimatedRows: number, budget: number): TemporalUnit => {
   const startIndex = TEMPORAL_UNITS.indexOf(from);
 
-  if (startIndex < 0) return from;
+  if (startIndex < 0) {
+    return from;
+  }
 
   for (let index = startIndex + 1; index < TEMPORAL_UNITS.length; index += 1) {
     const candidate = TEMPORAL_UNITS[index] as TemporalUnit;
     const ratio = PERIODS_PER_YEAR[candidate] / PERIODS_PER_YEAR[from];
 
-    if (estimatedRows * ratio <= budget) return candidate;
+    if (estimatedRows * ratio <= budget) {
+      return candidate;
+    }
   }
 
   return from;
@@ -79,7 +81,7 @@ export const widenTemporalUnit = (from: TemporalUnit, estimatedRows: number, bud
 const isRowLevel = (query: AnalysisQuery): boolean =>
   query.measures.length === 0 && (query.binnedDimensions ?? []).length === 0;
 
-const clampRate = (rate: number): number => Math.min(Math.max(rate, 0.000_01), 1);
+const clampRate = (rate: number): number => Math.min(Math.max(rate, 0.00001), 1);
 
 export interface SamplingInput {
   query: AnalysisQuery;
@@ -103,12 +105,14 @@ export const planSampling = ({
   const exact: SamplingPlan = { query, disclosure: null };
 
   // Headline values remain exact, and neither kind has an axis to widen.
-  if (requiresExactResult(kind)) return exact;
+  if (requiresExactResult(kind)) {
+    return exact;
+  }
 
   const temporalBin = (query.binnedDimensions ?? []).find((bin) => bin.strategy.kind === 'temporal');
 
   // Widening preserves every row and measure, so try it before lossy sampling.
-  if (temporalBin !== undefined && temporalBin.strategy.kind === 'temporal') {
+  if (temporalBin?.strategy.kind === 'temporal') {
     const target = Math.min(budget, readableBudget ?? budget);
 
     if (estimatedRows > target) {
@@ -131,25 +135,32 @@ export const planSampling = ({
   }
 
   // From here, every strategy loses information. Leave results that fit the performance budget exact.
-  if (estimatedRows <= budget) return exact;
+  if (estimatedRows <= budget) {
+    return exact;
+  }
 
   // Base the fraction on the compiler's maximum result size, not an uncapped display budget.
   const deliverable = Math.min(budget, MAX_QUERY_LIMIT);
   const rate = clampRate(deliverable / estimatedRows);
 
+  /*
+   * A row-level query returns individual rows, so bounding it means keeping the leading rows the
+   * engine scans. The result is a subset in storage order, not a randomized sample; the disclosure
+   * must describe it that way.
+   */
   if (isRowLevel(query)) {
     return {
       query: { ...query, limit: deliverable },
-      disclosure: { strategy: { kind: 'reservoir', rate }, rate, estimatedRows },
+      disclosure: { strategy: { kind: 'rowTruncation', rate }, rate, estimatedRows },
     };
   }
 
-  // Without dimensions, the query already returns one aggregate row; only row sampling is available.
+  /*
+   * An aggregate without any grouping already returns a single row, so there is nothing to reduce.
+   * Approximating it would trade an exact headline value for an estimate with no benefit.
+   */
   if (query.dimensions.length === 0 && (query.binnedDimensions ?? []).length === 0) {
-    return {
-      query,
-      disclosure: { strategy: { kind: 'tablesample', rate }, rate, estimatedRows },
-    };
+    return exact;
   }
 
   /*

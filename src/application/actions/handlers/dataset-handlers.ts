@@ -26,13 +26,17 @@ export const MAX_DATASET_NAME_LENGTH = 200;
 const uniqueDatasetName = (workspace: Workspace, name: string): string => {
   const taken = new Set(Object.values(workspace.datasets).map((dataset) => dataset.name));
 
-  if (!taken.has(name)) return name;
+  if (!taken.has(name)) {
+    return name;
+  }
 
   for (let counter = 2; ; counter += 1) {
     const suffix = ` (${counter})`;
     const candidate = `${name.slice(0, MAX_DATASET_NAME_LENGTH - suffix.length)}${suffix}`;
 
-    if (!taken.has(candidate)) return candidate;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
   }
 };
 
@@ -83,7 +87,9 @@ export const handleBeginDatasetImport: ActionHandler<BeginDatasetImportInput> = 
 export const handleImportDataset: ActionHandler<ImportDatasetInput> = async (workspace, payload, deps) => {
   const existing = resolveDataset(workspace, payload.datasetId);
 
-  if (!existing.ok) return existing;
+  if (!existing.ok) {
+    return existing;
+  }
 
   if (existing.value.importStatus !== 'loading') {
     return err(
@@ -99,7 +105,9 @@ export const handleImportDataset: ActionHandler<ImportDatasetInput> = async (wor
 
   const imported = await deps.dataEngine.importFile(payload.file, existing.value.id, payload.onProgress);
 
-  if (!imported.ok) return imported;
+  if (!imported.ok) {
+    return imported;
+  }
 
   const dataset: Dataset = {
     ...existing.value,
@@ -121,7 +129,9 @@ export const handleImportDataset: ActionHandler<ImportDatasetInput> = async (wor
 export const handleFailDatasetImport: ActionHandler<FailDatasetImportInput> = (workspace, payload) => {
   const existing = resolveDataset(workspace, payload.datasetId);
 
-  if (!existing.ok) return existing;
+  if (!existing.ok) {
+    return existing;
+  }
 
   const dataset: Dataset = {
     ...existing.value,
@@ -157,7 +167,9 @@ export const handleSetActiveDataset: ActionHandler<SetActiveDatasetInput> = (wor
 
   const dataset = resolveDataset(workspace, payload.datasetId);
 
-  if (!dataset.ok) return dataset;
+  if (!dataset.ok) {
+    return dataset;
+  }
 
   return ok({
     workspace: { ...workspace, activeDatasetId: dataset.value.id },

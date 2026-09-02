@@ -1,6 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { createUndoRedo } from '@/application/history/undo-redo.ts';
+import type { ActionHistoryEntry } from '@/application/history/action-history.ts';
+import { createUndoRedo, HISTORY_STACK_LIMIT } from '@/application/history/undo-redo.ts';
 import { createHarness } from './action-fixtures.ts';
+
+const NON_INVERTIBLE_ENTRY: ActionHistoryEntry = {
+  actionId: 'history_noninvertible',
+  type: 'dataset.remove',
+  actor: 'human',
+  revision: 0,
+  changedEntityIds: [],
+  timestamp: '2026-01-01T00:00:00.000Z',
+  summary: 'non-invertible',
+  undoable: false,
+};
 
 describe('undo and redo', () => {
   test('restores exact metadata through the dispatcher and clears redo after a new action', async () => {
@@ -31,5 +43,41 @@ describe('undo and redo', () => {
       { actor: 'agent', expectedRevision: 1 },
     );
     expect(stale.ok ? null : stale.error.code).toBe('STALE_WORKSPACE_REVISION');
+  });
+
+  test('undo on an empty history is refused rather than throwing', async () => {
+    const harness = createHarness();
+    const history = createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store });
+
+    expect((await history.undo()).ok).toBe(false);
+  });
+
+  test('redo on an empty history is refused rather than throwing', async () => {
+    const harness = createHarness();
+    const history = createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store });
+
+    expect((await history.redo()).ok).toBe(false);
+  });
+
+  /*
+   * A dropped DuckDB relation cannot be recreated from workspace state, so the entry stays on the
+   * stack as a record and both directions refuse it rather than replaying a partial inverse.
+   */
+  test('a non-invertible entry is refused in both directions', async () => {
+    const harness = createHarness();
+    const history = createUndoRedo({ dispatcher: harness.dispatcher, store: harness.store });
+    harness.store.setState({
+      history: [NON_INVERTIBLE_ENTRY],
+      undoStack: [NON_INVERTIBLE_ENTRY.actionId],
+      redoStack: [NON_INVERTIBLE_ENTRY.actionId],
+    });
+
+    expect((await history.undo()).ok).toBe(false);
+    expect((await history.redo()).ok).toBe(false);
+  });
+
+  // The bound keeps history from growing without limit across a long session.
+  test('the history stack is bounded', () => {
+    expect(HISTORY_STACK_LIMIT).toBe(100);
   });
 });

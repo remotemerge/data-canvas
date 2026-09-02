@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Dataset } from '@/domain/dataset/dataset.ts';
+import { filterValueText } from '@/domain/filter/filter.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
@@ -31,11 +32,9 @@ export const FilterPanel = ({
           {filters.map((filter) => {
             const column = dataset.columns.find((candidate) => candidate.id === filter.columnId);
             // Several filters can be listed at once, so each Remove needs its own accessible name.
-            const description = `${column?.name ?? 'Unknown column'} ${filter.operator.replaceAll('_', ' ')}${
-              filter.value === undefined
-                ? ''
-                : ` ${Array.isArray(filter.value) ? filter.value.join(', ') : String(filter.value)}`
-            }`;
+            const valueText = filterValueText(filter.value);
+            const description =
+              `${column?.name ?? 'Unknown column'} ${filter.operator.replaceAll('_', ' ')} ${valueText}`.trimEnd();
             return (
               <li key={filter.id}>
                 <label>

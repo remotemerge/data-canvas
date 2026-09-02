@@ -19,8 +19,11 @@ export const AnnotationEditor = ({
   const actions = useActions();
   const save = async () => {
     const result = await actions.addAnnotation({ visualizationId, anchor, text, origin: 'human' });
-    if (!result.ok) onError(result.error);
-    else onClose();
+    if (!result.ok) {
+      onError(result.error);
+    } else {
+      onClose();
+    }
   };
   return (
     <form
@@ -31,8 +34,7 @@ export const AnnotationEditor = ({
       }}
     >
       <label>
-        Note
-        <input maxLength={280} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
+        Note <input maxLength={280} value={text} onChange={(event) => setText(event.target.value)} autoFocus />
       </label>
       <div className="form-actions">
         <Button type="submit" disabled={text.trim().length === 0}>

@@ -19,11 +19,15 @@ const stripGeneratedIds = (value: unknown): unknown => {
       (/^(flt|viz|sel|rel|mtr|ann)_[\w-]+$/u.test(item) ||
         /^col_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(item))
     ) {
-      if (!ids.has(item)) ids.set(item, `generated_${next++}`);
+      if (!ids.has(item)) {
+        ids.set(item, `generated_${next++}`);
+      }
       return ids.get(item);
     }
-    if (Array.isArray(item)) return item.map(visit);
-    if (typeof item === 'object' && item !== null)
+    if (Array.isArray(item)) {
+      return item.map(visit);
+    }
+    if (typeof item === 'object' && item !== null) {
       return Object.fromEntries(
         Object.entries(item).map(([key, nested]) => [
           visit(key),
@@ -34,6 +38,7 @@ const stripGeneratedIds = (value: unknown): unknown => {
               : visit(nested),
         ]),
       );
+    }
     return item;
   };
   return visit(value);
@@ -90,6 +95,40 @@ test('human and agent visualization paths produce the same workspace', async () 
     yColumnIds: ['col_revenue'],
     expectedRevision: 0,
   });
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
+/*
+ * A scatter plot draws one mark per row, so its query must bind both channels as dimensions. If one
+ * adapter aggregated y instead, rows sharing an x value would collapse into a single point there.
+ */
+test('human and agent scatter paths produce the same row-level query', async () => {
+  const { human, agent, tool } = pair();
+  await human.dispatcher.execute(
+    {
+      type: 'visualization.create',
+      payload: {
+        datasetId: 'ds_sales',
+        title: 'Revenue by units',
+        kind: 'scatter',
+        binding: { x: 'col_units', y: ['col_revenue'] },
+      },
+    },
+    { actor: 'human' },
+  );
+  await tool('create_visualization').handler({
+    datasetId: 'ds_sales',
+    title: 'Revenue by units',
+    kind: 'scatter',
+    xColumnId: 'col_units',
+    yColumnIds: ['col_revenue'],
+    expectedRevision: 0,
+  });
+
+  const [chart] = Object.values(human.workspace().visualizations);
+
+  expect(chart?.query.measures).toEqual([]);
+  expect(chart?.query.dimensions).toEqual(['col_units', 'col_revenue']);
   expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
 });
 

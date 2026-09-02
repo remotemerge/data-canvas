@@ -21,7 +21,9 @@ describe('bin strategy compilation', () => {
 
     expect(result.ok).toBe(true);
     // min + floor((x - min) / width) * width places a value back on the bucket's floor.
-    if (result.ok) expect(result.value.parameters).toEqual([10, 10, 10, 10]);
+    if (result.ok) {
+      expect(result.value.parameters).toEqual([10, 10, 10, 10]);
+    }
   });
 
   test('a constant column collapses to one bucket rather than dividing by zero', () => {
@@ -38,7 +40,19 @@ describe('bin strategy compilation', () => {
     const result = compileBinStrategy({ kind: 'equalWidth', binCount: 4 }, REFERENCE);
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
+  });
+
+  // Both range-dependent strategies need the column's bounds; neither may guess them.
+  test('equalWidthOf without a range is refused', () => {
+    const result = compileBinStrategy({ kind: 'equalWidthOf', width: 10 }, REFERENCE);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNSUPPORTED_OPERATION');
+    }
   });
 
   test('equalWidthOf rejects a width that would exceed the bucket cap over this range', () => {
@@ -52,7 +66,9 @@ describe('bin strategy compilation', () => {
     });
 
     expect(overCap.ok).toBe(false);
-    if (!overCap.ok) expect(overCap.error.code).toBe('RESULT_LIMIT_EXCEEDED');
+    if (!overCap.ok) {
+      expect(overCap.error.code).toBe('RESULT_LIMIT_EXCEEDED');
+    }
   });
 
   test('quantile compiles to ntile, whose bucket is an ordinal rather than a value', () => {
@@ -71,7 +87,35 @@ describe('bin strategy compilation', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.sql).toBe('CASE WHEN "revenue" < ? THEN ? WHEN "revenue" < ? THEN ? ELSE ? END');
-      expect(result.value.parameters).toEqual([10, Number.NEGATIVE_INFINITY, 20, 10, 20]);
+      // The open-ended bucket borrows the next bucket's width so its label stays finite.
+      expect(result.value.parameters).toEqual([10, 0, 20, 10, 20]);
+    }
+  });
+
+  /*
+   * A non-finite label reaches the UI as `null` (see `convertArrowValue`) and renders as a gap
+   * rather than a bucket, so every explicit bin label must be a finite, renderable number.
+   */
+  test('explicit bin labels stay finite so the lowest bucket renders', () => {
+    for (const breaks of [[10, 20], [0, 5, 10], [7]]) {
+      const result = compileBinStrategy({ kind: 'explicit', breaks }, REFERENCE);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        for (const parameter of result.value.parameters) {
+          expect(Number.isFinite(parameter as number)).toBe(true);
+        }
+      }
+    }
+  });
+
+  test('a single explicit break still separates its two buckets', () => {
+    const result = compileBinStrategy({ kind: 'explicit', breaks: [7] }, REFERENCE);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Below-7 bucket labelled 6, at-or-above-7 bucket labelled 7.
+      expect(result.value.parameters).toEqual([7, 6, 7]);
     }
   });
 
@@ -96,7 +140,9 @@ describe('bin strategy compilation', () => {
       const result = compileBinStrategy(strategy, REFERENCE, { min: 0, max: 70 });
 
       expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value.sql).not.toContain('7');
+      if (result.ok) {
+        expect(result.value.sql).not.toContain('7');
+      }
     }
   });
 });

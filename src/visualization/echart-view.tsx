@@ -85,7 +85,9 @@ export const EChart = ({
   const propagated = propagateSelection(workspace, visualization);
   // Highlight mode dims marks; filter mode has already removed them from the result.
   const highlightPredicate = useMemo(() => {
-    if (propagated.effect !== 'highlight' || propagated.predicate === undefined) return undefined;
+    if (propagated.effect !== 'highlight' || propagated.predicate === undefined) {
+      return undefined;
+    }
 
     // Dimension keys carry column IDs used by selection predicates.
     const columnIndexById = new Map(result.columns.map((column, index) => [column.key, index]));
@@ -111,7 +113,9 @@ export const EChart = ({
         setAnnotationAnchor({ kind: 'point', x: clicked.value[0], y: clicked.value[1] });
       }
       const predicate = categorySelectionFromClick(visualization, event as never);
-      if (predicate === null) return;
+      if (predicate === null) {
+        return;
+      }
       // Ctrl/cmd-click extends selection; plain click replaces it; clicking again clears it.
       if (isAdditiveClick(clicked as { event?: { ctrlKey?: boolean; metaKey?: boolean } })) {
         void actions.extendSelection({
@@ -122,15 +126,16 @@ export const EChart = ({
         });
         return;
       }
-      if (isSameSelection(selection?.predicate, predicate))
+      if (isSameSelection(selection?.predicate, predicate)) {
         void actions.clearSelection({ datasetId: visualization.datasetId });
-      else
+      } else {
         void actions.setSelection({
           datasetId: visualization.datasetId,
           mode: 'predicate',
           predicate,
           origin: 'chart',
         });
+      }
     },
     [actions, selection?.predicate, visualization],
   );
@@ -143,10 +148,14 @@ export const EChart = ({
       }
       const range = areas?.[0]?.coordRange;
       const columnId = visualization.binding.x;
-      if (columnId === undefined || range === undefined || range.length < 2) return;
+      if (columnId === undefined || range === undefined || range.length < 2) {
+        return;
+      }
       const start = Number(range[0]);
       const end = Number(range[1]);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return;
+      }
       void actions.setSelection({
         datasetId: visualization.datasetId,
         mode: 'predicate',
@@ -159,10 +168,14 @@ export const EChart = ({
   const ref = useECharts(option, onClick, onBrush);
   return (
     <>
-      <div
+      {/*
+        ECharts renders a canvas into this element, so it cannot be an `img`. `role="img"` would
+        also misdescribe it: the chart accepts clicks and brush selections, so it is announced as a
+        labelled interactive group rather than a static image.
+      */}
+      <figure
         ref={ref}
         className="chart-panel__chart"
-        role="img"
         aria-label={`${visualization.title}. Select a chart mark to add an annotation.`}
       />
       {annotations.length === 0 ? null : (

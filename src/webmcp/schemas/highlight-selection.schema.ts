@@ -5,8 +5,15 @@ export const highlightSelectionSchema = {
   properties: {
     datasetId: { type: 'string', minLength: 1, maxLength: 100 },
     columnId: { type: 'string', minLength: 1, maxLength: 100 },
-    values: { type: 'array', items: {}, minItems: 1, maxItems: 100 },
-    label: { type: 'string', maxLength: 160 },
+    // Selection values are compared against a single column, so only scalars are accepted.
+    values: {
+      type: 'array',
+      items: {
+        anyOf: [{ type: 'string', maxLength: 200 }, { type: 'number' }, { type: 'boolean' }, { type: 'null' }],
+      },
+      minItems: 1,
+      maxItems: 100,
+    },
     operator: { type: 'string', enum: ['in'] },
     additive: {
       type: 'boolean',

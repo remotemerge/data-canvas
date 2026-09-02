@@ -55,12 +55,16 @@ const usePlotWidth = (ref: React.RefObject<HTMLDivElement | null>): number | und
   useEffect(() => {
     const element = ref.current;
 
-    if (element === null) return;
+    if (element === null) {
+      return;
+    }
 
     const observer = new ResizeObserver((entries) => {
       const measured = entries[0]?.contentRect.width ?? 0;
 
-      if (measured <= 0) return;
+      if (measured <= 0) {
+        return;
+      }
 
       const quantised = Math.max(Math.round(measured / PLOT_WIDTH_QUANTUM) * PLOT_WIDTH_QUANTUM, PLOT_WIDTH_QUANTUM);
 
@@ -99,24 +103,76 @@ export const ChartPanel = ({
     // Keep the previous result visible while the next query runs.
     setLoading(true);
     void executeVisualizationQuery(visualization, workspace, undefined, controller.signal, plotWidth).then((next) => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        return;
+      }
       // Ignore superseded results so they cannot blank the chart.
-      if (next.ok && next.value.stale === true) return;
+      if (next.ok && next.value.stale === true) {
+        return;
+      }
       if (next.ok) {
         setResult(next.value);
         setError(null);
-      } else setError(next.error);
+      } else {
+        setError(next.error);
+      }
       setLoading(false);
     });
     return () => {
       controller.abort();
     };
-    // Quantize width changes so resizing triggers only a few re-queries.
-  }, [visualization, workspace.filters, workspace.selections, workspace.revision, plotWidth]);
+    /*
+     * Depend on the workspace slices the query actually reads rather than on `revision`, which every
+     * committed action bumps. Results are not cached, so a `revision` dependency re-runs the SQL for
+     * every chart on annotation edits, layout drags, and other unrelated actions.
+     *
+     * Width changes are quantized upstream so resizing triggers only a few re-queries.
+     */
+  }, [
+    visualization,
+    workspace.filters,
+    workspace.selections,
+    workspace.relationships,
+    workspace.derivedColumns,
+    plotWidth,
+  ]);
 
   const remove = async () => {
     const outcome = await actions.removeVisualization({ visualizationId: visualization.id });
-    if (!outcome.ok) onError(outcome.error);
+    if (!outcome.ok) {
+      onError(outcome.error);
+    }
+  };
+
+  // KPI and table views render their own presentation; every other kind goes through ECharts.
+  const renderBody = (): React.ReactNode => {
+    if (result === null || result.rows.length === 0) {
+      return null;
+    }
+
+    if (visualization.kind === 'kpi') {
+      return <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>;
+    }
+
+    if (visualization.kind === 'table') {
+      return <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />;
+    }
+
+    return (
+      <ChartErrorBoundary
+        key={`${visualization.id}:${workspace.revision}`}
+        onError={() => {
+          onError({
+            code: 'UNSUPPORTED_OPERATION',
+            message: 'A chart failed to render. Its workspace card remains available for recovery.',
+          });
+        }}
+      >
+        <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
+          <EChart visualization={visualization} result={result} onError={onError} />
+        </Suspense>
+      </ChartErrorBoundary>
+    );
   };
 
   return (
@@ -167,25 +223,7 @@ export const ChartPanel = ({
           <p className="chart-panel__empty">No data matches current filters.</p>
         ) : null}
         {loading && result === null && error === null ? <QuerySkeleton label={visualization.title} /> : null}
-        {result === null || result.rows.length === 0 ? null : visualization.kind === 'kpi' ? (
-          <div className="chart-panel__kpi">{formatValue(result.rows[0]?.at(-1))}</div>
-        ) : visualization.kind === 'table' ? (
-          <WorkspaceTable dataset={workspace.datasets[visualization.datasetId]!} />
-        ) : (
-          <ChartErrorBoundary
-            key={`${visualization.id}:${workspace.revision}`}
-            onError={() => {
-              onError({
-                code: 'UNSUPPORTED_OPERATION',
-                message: 'A chart failed to render. Its workspace card remains available for recovery.',
-              });
-            }}
-          >
-            <Suspense fallback={<QuerySkeleton label={visualization.title} />}>
-              <EChart visualization={visualization} result={result} onError={onError} />
-            </Suspense>
-          </ChartErrorBoundary>
-        )}
+        {renderBody()}
       </div>
     </article>
   );

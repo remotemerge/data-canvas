@@ -81,5 +81,9 @@ describe('suggested visualization titles', () => {
 
   test('an unbound chart suggests nothing rather than a meaningless title', () => {
     expect(suggestVisualizationTitle({ kind: 'line' })).toBe('');
+    // A box plot describes the spread of a measure, so a category alone names nothing to spread.
+    expect(suggestVisualizationTitle({ kind: 'boxplot', dimensionName: 'Region' })).toBe('');
+    // A histogram is titled by the column it bins, so it has no title without one.
+    expect(suggestVisualizationTitle({ kind: 'histogram' })).toBe('');
   });
 });

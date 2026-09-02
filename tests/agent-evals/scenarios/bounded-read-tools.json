@@ -1,0 +1,13 @@
+{
+  "name": "bounded read tools leave the canvas alone",
+  "prompt": "Preview and analyze the sales dataset.",
+  "fixture": "sales-with-chart",
+  "transcript": [
+    { "tool": "preview_data", "arguments": { "datasetId": "ds_sales" } },
+    {
+      "tool": "analyze_data",
+      "arguments": { "datasetId": "ds_sales", "dimensions": [], "measures": [{ "aggregate": "count" }] }
+    }
+  ],
+  "expected": { "tools": ["preview_data", "analyze_data"], "visualizations": 1, "preserveExisting": true }
+}

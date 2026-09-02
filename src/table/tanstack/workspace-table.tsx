@@ -24,29 +24,23 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
   const filterRecord = useWorkspace(selectFilters);
   const selectionRecord = useWorkspace((state) => state.workspace.selections);
   const tableSorts = useWorkspace((state) => state.workspace.tableSorts);
-  const filters = useMemo(() => {
-    const stored = Object.values(filterRecord).filter((filter) => filter.datasetId === dataset.id);
-    const predicate = Object.values(selectionRecord).find((selection) => selection.datasetId === dataset.id)?.predicate;
-    if (predicate?.kind !== 'comparison') return stored;
-    return [
-      ...stored,
-      {
-        id: `selection_${dataset.id}`,
-        datasetId: dataset.id,
-        columnId: predicate.columnId,
-        operator: predicate.operator,
-        ...(predicate.value === undefined ? {} : { value: predicate.value }),
-        enabled: true,
-        origin: 'system' as const,
-        createdBy: 'system' as const,
-      },
-    ];
-  }, [dataset.id, filterRecord, selectionRecord]);
+  const filters = useMemo(
+    () => Object.values(filterRecord).filter((filter) => filter.datasetId === dataset.id),
+    [dataset.id, filterRecord],
+  );
+  /*
+   * Extending a selection stores an `or` tree, which a flat `Filter` cannot express. Pass the
+   * predicate through so the table narrows to the same rows the charts do.
+   */
+  const selectionPredicate = useMemo(
+    () => Object.values(selectionRecord).find((selection) => selection.datasetId === dataset.id)?.predicate,
+    [dataset.id, selectionRecord],
+  );
   const sort = tableSorts[dataset.id] ?? EMPTY_SORT;
   const { clearFilters, setTableSort } = useActions();
   const [offset, setOffset] = useState(0);
   const parentRef = useRef<HTMLDivElement>(null);
-  const state = useTableWindow(dataset, offset, WINDOW_SIZE, filters, sort);
+  const state = useTableWindow(dataset, offset, WINDOW_SIZE, filters, sort, selectionPredicate);
   const columns = useMemo(() => createTableColumns(dataset.columns), [dataset.columns]);
   const table = useTable({
     features: workspaceTableFeatures,
@@ -68,7 +62,7 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
   });
   const virtualRows = virtualizer.getVirtualItems();
   const firstVisible = virtualRows[0]?.index ?? 0;
-  const lastVisible = virtualRows[virtualRows.length - 1]?.index ?? firstVisible;
+  const lastVisible = virtualRows.at(-1)?.index ?? firstVisible;
   // Fetch when either edge of the current window is close.
   const anchor = lastVisible + PREFETCH_MARGIN >= offset + WINDOW_SIZE ? lastVisible + PREFETCH_MARGIN : firstVisible;
   const wantedOffset = Math.max(Math.floor(anchor / WINDOW_SIZE) * WINDOW_SIZE, 0);
@@ -119,7 +113,9 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
             <tbody style={{ height: virtualizer.getTotalSize() }}>
               {virtualRows.map((virtualRow) => {
                 const row = rows[virtualRow.index - offset];
-                if (row === undefined) return null;
+                if (row === undefined) {
+                  return null;
+                }
                 return (
                   <tr key={virtualRow.key} style={{ transform: `translateY(${virtualRow.start}px)` }}>
                     {row.getAllCells().map((cell, index) => {

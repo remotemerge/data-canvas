@@ -9,7 +9,9 @@ export const workspaceTableFeatures = tableFeatures({
   rowSortingFeature,
   rowPaginationFeature,
 });
-export const formatCellValue = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
+// Row cells are scalars by the `TableRow` contract, so each has a faithful string form.
+export const formatCellValue = (value: unknown): string =>
+  value === null || value === undefined ? '' : String(value as string | number | boolean);
 
 // Returns the alignment for a table column.
 export const columnAlignment = (column: Column): 'end' | 'start' =>

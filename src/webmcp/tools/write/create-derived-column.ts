@@ -25,7 +25,9 @@ export const createCreateDerivedColumnTool = (deps: ToolDependencies): DataCanva
       { actor: 'agent', expectedRevision: input.expectedRevision as number | undefined },
     );
 
-    if (!result.ok) return failure(result.error);
+    if (!result.ok) {
+      return failure(result.error);
+    }
 
     return success({
       revision: result.value.revision,

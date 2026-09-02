@@ -10,10 +10,12 @@ export const UpdatePrompt = (): React.JSX.Element | null => {
     registerServiceWorker((apply) => setApplyUpdate(() => apply));
   }, []);
 
-  if (applyUpdate === null) return null;
+  if (applyUpdate === null) {
+    return null;
+  }
 
   return (
-    <div className="update-prompt" role="status">
+    <output className="update-prompt">
       <span>A new version of Data Canvas is ready.</span>
       <button type="button" onClick={applyUpdate}>
         Reload
@@ -21,6 +23,6 @@ export const UpdatePrompt = (): React.JSX.Element | null => {
       <button type="button" onClick={() => setApplyUpdate(null)}>
         Later
       </button>
-    </div>
+    </output>
   );
 };

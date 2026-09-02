@@ -21,23 +21,41 @@ interface TitleInput {
   aggregate?: AggregateFunction;
 }
 
+// Names the measure, prefixed by its aggregate when that aggregate adds meaning.
+const describeMeasure = (
+  measureName: string | undefined,
+  aggregate: AggregateFunction | undefined,
+): string | undefined => {
+  if (measureName === undefined) {
+    return undefined;
+  }
+
+  const prefix = aggregate === undefined ? undefined : AGGREGATE_LABEL[aggregate];
+
+  return prefix === undefined ? measureName : `${prefix} ${measureName}`;
+};
+
 // Suggests an editable title from the chart kind and its bound fields.
 export const suggestVisualizationTitle = ({ kind, measureName, dimensionName, aggregate }: TitleInput): string => {
-  const prefix = aggregate === undefined ? undefined : AGGREGATE_LABEL[aggregate];
-  const measure =
-    measureName === undefined ? undefined : prefix === undefined ? measureName : `${prefix} ${measureName}`;
+  const measure = describeMeasure(measureName, aggregate);
 
   // A histogram computes its own count, so the title names only its binned column.
-  if (kind === 'histogram') return dimensionName === undefined ? '' : `Distribution of ${dimensionName}`;
+  if (kind === 'histogram') {
+    return dimensionName === undefined ? '' : `Distribution of ${dimensionName}`;
+  }
 
   // A box plot describes one column's spread, optionally split by a category.
   if (kind === 'boxplot') {
-    if (measureName === undefined) return '';
+    if (measureName === undefined) {
+      return '';
+    }
 
     return dimensionName === undefined ? `Spread of ${measureName}` : `Spread of ${measureName} by ${dimensionName}`;
   }
 
-  if (measure === undefined) return dimensionName === undefined ? '' : `Rows by ${dimensionName}`;
+  if (measure === undefined) {
+    return dimensionName === undefined ? '' : `Rows by ${dimensionName}`;
+  }
 
   return dimensionName === undefined ? measure : `${measure} by ${dimensionName}`;
 };

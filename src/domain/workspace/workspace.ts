@@ -9,8 +9,11 @@ import type { SortSpec } from '@/domain/analysis/analysis-query.ts';
 import type { Visualization } from '@/domain/visualization/visualization.ts';
 import { createEntityId, ID_PREFIX, type EntityId } from '@/shared/ids/entity-id.ts';
 
-// Monotonic revision incremented once per committed action.
-export type WorkspaceRevision = number;
+/*
+ * Monotonic revision incremented once per committed action. The alias names the revision semantics
+ * that state-changing operations depend on, which a bare `number` would not convey.
+ */
+export type WorkspaceRevision = number; // NOSONAR
 
 export const CURRENT_SCHEMA_VERSION = 2;
 

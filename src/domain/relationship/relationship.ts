@@ -38,8 +38,12 @@ export interface Relationship {
 
 // Returns the dataset on the opposite side, if any.
 export const relatedDatasetId = (relationship: Relationship, datasetId: EntityId): EntityId | undefined => {
-  if (relationship.leftDatasetId === datasetId) return relationship.rightDatasetId;
-  if (relationship.rightDatasetId === datasetId) return relationship.leftDatasetId;
+  if (relationship.leftDatasetId === datasetId) {
+    return relationship.rightDatasetId;
+  }
+  if (relationship.rightDatasetId === datasetId) {
+    return relationship.leftDatasetId;
+  }
 
   return undefined;
 };

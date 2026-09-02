@@ -54,22 +54,52 @@ const missingColumn = (columnId: EntityId): DomainError =>
 const normalizeContext = (context: QueryDataset | QueryContext): QueryContext =>
   'datasets' in context ? context : { datasets: [context] };
 
+// Compiles a relationship's key column pairs into the equality predicates of one JOIN.
+const buildJoinConditions = (
+  step: JoinPlan['steps'][number],
+  resolve: ColumnReferenceResolver,
+): Result<string[], DomainError> => {
+  const conditions: string[] = [];
+
+  for (const pair of step.relationship.on) {
+    const left = resolve(pair.leftColumnId);
+    const right = resolve(pair.rightColumnId);
+
+    if (left === undefined) {
+      return err(missingColumn(pair.leftColumnId));
+    }
+    if (right === undefined) {
+      return err(missingColumn(pair.rightColumnId));
+    }
+
+    conditions.push(`${left.sql} = ${right.sql}`);
+  }
+
+  if (conditions.length === 0) {
+    return err(
+      domainError('UNSUPPORTED_OPERATION', 'A relationship must declare at least one key column pair.', {
+        relationshipId: step.relationship.id,
+      }),
+    );
+  }
+
+  return ok(conditions);
+};
+
 // Builds the column resolver and matching FROM/JOIN clause for a resolved plan.
 const buildFromClause = (
   plan: JoinPlan,
   datasets: readonly QueryDataset[],
+  anchor: QueryDataset,
 ): Result<{ sql: string; resolve: ColumnReferenceResolver }, DomainError> => {
   const aliases = new Map<EntityId, string>();
 
-  for (const [index, datasetId] of plan.datasetIds.entries()) aliases.set(datasetId, joinAlias(index));
+  for (const [index, datasetId] of plan.datasetIds.entries()) {
+    aliases.set(datasetId, joinAlias(index));
+  }
 
   const datasetFor = (datasetId: EntityId): QueryDataset | undefined =>
     datasets.find((candidate) => candidate.id === datasetId);
-
-  const anchorId = plan.datasetIds[0] as EntityId;
-  const anchor = datasetFor(anchorId);
-
-  if (anchor === undefined) return err(domainError('DATASET_NOT_FOUND', 'The query anchor dataset was not resolved.'));
 
   // Keep single-dataset queries unaliased; aliases are needed only when relations are joined.
   const unjoined = plan.steps.length === 0;
@@ -84,7 +114,9 @@ const buildFromClause = (
       const dataset = datasetFor(datasetId);
       const column = dataset?.columns.find((candidate) => candidate.id === columnId);
 
-      if (dataset !== undefined && column !== undefined) return { sql: referenceFor(dataset, column), column };
+      if (dataset !== undefined && column !== undefined) {
+        return { sql: referenceFor(dataset, column), column };
+      }
     }
 
     return undefined;
@@ -105,57 +137,32 @@ const buildFromClause = (
       );
     }
 
-    const conditions: string[] = [];
+    const conditions = buildJoinConditions(step, resolve);
 
-    for (const pair of step.relationship.on) {
-      const left = resolve(pair.leftColumnId);
-      const right = resolve(pair.rightColumnId);
-
-      if (left === undefined) return err(missingColumn(pair.leftColumnId));
-      if (right === undefined) return err(missingColumn(pair.rightColumnId));
-
-      conditions.push(`${left.sql} = ${right.sql}`);
-    }
-
-    if (conditions.length === 0) {
-      return err(
-        domainError('UNSUPPORTED_OPERATION', 'A relationship must declare at least one key column pair.', {
-          relationshipId: step.relationship.id,
-        }),
-      );
+    if (!conditions.ok) {
+      return conditions;
     }
 
     // Emit LEFT JOIN relative to traversal direction so the existing chain remains the preserved side.
     const keyword = step.relationship.join === 'left' ? 'LEFT JOIN' : 'INNER JOIN';
 
     fragments.push(
-      `${keyword} ${quoteIdentifier(joined.relationId)} AS ${quoteIdentifier(aliases.get(joined.id) as string)} ON ${conditions.join(' AND ')}`,
+      `${keyword} ${quoteIdentifier(joined.relationId)} AS ${quoteIdentifier(aliases.get(joined.id) as string)} ON ${conditions.value.join(' AND ')}`,
     );
   }
 
   return ok({ sql: fragments.join(' '), resolve });
 };
 
-// Compiles an `AnalysisQuery` to parameterized SQL.
-export const compileAnalysisQuery = (
-  query: AnalysisQuery,
-  context: QueryDataset | QueryContext,
-): Result<CompiledQuery, DomainError> => {
-  const { datasets, relationships = [], derivedColumns = {}, joinOrder } = normalizeContext(context);
-  const anchor = datasets.find((candidate) => candidate.id === query.datasetId);
-
-  if (anchor === undefined) {
-    return err(domainError('DATASET_NOT_FOUND', 'The query does not target the resolved dataset.'));
-  }
-
-  // Join resolution follows derived references to the physical columns they read.
+// Collects every column the query names, following derived references to the physical columns they read.
+const referencedColumnIds = (query: AnalysisQuery, derivedColumns: Record<EntityId, DerivedColumn>): EntityId[] => {
   const throughDerived = (columnId: EntityId): EntityId[] => {
     const derived = derivedColumns[columnId];
 
     return derived === undefined ? [columnId] : expressionColumnIds(derived.expression).flatMap(throughDerived);
   };
 
-  const referencedColumnIds = [
+  return [
     ...query.dimensions,
     ...(query.binnedDimensions ?? []).map((bin) => bin.columnId),
     ...query.measures.flatMap((measure) => (measure.columnId === undefined ? [] : [measure.columnId])),
@@ -168,58 +175,176 @@ export const compileAnalysisQuery = (
     ...(query.orderBy ?? []).flatMap((sort) => (sort.columnId === undefined ? [] : [sort.columnId])),
     ...query.filters.flatMap(collectFilterColumnIds),
   ].flatMap(throughDerived);
+};
 
-  const requiredDatasetIds = datasetIdsForColumns(referencedColumnIds, datasets);
+// Restricts the planner hint to required datasets so it cannot add or remove a join.
+const orderDatasetIds = (requiredDatasetIds: EntityId[], joinOrder: readonly EntityId[] | undefined): EntityId[] =>
+  joinOrder === undefined
+    ? requiredDatasetIds
+    : [
+        ...joinOrder.filter((datasetId) => requiredDatasetIds.includes(datasetId)),
+        ...requiredDatasetIds.filter((datasetId) => !joinOrder.includes(datasetId)),
+      ];
 
-  // Restrict the hint to required datasets so it cannot add or remove a join.
-  const orderedDatasetIds =
-    joinOrder === undefined
-      ? requiredDatasetIds
-      : [
-          ...joinOrder.filter((datasetId) => requiredDatasetIds.includes(datasetId)),
-          ...requiredDatasetIds.filter((datasetId) => !joinOrder.includes(datasetId)),
-        ];
+// Projects the anchor's own columns, used when the query names no dimension, measure, or distribution.
+const projectAnchorColumns = (
+  anchor: QueryDataset,
+  unjoined: boolean,
+  select: string[],
+  resultColumns: ResultColumn[],
+): void => {
+  for (const column of anchor.columns) {
+    select.push(
+      unjoined
+        ? quoteIdentifier(column.physicalName)
+        : `${quoteIdentifier(joinAlias(0))}.${quoteIdentifier(column.physicalName)}`,
+    );
+    resultColumns.push({ key: column.id, name: column.name, logicalType: column.logicalType });
+  }
+};
 
-  const plan = resolveJoinPath(anchor.id, orderedDatasetIds, relationships, query.relationshipIds);
+// Compiles each filter into a parenthesized predicate, keeping placeholders in emitted order.
+const buildWhereClause = (
+  filters: AnalysisQuery['filters'],
+  resolve: ColumnReferenceResolver,
+): Result<{ clauses: string[]; parameters: unknown[] }, DomainError> => {
+  const clauses: string[] = [];
+  const parameters: unknown[] = [];
 
-  if (!plan.ok) return plan;
+  for (const filter of filters) {
+    const compiled = compileFilterExpression(filter, resolve);
+    if (!compiled.ok) {
+      return compiled;
+    }
+    clauses.push(`(${compiled.value.sql})`);
+    parameters.push(...compiled.value.parameters);
+  }
 
-  const from = buildFromClause(plan.value, datasets);
+  return ok({ clauses, parameters });
+};
 
-  if (!from.ok) return from;
+/*
+ * The date spine projects exactly one measure over its own generated period axis, so it cannot carry
+ * additional measures, grouping dimensions, or a distribution summary. Those combinations are rejected
+ * instead of returning a result that silently omits what the caller asked for.
+ */
+const checkTimeComparisonCombination = (query: AnalysisQuery): Result<void, DomainError> => {
+  const binnedDimensions = (query.binnedDimensions ?? []).length;
 
-  const { resolve } = from.value;
+  if (
+    query.measures.length > 1 ||
+    query.dimensions.length > 0 ||
+    binnedDimensions > 0 ||
+    query.distribution !== undefined
+  ) {
+    return err(
+      domainError(
+        'UNSUPPORTED_OPERATION',
+        'A time comparison produces its own period axis, so it cannot be combined with other measures, dimensions, or a distribution.',
+        {
+          measures: query.measures.length,
+          dimensions: query.dimensions.length,
+          binnedDimensions,
+          distribution: query.distribution !== undefined,
+        },
+      ),
+    );
+  }
 
-  const select: string[] = [];
-  // Use SELECT positions in GROUP BY so parameterized expressions are not emitted twice.
-  const groupBy: string[] = [];
-  const resultColumns: ResultColumn[] = [];
+  return ok(undefined);
+};
+
+// Builds the ORDER BY terms, which sort either by a resolved column or by a projected measure alias.
+const buildOrderBy = (
+  sorts: NonNullable<AnalysisQuery['orderBy']>,
+  resolve: ColumnReferenceResolver,
+  measureAliases: ReadonlyMap<string, string>,
+): Result<string[], DomainError> => {
+  const orderBy: string[] = [];
+
+  for (const sort of sorts) {
+    if (sort.columnId !== undefined) {
+      const resolved = resolve(sort.columnId);
+      if (resolved === undefined) {
+        return err(missingColumn(sort.columnId));
+      }
+      orderBy.push(`${resolved.sql} ${sort.direction.toUpperCase()}`);
+    } else if (sort.measureAlias !== undefined && measureAliases.has(sort.measureAlias)) {
+      orderBy.push(
+        `${quoteIdentifier(measureAliases.get(sort.measureAlias) as string)} ${sort.direction.toUpperCase()}`,
+      );
+    } else {
+      return err(domainError('COLUMN_NOT_FOUND', 'The query sort target does not exist.'));
+    }
+  }
+
+  return ok(orderBy);
+};
+
+// A quantile bin computed per row in a subquery, then grouped by the outer query.
+interface QuantileBin {
+  sql: string;
+  alias: string;
+  parameters: unknown[];
+}
+
+// The SELECT list and its companion clauses, accumulated as dimensions and measures are projected.
+interface Projection {
+  select: string[];
+  // SELECT positions rather than expressions, so parameterized expressions are not emitted twice.
+  groupBy: string[];
+  resultColumns: ResultColumn[];
+  // Dimension parameters come first because their placeholders appear in SELECT.
+  dimensionParameters: unknown[];
+  quantileBins: QuantileBin[];
+  measureAliases: Map<string, string>;
+  // Base aggregates kept per measure so the time-spine branch can rebind them.
+  aggregateByMeasure: Map<AnalysisQuery['measures'][number], { sql: string; parameters: unknown[] }>;
+}
+
+// Builds the SELECT list for a query's dimensions, binned dimensions, measures, and distribution.
+const buildProjection = (
+  query: AnalysisQuery,
+  resolve: ColumnReferenceResolver,
+  derivedColumns: Record<EntityId, DerivedColumn>,
+): Result<Projection, DomainError> => {
+  const projection: Projection = {
+    select: [],
+    groupBy: [],
+    resultColumns: [],
+    dimensionParameters: [],
+    quantileBins: [],
+    measureAliases: new Map(),
+    aggregateByMeasure: new Map(),
+  };
+  const { select, groupBy, resultColumns, dimensionParameters, quantileBins } = projection;
+  const derivedContext = { resolve, derivedColumns };
+
   // Records the SELECT position used by GROUP BY.
   const groupBySelectPosition = (): void => {
     groupBy.push(`${select.length}`);
   };
 
-  // Dimension parameters come first because their placeholders appear in SELECT.
-  const dimensionParameters: unknown[] = [];
-  const derivedContext = { resolve, derivedColumns };
-  // Window-function bins computed per row in a subquery, then grouped by the outer query.
-  const quantileBins: { sql: string; alias: string; parameters: unknown[] }[] = [];
-
-  for (const columnId of query.dimensions) {
+  // Projects a plain dimension, following a derived reference to its compiled expression.
+  const projectDimension = (columnId: EntityId): Result<void, DomainError> => {
     const derived = derivedColumns[columnId];
 
     if (derived !== undefined) {
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
-      if (!compiled.ok) return compiled;
+      if (!compiled.ok) {
+        return compiled;
+      }
       select.push(compiled.value.sql);
       groupBySelectPosition();
       dimensionParameters.push(...compiled.value.parameters);
       resultColumns.push({ key: derived.id, name: derived.name, logicalType: derived.logicalType });
-      continue;
+      return ok(undefined);
     }
 
     const resolved = resolve(columnId);
-    if (resolved === undefined) return err(missingColumn(columnId));
+    if (resolved === undefined) {
+      return err(missingColumn(columnId));
+    }
     select.push(resolved.sql);
     groupBySelectPosition();
     resultColumns.push({
@@ -227,20 +352,28 @@ export const compileAnalysisQuery = (
       name: resolved.column.name,
       logicalType: resolved.column.logicalType,
     });
-  }
 
-  for (const bin of query.binnedDimensions ?? []) {
+    return ok(undefined);
+  };
+
+  /*
+   * Projects a binned dimension. A quantile bin compiles to `NTILE(...) OVER (...)`; SQL forbids a
+   * window function in GROUP BY and forbids mixing one with an aggregate over the same level, so the
+   * bucket is computed per row in a subquery and the outer query groups by the resulting column.
+   */
+  const projectBinnedDimension = (
+    bin: NonNullable<AnalysisQuery['binnedDimensions']>[number],
+  ): Result<void, DomainError> => {
     const resolved = resolve(bin.columnId);
-    if (resolved === undefined) return err(missingColumn(bin.columnId));
+    if (resolved === undefined) {
+      return err(missingColumn(bin.columnId));
+    }
 
     const compiled = compileBinStrategy(bin.strategy, resolved.sql, bin.range);
-    if (!compiled.ok) return compiled;
+    if (!compiled.ok) {
+      return compiled;
+    }
 
-    /*
-     * A quantile bin compiles to `NTILE(...) OVER (...)`. SQL forbids a window function in GROUP BY
-     * and forbids mixing one with an aggregate over the same level, so the bucket is computed per row
-     * in a subquery and the outer query groups by the resulting column.
-     */
     if (bin.strategy.kind === 'quantile') {
       const alias = `bin${quantileBins.length}`;
 
@@ -258,63 +391,106 @@ export const compileAnalysisQuery = (
       name: resolved.column.name,
       logicalType: bin.strategy.kind === 'temporal' ? resolved.column.logicalType : 'number',
     });
-  }
 
-  const measureAliases = new Map<string, string>();
-  for (const [index, measure] of query.measures.entries()) {
+    return ok(undefined);
+  };
+
+  // Resolves the column a measure aggregates over, which may be physical, derived, or absent.
+  const measureTarget = (
+    measure: AnalysisQuery['measures'][number],
+  ): Result<{ reference?: string; column?: Column; parameters: unknown[] }, DomainError> => {
     const derived = measure.columnId === undefined ? undefined : derivedColumns[measure.columnId];
-    let reference: string | undefined;
-    let column: Column | undefined;
 
     if (derived !== undefined) {
       const compiled = compileDerivedExpression(derived.expression, derivedContext);
-      if (!compiled.ok) return compiled;
-      reference = compiled.value.sql;
-      dimensionParameters.push(...compiled.value.parameters);
-      // Preserve the derived type so aggregate validation matches physical columns.
-      column = {
-        id: derived.id,
-        name: derived.name,
-        physicalName: '',
-        databaseType: '',
-        logicalType: derived.logicalType,
-        nullable: true,
-      };
-    } else if (measure.columnId !== undefined) {
-      const resolved = resolve(measure.columnId);
-      if (resolved === undefined) return err(missingColumn(measure.columnId));
-      reference = resolved.sql;
-      column = resolved.column;
+      if (!compiled.ok) {
+        return compiled;
+      }
+
+      return ok({
+        reference: compiled.value.sql,
+        // Preserve the derived type so aggregate validation matches physical columns.
+        column: {
+          id: derived.id,
+          name: derived.name,
+          physicalName: '',
+          databaseType: '',
+          logicalType: derived.logicalType,
+          nullable: true,
+        },
+        parameters: compiled.value.parameters,
+      });
     }
 
-    const aggregate = compileAggregate(measure.aggregate, column, reference);
-    if (!aggregate.ok) return aggregate;
+    if (measure.columnId === undefined) {
+      return ok({ parameters: [] });
+    }
 
-    const modified = compileMetricModifier(measure.modifier, aggregate.value, resolve);
-    if (!modified.ok) return modified;
+    const resolved = resolve(measure.columnId);
+    if (resolved === undefined) {
+      return err(missingColumn(measure.columnId));
+    }
+
+    return ok({ reference: resolved.sql, column: resolved.column, parameters: [] });
+  };
+
+  const projectMeasure = (measure: AnalysisQuery['measures'][number], index: number): Result<void, DomainError> => {
+    const target = measureTarget(measure);
+    if (!target.ok) {
+      return target;
+    }
+
+    // Placeholders embedded in this measure's aggregate; the time-spine branch rebinds them.
+    const aggregateParameters = target.value.parameters;
+    dimensionParameters.push(...aggregateParameters);
+
+    const aggregate = compileAggregate(measure.aggregate, target.value.column, target.value.reference);
+    if (!aggregate.ok) {
+      return aggregate;
+    }
+    projection.aggregateByMeasure.set(measure, { sql: aggregate.value, parameters: aggregateParameters });
+
+    // Time comparisons replace the query with a date spine below, so retain the base aggregate here.
+    const modified =
+      measure.modifier?.kind === 'timeComparison'
+        ? ok({ sql: aggregate.value, parameters: [] })
+        : compileMetricModifier(measure.modifier, aggregate.value, resolve);
+    if (!modified.ok) {
+      return modified;
+    }
 
     const alias = `m${index}`;
     select.push(`${modified.value.sql} AS ${quoteIdentifier(alias)}`);
     dimensionParameters.push(...modified.value.parameters);
-    if (measure.alias !== undefined) measureAliases.set(measure.alias, alias);
+    if (measure.alias !== undefined) {
+      projection.measureAliases.set(measure.alias, alias);
+    }
     resultColumns.push({
       key: measure.alias ?? alias,
       name: measure.alias ?? measure.aggregate,
       logicalType: 'number',
     });
-  }
+
+    return ok(undefined);
+  };
 
   // Box plots return the five-number summary consumed by ECharts.
-  if (query.distribution !== undefined) {
-    const target = resolve(query.distribution.columnId);
-    if (target === undefined) return err(missingColumn(query.distribution.columnId));
+  const projectDistribution = (distribution: NonNullable<AnalysisQuery['distribution']>): Result<void, DomainError> => {
+    const target = resolve(distribution.columnId);
+    if (target === undefined) {
+      return err(missingColumn(distribution.columnId));
+    }
 
-    if (query.distribution.categoryColumnId !== undefined) {
-      const category = resolve(query.distribution.categoryColumnId);
-      if (category === undefined) return err(missingColumn(query.distribution.categoryColumnId));
+    if (distribution.categoryColumnId !== undefined) {
+      const category = resolve(distribution.categoryColumnId);
+      if (category === undefined) {
+        return err(missingColumn(distribution.categoryColumnId));
+      }
       select.unshift(category.sql);
       // The category shifts existing SELECT positions by one.
-      for (const [index, position] of groupBy.entries()) groupBy[index] = `${Number(position) + 1}`;
+      for (const [index, position] of groupBy.entries()) {
+        groupBy[index] = `${Number(position) + 1}`;
+      }
       groupBy.unshift('1');
       resultColumns.unshift({
         key: category.column.id,
@@ -336,50 +512,148 @@ export const compileAnalysisQuery = (
       select.push(`${expression} AS ${quoteIdentifier(key)}`);
       resultColumns.push({ key, name: key, logicalType: 'number' });
     }
-  }
 
-  if (select.length === 0) {
-    // A bare projection selects only the anchor's columns.
-    for (const column of anchor.columns) {
-      const resolved = resolve(column.id);
-      if (resolved === undefined) return err(missingColumn(column.id));
-      select.push(resolved.sql);
-      resultColumns.push({ key: column.id, name: column.name, logicalType: column.logicalType });
+    return ok(undefined);
+  };
+
+  for (const columnId of query.dimensions) {
+    const projected = projectDimension(columnId);
+    if (!projected.ok) {
+      return projected;
     }
   }
 
-  const whereParameters: unknown[] = [];
-  const where: string[] = [];
-  for (const filter of query.filters) {
-    const compiled = compileFilterExpression(filter, resolve);
-    if (!compiled.ok) return compiled;
-    where.push(`(${compiled.value.sql})`);
-    whereParameters.push(...compiled.value.parameters);
+  for (const bin of query.binnedDimensions ?? []) {
+    const projected = projectBinnedDimension(bin);
+    if (!projected.ok) {
+      return projected;
+    }
   }
+
+  for (const [index, measure] of query.measures.entries()) {
+    const projected = projectMeasure(measure, index);
+    if (!projected.ok) {
+      return projected;
+    }
+  }
+
+  if (query.distribution !== undefined) {
+    const projected = projectDistribution(query.distribution);
+    if (!projected.ok) {
+      return projected;
+    }
+  }
+
+  return ok(projection);
+};
+
+// Bounds the requested row limit to the compiler's maximum.
+const boundedLimit = (requested: number | undefined): number =>
+  Math.min(Math.max(Math.trunc(requested ?? DEFAULT_QUERY_LIMIT), 1), MAX_QUERY_LIMIT);
+
+/*
+ * Chooses the FROM source. A quantile bin needs its window function evaluated per row before the
+ * outer query aggregates it, so the subquery applies the filters and computes the bucket, and the
+ * outer query reads it by alias. Parameter order follows the emitted text: the subquery's bin and
+ * filter placeholders bind before the outer SELECT's remaining dimension placeholders.
+ */
+const buildSource = (
+  from: string,
+  where: string[],
+  whereParameters: unknown[],
+  projection: Projection,
+): { sql: string; parameters: unknown[]; where: string[] } => {
+  const { quantileBins, dimensionParameters } = projection;
+
+  if (quantileBins.length === 0) {
+    return { sql: from, parameters: [...dimensionParameters, ...whereParameters], where };
+  }
+
+  const binProjection = quantileBins.map((bin) => `${bin.sql} AS ${quoteIdentifier(bin.alias)}`).join(', ');
+  const whereClause = where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`;
+
+  return {
+    sql: `(SELECT *, ${binProjection} FROM ${from}${whereClause})`,
+    parameters: [...quantileBins.flatMap((bin) => bin.parameters), ...whereParameters, ...dimensionParameters],
+    // Filters are applied inside the subquery, so the outer query must not repeat them.
+    where: [],
+  };
+};
+
+// Compiles an `AnalysisQuery` to parameterized SQL.
+export const compileAnalysisQuery = (
+  query: AnalysisQuery,
+  context: QueryDataset | QueryContext,
+): Result<CompiledQuery, DomainError> => {
+  const { datasets, relationships = [], derivedColumns = {}, joinOrder } = normalizeContext(context);
+  const anchor = datasets.find((candidate) => candidate.id === query.datasetId);
+
+  if (anchor === undefined) {
+    return err(domainError('DATASET_NOT_FOUND', 'The query does not target the resolved dataset.'));
+  }
+
+  const requiredDatasetIds = datasetIdsForColumns(referencedColumnIds(query, derivedColumns), datasets);
+  const orderedDatasetIds = orderDatasetIds(requiredDatasetIds, joinOrder);
+
+  const plan = resolveJoinPath(anchor.id, orderedDatasetIds, relationships, query.relationshipIds);
+
+  if (!plan.ok) {
+    return plan;
+  }
+
+  const from = buildFromClause(plan.value, datasets, anchor);
+
+  if (!from.ok) {
+    return from;
+  }
+
+  const { resolve } = from.value;
+
+  const projected = buildProjection(query, resolve, derivedColumns);
+
+  if (!projected.ok) {
+    return projected;
+  }
+
+  const { select, groupBy, resultColumns, measureAliases, aggregateByMeasure } = projected.value;
+
+  if (select.length === 0) {
+    projectAnchorColumns(anchor, plan.value.steps.length === 0, select, resultColumns);
+  }
+
+  const compiledWhere = buildWhereClause(query.filters, resolve);
+
+  if (!compiledWhere.ok) {
+    return compiledWhere;
+  }
+
+  const { clauses: where, parameters: whereParameters } = compiledWhere.value;
 
   // Time comparisons replace the ordinary SELECT with a generated date-spine query.
   const comparison = query.measures.find((measure) => measure.modifier?.kind === 'timeComparison');
 
   if (comparison !== undefined) {
-    const resolved = comparison.columnId === undefined ? undefined : resolve(comparison.columnId);
+    const combinable = checkTimeComparisonCombination(query);
 
-    if (comparison.columnId !== undefined && resolved === undefined) return err(missingColumn(comparison.columnId));
+    if (!combinable.ok) {
+      return combinable;
+    }
 
-    const aggregate = compileAggregate(comparison.aggregate, resolved?.column, resolved?.sql);
-
-    if (!aggregate.ok) return aggregate;
-
+    const compiledAggregate = aggregateByMeasure.get(comparison) as { sql: string; parameters: unknown[] };
     const spine = compileTimeSpine({
       modifier: comparison.modifier as Extract<NonNullable<typeof comparison.modifier>, { kind: 'timeComparison' }>,
-      aggregate: aggregate.value,
+      aggregate: compiledAggregate.sql,
+      aggregateParameters: compiledAggregate.parameters,
       from: from.value.sql,
       where: where.join(' AND '),
       whereParameters,
       resolve,
-      limit: Math.min(Math.max(Math.trunc(query.limit ?? DEFAULT_QUERY_LIMIT), 1), MAX_QUERY_LIMIT),
+      limit: boundedLimit(query.limit),
     });
 
-    if (!spine.ok) return spine;
+    if (!spine.ok) {
+      return spine;
+    }
 
     return ok({
       sql: spine.value.sql,
@@ -394,42 +668,17 @@ export const compileAnalysisQuery = (
     });
   }
 
-  const orderBy: string[] = [];
-  for (const sort of query.orderBy ?? []) {
-    if (sort.columnId !== undefined) {
-      const resolved = resolve(sort.columnId);
-      if (resolved === undefined) return err(missingColumn(sort.columnId));
-      orderBy.push(`${resolved.sql} ${sort.direction.toUpperCase()}`);
-    } else if (sort.measureAlias !== undefined && measureAliases.has(sort.measureAlias)) {
-      orderBy.push(
-        `${quoteIdentifier(measureAliases.get(sort.measureAlias) as string)} ${sort.direction.toUpperCase()}`,
-      );
-    } else {
-      return err(domainError('COLUMN_NOT_FOUND', 'The query sort target does not exist.'));
-    }
+  const orderByClauses = buildOrderBy(query.orderBy ?? [], resolve, measureAliases);
+
+  if (!orderByClauses.ok) {
+    return orderByClauses;
   }
 
-  const requestedLimit = query.limit ?? DEFAULT_QUERY_LIMIT;
-  const limit = Math.min(Math.max(Math.trunc(requestedLimit), 1), MAX_QUERY_LIMIT);
-  const offset = Math.max(Math.trunc(query.offset ?? 0), 0);
+  const orderBy = orderByClauses.value;
 
-  /*
-   * A quantile bin needs its window function evaluated per row before the outer query aggregates it.
-   * The subquery applies the filters so the buckets are computed over the filtered rows only, and the
-   * outer query reads the bucket by alias. Parameter order follows the emitted text: the subquery's
-   * bin and filter placeholders bind before the outer SELECT's remaining dimension placeholders.
-   */
-  const source =
-    quantileBins.length === 0
-      ? { sql: from.value.sql, parameters: [...dimensionParameters, ...whereParameters], where }
-      : {
-          sql: `(SELECT *, ${quantileBins
-            .map((bin) => `${bin.sql} AS ${quoteIdentifier(bin.alias)}`)
-            .join(', ')} FROM ${from.value.sql}${where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`})`,
-          parameters: [...quantileBins.flatMap((bin) => bin.parameters), ...whereParameters, ...dimensionParameters],
-          // Filters are applied inside the subquery, so the outer query must not repeat them.
-          where: [] as string[],
-        };
+  const limit = boundedLimit(query.limit);
+  const offset = Math.max(Math.trunc(query.offset ?? 0), 0);
+  const source = buildSource(from.value.sql, where, whereParameters, projected.value);
 
   const sql = [
     `SELECT ${select.join(', ')} FROM ${source.sql}`,
@@ -455,8 +704,12 @@ export const compileAnalysisQuery = (
 
 // Collects column IDs named by a filter tree.
 function collectFilterColumnIds(expression: AnalysisQuery['filters'][number]): EntityId[] {
-  if (expression.kind === 'comparison') return [expression.columnId];
-  if (expression.kind === 'not') return collectFilterColumnIds(expression.operand);
+  if (expression.kind === 'comparison') {
+    return [expression.columnId];
+  }
+  if (expression.kind === 'not') {
+    return collectFilterColumnIds(expression.operand);
+  }
 
   return expression.operands.flatMap(collectFilterColumnIds);
 }

@@ -7,7 +7,9 @@ interface ActionErrorBannerProps {
 
 // Shows a rejected action's stable code and message.
 export const ActionErrorBanner = ({ error, onDismiss }: ActionErrorBannerProps): React.JSX.Element | null => {
-  if (error === null) return null;
+  if (error === null) {
+    return null;
+  }
 
   return (
     <div className="action-error" role="alert">

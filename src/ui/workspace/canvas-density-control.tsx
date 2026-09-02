@@ -30,7 +30,7 @@ export const CanvasDensityControl = ({ onError }: CanvasDensityControlProps): Re
     <section className="density">
       <h2 className="workspace__panel-heading">Canvas density</h2>
 
-      <div className="density__options" role="group" aria-label="Canvas density">
+      <fieldset className="density__options" aria-label="Canvas density">
         {DENSITY_PRESETS.map((preset) => (
           <button
             key={preset.columns}
@@ -42,7 +42,7 @@ export const CanvasDensityControl = ({ onError }: CanvasDensityControlProps): Re
             {preset.label}
           </button>
         ))}
-      </div>
+      </fieldset>
 
       <p className="density__value">
         {columns} columns, range {MIN_LAYOUT_COLUMNS} to {MAX_LAYOUT_COLUMNS}

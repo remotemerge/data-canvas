@@ -1,4 +1,5 @@
 import { validateBinStrategy } from '@/application/validation/validate-bin-strategy.ts';
+import type { BinStrategy } from '@/domain/analysis/bin-strategy.ts';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import { isNumericType, isTemporalType, isTextType } from '@/domain/logical-type.ts';
 import type { VisualBinding, VisualizationKind } from '@/domain/visualization/visualization.ts';
@@ -42,7 +43,9 @@ const resolveBoundColumns = (
   const resolved = new Map<EntityId, Column>();
 
   for (const columnId of referenced) {
-    if (resolved.has(columnId)) continue;
+    if (resolved.has(columnId)) {
+      continue;
+    }
 
     const fromRelated = related.flatMap((candidate) => candidate.columns).find((column) => column.id === columnId);
 
@@ -54,7 +57,9 @@ const resolveBoundColumns = (
     // Check the anchor last so errors name the dataset the caller selected.
     const column = resolveColumn(dataset, columnId);
 
-    if (!column.ok) return column;
+    if (!column.ok) {
+      return column;
+    }
 
     resolved.set(columnId, column.value);
   }
@@ -71,7 +76,9 @@ const validateMeasures = (
 ): Result<void, DomainError> => {
   const measures = measureIds(binding);
 
-  if (measures.length === 0) return err(missingChannel(kind, 'y', 'at least one measure'));
+  if (measures.length === 0) {
+    return err(missingChannel(kind, 'y', 'at least one measure'));
+  }
 
   if (measures.length > MAX_BOUND_MEASURES) {
     return err(
@@ -98,7 +105,9 @@ const validateSeriesKind = (
   binding: VisualBinding,
   columns: Map<EntityId, Column>,
 ): Result<void, DomainError> => {
-  if (binding.x === undefined) return err(missingChannel(kind, 'x', 'an x dimension'));
+  if (binding.x === undefined) {
+    return err(missingChannel(kind, 'x', 'an x dimension'));
+  }
 
   const x = columns.get(binding.x);
 
@@ -111,7 +120,9 @@ const validateSeriesKind = (
 };
 
 const validateScatter = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
-  if (binding.x === undefined) return err(missingChannel('scatter', 'x', 'numeric x and y'));
+  if (binding.x === undefined) {
+    return err(missingChannel('scatter', 'x', 'numeric x and y'));
+  }
 
   const x = columns.get(binding.x);
 
@@ -139,7 +150,9 @@ const validateScatter = (binding: VisualBinding, columns: Map<EntityId, Column>)
 };
 
 const validateDonut = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
-  if (binding.x === undefined) return err(missingChannel('donut', 'x', 'one category dimension and one measure'));
+  if (binding.x === undefined) {
+    return err(missingChannel('donut', 'x', 'one category dimension and one measure'));
+  }
 
   const dimension = columns.get(binding.x);
 
@@ -223,7 +236,9 @@ const validateHistogram = (binding: VisualBinding, columns: Map<EntityId, Column
 
   const strategy = validateBinStrategy(binding.binX);
 
-  if (!strategy.ok) return strategy;
+  if (!strategy.ok) {
+    return strategy;
+  }
 
   // Reject temporal strategies on numeric columns and numeric strategies on temporal columns.
   if (column !== undefined) {
@@ -278,8 +293,12 @@ const validateBoxplot = (binding: VisualBinding, columns: Map<EntityId, Column>)
 
 // Validates a heatmap binding with two axes and one measure.
 const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>): Result<void, DomainError> => {
-  if (binding.x === undefined) return err(missingChannel('heatmap', 'x', 'two dimensions and one measure'));
-  if (binding.series === undefined) return err(missingChannel('heatmap', 'series', 'two dimensions and one measure'));
+  if (binding.x === undefined) {
+    return err(missingChannel('heatmap', 'x', 'two dimensions and one measure'));
+  }
+  if (binding.series === undefined) {
+    return err(missingChannel('heatmap', 'series', 'two dimensions and one measure'));
+  }
 
   const measures = measureIds(binding);
 
@@ -299,30 +318,51 @@ const validateHeatmap = (binding: VisualBinding, columns: Map<EntityId, Column>)
     return err(wrongType('heatmap', 'y', measure, 'a numeric measure'));
   }
 
-  for (const [channel, strategy] of [
-    ['binX', binding.binX],
-    ['binSeries', binding.binSeries],
+  for (const [channel, strategy, columnId] of [
+    ['binX', binding.binX, binding.x],
+    ['binSeries', binding.binSeries, binding.series],
   ] as const) {
-    if (strategy === undefined) continue;
+    const validated = validateHeatmapBin(channel, strategy, columnId, columns);
 
-    const validated = validateBinStrategy(strategy);
-
-    if (!validated.ok) return validated;
-
-    const columnId = channel === 'binX' ? binding.x : binding.series;
-    const column = columnId === undefined ? undefined : columns.get(columnId);
-
-    if (column === undefined) continue;
-
-    const temporalStrategy = strategy.kind === 'temporal';
-
-    if (temporalStrategy && !isTemporalType(column.logicalType)) {
-      return err(wrongType('heatmap', channel, column, 'a temporal column for temporal binning'));
+    if (!validated.ok) {
+      return validated;
     }
+  }
 
-    if (!temporalStrategy && !isNumericType(column.logicalType)) {
-      return err(wrongType('heatmap', channel, column, 'a numeric column for numeric binning'));
-    }
+  return ok(undefined);
+};
+
+// Checks one heatmap bin channel against the column it buckets.
+const validateHeatmapBin = (
+  channel: 'binX' | 'binSeries',
+  strategy: BinStrategy | undefined,
+  columnId: EntityId,
+  columns: Map<EntityId, Column>,
+): Result<void, DomainError> => {
+  if (strategy === undefined) {
+    return ok(undefined);
+  }
+
+  const validated = validateBinStrategy(strategy);
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  /*
+   * Both heatmap axes are required above and `resolveBoundColumns` rejects any binding naming a
+   * column the dataset does not have, so every bound id resolves by this point.
+   */
+  const column = columns.get(columnId)!;
+
+  const temporalStrategy = strategy.kind === 'temporal';
+
+  if (temporalStrategy && !isTemporalType(column.logicalType)) {
+    return err(wrongType('heatmap', channel, column, 'a temporal column for temporal binning'));
+  }
+
+  if (!temporalStrategy && !isNumericType(column.logicalType)) {
+    return err(wrongType('heatmap', channel, column, 'a numeric column for numeric binning'));
   }
 
   return ok(undefined);
@@ -337,7 +377,9 @@ export const validateVisualization = (
 ): Result<void, DomainError> => {
   const columns = resolveBoundColumns(dataset, binding, related);
 
-  if (!columns.ok) return columns;
+  if (!columns.ok) {
+    return columns;
+  }
 
   switch (kind) {
     case 'line':

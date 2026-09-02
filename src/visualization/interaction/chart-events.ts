@@ -12,9 +12,16 @@ export const categorySelectionFromClick = (
   event: ClickLikeEvent,
 ): FilterExpression | null => {
   const columnId = visualization.binding.x;
-  if (columnId === undefined) return null;
-  const row = Array.isArray(event.data) ? event.data : Array.isArray(event.value) ? event.value : null;
-  if (row === null) return null;
+  if (columnId === undefined) {
+    return null;
+  }
+  // ECharts reports the clicked mark's row on `data` for most series and on `value` for the rest.
+  const rowCandidates = [event.data, event.value];
+  const row = rowCandidates.find((candidate) => Array.isArray(candidate)) ?? null;
+
+  if (row === null) {
+    return null;
+  }
   return { kind: 'comparison', columnId, operator: 'eq', value: row[0] };
 };
 
@@ -47,7 +54,9 @@ const compare = (operator: string, cell: unknown, value: unknown): boolean => {
     case 'lte':
       return Number(cell) <= Number(value);
     case 'between': {
-      if (!Array.isArray(value) || value.length < 2) return false;
+      if (!Array.isArray(value) || value.length < 2) {
+        return false;
+      }
       const numeric = Number(cell);
 
       return numeric >= Number(value[0]) && numeric <= Number(value[1]);
@@ -77,7 +86,9 @@ export const rowMatchesPredicate = (
     case 'comparison': {
       const index = columnIndexById.get(predicate.columnId);
 
-      if (index === undefined) return true;
+      if (index === undefined) {
+        return true;
+      }
 
       return compare(predicate.operator, row[index], predicate.value);
     }
