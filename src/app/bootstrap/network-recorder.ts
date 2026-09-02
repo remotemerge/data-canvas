@@ -32,7 +32,8 @@ const bodyBytes = async (body: unknown): Promise<Uint8Array<ArrayBuffer> | strin
   if (body instanceof FormData) {
     const parts: string[] = [];
     for (const [key, value] of body) {
-      parts.push(`${key}=${typeof value === 'string' ? value : `file:${value.name}:${String(value.size)}`}`);
+      const encoded = typeof value === 'string' ? value : `file:${value.name}:${String(value.size)}`;
+      parts.push(`${key}=${encoded}`);
     }
     return new TextEncoder().encode(parts.join('&'));
   }
