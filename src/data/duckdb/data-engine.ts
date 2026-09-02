@@ -99,6 +99,37 @@ const statisticsMeasures = (columnId: EntityId, numeric: boolean, extrema: boole
 ];
 
 /*
+ * Resolves the profiled column, which may be physical or derived. A derived column has no physical
+ * counterpart, so it is described from its definition and only when it belongs to the target dataset.
+ */
+const resolveStatisticsColumn = (
+  relation: RelationEntry,
+  request: ColumnStatisticsRequest,
+  derivedColumns: Record<EntityId, DerivedColumn>,
+): Column | undefined => {
+  const physical = relation.columns.find((candidate) => candidate.id === request.columnId);
+
+  if (physical !== undefined) {
+    return physical;
+  }
+
+  const derived = derivedColumns[request.columnId];
+
+  if (derived?.datasetId !== request.datasetId) {
+    return undefined;
+  }
+
+  return {
+    id: derived.id,
+    name: derived.name,
+    physicalName: '',
+    databaseType: '',
+    logicalType: derived.logicalType,
+    nullable: true,
+  };
+};
+
+/*
  * DuckDB metadata columns are declared `unknown` because the driver returns untyped Arrow values.
  * Only genuine scalars have a faithful string form, so anything else falls back rather than
  * stringifying to `[object Object]`.
@@ -809,19 +840,7 @@ export const createDataEngine = (): DataEngine => {
       return err(domainError('DATASET_NOT_FOUND', 'That dataset has not been imported into this session.'));
     }
 
-    const derived = derivedColumnDefinitions[request.columnId];
-    const column =
-      relation.columns.find((candidate) => candidate.id === request.columnId) ??
-      (derived?.datasetId === request.datasetId
-        ? {
-            id: derived.id,
-            name: derived.name,
-            physicalName: '',
-            databaseType: '',
-            logicalType: derived.logicalType,
-            nullable: true,
-          }
-        : undefined);
+    const column = resolveStatisticsColumn(relation, request, derivedColumnDefinitions);
 
     if (column === undefined) {
       return err(domainError('COLUMN_NOT_FOUND', 'The statistics request references a column that does not exist.'));
