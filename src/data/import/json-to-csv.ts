@@ -112,15 +112,8 @@ const csvField = (value: unknown): string => {
   }
 
   // Nested objects and arrays are preserved as JSON text so the CSV keeps one field per column.
-  const fieldText = (): string => {
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-    return String(value as string | number | boolean);
-  };
+  const fieldText = (): string =>
+    typeof value === 'object' ? JSON.stringify(value) : String(value as string | number | boolean);
 
   return `"${fieldText().replaceAll('"', '""')}"`;
 };
