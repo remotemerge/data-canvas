@@ -305,6 +305,40 @@ describe('chart kind series builders', () => {
     expect(buildBoxplotSeries([[1, 2, 3, 4, 5]], 0)).toMatchObject({ categories: ['all'] });
   });
 
+  // A summary missing a value cannot be drawn, so the box is dropped rather than collapsed onto zero.
+  test('a boxplot drops a box whose summary is incomplete', () => {
+    const { series } = buildBoxplotSeries([['West', 1, 2, null, 4, 5]], 1);
+
+    expect((series[0] as { data: unknown[][] }).data).toEqual([[]]);
+  });
+
+  /*
+   * The compiler prepends the distribution category to the projection instead of adding it to
+   * `dimensions`, so an offset derived from `dimensions` alone read the category string as the box
+   * minimum and left every box unlabelled and undrawable.
+   */
+  test('a split boxplot offsets past the category the compiler prepends', () => {
+    const base = visualization('viz_box', 'ds_sales');
+    const option = buildEChartsOption(
+      {
+        ...base,
+        kind: 'boxplot',
+        binding: { x: 'col_region', y: ['col_revenue'] },
+        query: {
+          ...base.query,
+          dimensions: [],
+          measures: [],
+          distribution: { columnId: 'col_revenue', categoryColumnId: 'col_region' },
+        },
+      },
+      boxplotResult,
+      theme,
+    );
+
+    expect((option['xAxis'] as { data: string[] }).data).toEqual(['West']);
+    expect((option['series'] as { data: unknown[][] }[])[0]?.data).toEqual([[1, 2, 3, 4, 5]]);
+  });
+
   test('a heatmap derives its colour bounds from the cell values, treating null as zero', () => {
     expect(
       buildHeatmapSeries([

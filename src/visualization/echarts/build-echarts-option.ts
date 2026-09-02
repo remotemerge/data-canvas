@@ -152,7 +152,14 @@ export const buildEChartsOption = (
   }
   // Box plots and heatmaps map fixed row tuples positionally.
   if (visualization.kind === 'boxplot') {
-    const offset = visualization.query.dimensions.length;
+    /*
+     * The compiler prepends the distribution's category to the projection rather than adding it to
+     * `dimensions`, so the five-number summary starts one column later when a split is bound.
+     * Deriving the offset from `dimensions` alone reads the category string as the box minimum.
+     */
+    const offset =
+      visualization.query.dimensions.length +
+      (visualization.query.distribution?.categoryColumnId === undefined ? 0 : 1);
     const { series, categories } = buildBoxplotSeries(result.rows, offset);
 
     return {
