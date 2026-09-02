@@ -5,6 +5,7 @@ import {
   handleExtendSelection as rawHandleExtendSelection,
   handleSetSelection as rawHandleSetSelection,
   MAX_SELECTION_KEYS,
+  MAX_SELECTION_PREDICATE_DEPTH,
 } from '@/application/actions/handlers/selection-handlers.ts';
 import type { FilterExpression } from '@/domain/filter/filter.ts';
 import type { Workspace } from '@/domain/workspace/workspace.ts';
@@ -33,6 +34,10 @@ const failureCode = (result: Result<unknown, DomainError>): string => {
 
 const WEST: FilterExpression = { kind: 'comparison', columnId: 'col_region', operator: 'eq', value: 'West' };
 const EAST: FilterExpression = { kind: 'comparison', columnId: 'col_region', operator: 'eq', value: 'East' };
+
+// Wraps a valid comparison in `levels` nested `not` nodes, so only nesting depth can fail validation.
+const nestPredicate = (levels: number): FilterExpression =>
+  Array.from({ length: levels }).reduce<FilterExpression>((operand) => ({ kind: 'not', operand }), WEST);
 
 // A workspace whose sales dataset carries a two-key selection, plus that selection's id.
 const workspaceWithKeySelection = (): { workspace: Workspace; selectionId: string } => {
@@ -135,6 +140,55 @@ describe('selection predicate validation', () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  test('accepts a composed predicate whose operands are all well-typed', () => {
+    expect(
+      setSelection(workspaceWithDataset(), {
+        datasetId: 'ds_sales',
+        mode: 'predicate',
+        predicate: { kind: 'or', operands: [WEST, EAST] },
+        origin: 'agent',
+      }).ok,
+    ).toBe(true);
+  });
+
+  test('accepts a predicate nested to the depth limit', () => {
+    expect(
+      setSelection(workspaceWithDataset(), {
+        datasetId: 'ds_sales',
+        mode: 'predicate',
+        predicate: nestPredicate(MAX_SELECTION_PREDICATE_DEPTH),
+        origin: 'agent',
+      }).ok,
+    ).toBe(true);
+  });
+
+  // An unbounded predicate tree would let an agent drive validation and query compilation into deep recursion.
+  test('rejects a predicate nested past the depth limit', () => {
+    expect(
+      failureCode(
+        setSelection(workspaceWithDataset(), {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: nestPredicate(MAX_SELECTION_PREDICATE_DEPTH + 1),
+          origin: 'agent',
+        }),
+      ),
+    ).toBe('UNSUPPORTED_OPERATION');
+  });
+
+  test('rejects an over-nested predicate when extending an existing selection', () => {
+    expect(
+      failureCode(
+        extendSelection(workspaceWithPredicateSelection(), {
+          datasetId: 'ds_sales',
+          mode: 'predicate',
+          predicate: nestPredicate(MAX_SELECTION_PREDICATE_DEPTH + 1),
+          origin: 'agent',
+        }),
+      ),
+    ).toBe('UNSUPPORTED_OPERATION');
   });
 });
 
