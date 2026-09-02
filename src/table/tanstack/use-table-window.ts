@@ -21,7 +21,7 @@ export const useTableWindow = (
   sort: SortSpec[],
   selectionPredicate?: FilterExpression,
 ): TableWindowState => {
-  const [state, setWindowState] = useState<TableWindowState>({ window: null, loading: true, error: null });
+  const [windowState, setWindowState] = useState<TableWindowState>({ window: null, loading: true, error: null });
 
   // Derived columns leave dataset.revision unchanged, so include their IDs in the refetch key.
   const projectionKey = dataset.columns.map((column) => column.id).join(',');
@@ -76,5 +76,5 @@ export const useTableWindow = (
     selectionPredicate,
   ]);
 
-  return state;
+  return windowState;
 };

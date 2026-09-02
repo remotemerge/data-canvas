@@ -1,5 +1,9 @@
 import type { ChromeModelContext, ModelContext, RegisteredTool } from '@mcp-b/webmcp-types';
 
+/*
+ * `document.modelContext` is the standard surface. The deprecated `navigator.modelContext` is kept
+ * as a fallback because browsers that shipped the earlier placement still expose only that one.
+ */
 export const resolveModelContextHost = (): ModelContext | null =>
   document.modelContext ?? navigator.modelContext ?? null;
 

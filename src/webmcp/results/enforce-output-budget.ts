@@ -68,52 +68,50 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
   const isColumnObjects = Array.isArray(result['columns']);
   const columnCountKey = isColumnObjects ? 'columns' : 'columnIds';
 
-  if (Array.isArray(originalColumns) && Array.isArray(keptColumns) && Array.isArray(keptRows) && !preserveColumns) {
+  // Keep rows useful by narrowing a wide preview and trimming each row to the same projection.
+  const narrowColumns = (originals: unknown[], kept: unknown[], rows: unknown[][]): void => {
     const measured = (): number =>
       serializedLength({
         ...result,
-        [`${columnCountKey}Returned`]: keptColumns.length,
-        [`${columnCountKey}Total`]: result[`${columnCountKey}Total`] ?? originalColumns.length,
+        [`${columnCountKey}Returned`]: kept.length,
+        [`${columnCountKey}Total`]: result[`${columnCountKey}Total`] ?? originals.length,
         truncated: true,
       });
 
-    // Keep rows useful by narrowing a wide preview and trimming each row to the same projection.
-    while (keptColumns.length > 1 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
-      keptColumns.pop();
-      if (isColumnObjects && Array.isArray(keptColumnIds) && keptColumnIds.length > keptColumns.length) {
+    while (kept.length > 1 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
+      kept.pop();
+      if (isColumnObjects && Array.isArray(keptColumnIds) && keptColumnIds.length > kept.length) {
         keptColumnIds.pop();
       }
-      for (const row of keptRows) {
-        if (Array.isArray(row) && row.length > keptColumns.length) {
-          row.length = keptColumns.length;
+      for (const row of rows) {
+        if (Array.isArray(row) && row.length > kept.length) {
+          row.length = kept.length;
         }
       }
     }
 
-    if (keptColumns.length < originalColumns.length) {
-      result[`${columnCountKey}Returned`] = keptColumns.length;
-      result[`${columnCountKey}Total`] ??= originalColumns.length;
-
-      /*
-       * State the dropped columns in the summary. An agent reading only that line would otherwise
-       * treat a narrowed projection as the full one it requested. Applying it before the row-trim
-       * loop keeps the longer summary inside the budget the loop enforces.
-       */
-      columnNotice = `Returned ${keptColumns.length} of ${originalColumns.length} requested columns.`;
-      result['summary'] = typeof result['summary'] === 'string' ? `${result['summary']} ${columnNotice}` : columnNotice;
+    if (kept.length >= originals.length) {
+      return;
     }
+
+    result[`${columnCountKey}Returned`] = kept.length;
+    result[`${columnCountKey}Total`] ??= originals.length;
+
+    /*
+     * State the dropped columns in the summary. An agent reading only that line would otherwise
+     * treat a narrowed projection as the full one it requested. Applying it before the row-trim
+     * loop keeps the longer summary inside the budget the loop enforces.
+     */
+    columnNotice = `Returned ${kept.length} of ${originals.length} requested columns.`;
+    result['summary'] = typeof result['summary'] === 'string' ? `${result['summary']} ${columnNotice}` : columnNotice;
+  };
+
+  if (Array.isArray(originalColumns) && Array.isArray(keptColumns) && Array.isArray(keptRows) && !preserveColumns) {
+    narrowColumns(originalColumns, keptColumns, keptRows);
   }
 
-  // Trim trailing fields first so dataset identifiers remain available for follow-up tools.
-  for (
-    let index = lists.length - 1;
-    index >= 0 && serializedLength({ ...result, truncated: true }) > MAX_TOOL_OUTPUT_LENGTH;
-    index -= 1
-  ) {
-    const [key, original] = lists[index]!;
-    if ((PRESERVED_LIST_KEYS as readonly string[]).includes(key)) {
-      continue;
-    }
+  // Drops entries from one list until the payload fits, recording how many survived.
+  const trimList = (key: string, original: readonly unknown[]): void => {
     const kept = result[key] as unknown[];
 
     const originalTotal =
@@ -129,16 +127,33 @@ const trimToBudget = (parsed: ToolPayload): Record<string, unknown> => {
         [`${key}Total`]: originalTotal,
         truncated: true,
       });
+
     while (kept.length > 0 && measured() > MAX_TOOL_OUTPUT_LENGTH) {
       kept.pop();
     }
-    if (kept.length < original.length) {
-      result[`${key}Returned`] = kept.length;
-      result[`${key}Total`] = originalTotal;
-      if (key === 'rows' && typeof originalTotal === 'number') {
-        result['summary'] =
-          `Returned ${kept.length} of ${originalTotal} rows.${columnNotice === undefined ? '' : ` ${columnNotice}`}`;
-      }
+
+    if (kept.length >= original.length) {
+      return;
+    }
+
+    result[`${key}Returned`] = kept.length;
+    result[`${key}Total`] = originalTotal;
+
+    if (key === 'rows' && typeof originalTotal === 'number') {
+      const noticeSuffix = columnNotice === undefined ? '' : ` ${columnNotice}`;
+      result['summary'] = `Returned ${kept.length} of ${originalTotal} rows.${noticeSuffix}`;
+    }
+  };
+
+  // Trim trailing fields first so dataset identifiers remain available for follow-up tools.
+  for (
+    let index = lists.length - 1;
+    index >= 0 && serializedLength({ ...result, truncated: true }) > MAX_TOOL_OUTPUT_LENGTH;
+    index -= 1
+  ) {
+    const [key, original] = lists[index]!;
+    if (!(PRESERVED_LIST_KEYS as readonly string[]).includes(key)) {
+      trimList(key, original);
     }
   }
 

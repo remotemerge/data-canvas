@@ -4,6 +4,13 @@ import type { DataCanvasTool, ToolDependencies } from '@/webmcp/registry/tool-ty
 import { toolSchemas } from '@/webmcp/schemas/compile-schemas.ts';
 import { asInput, failure, success } from '@/webmcp/tools/tool-helpers.ts';
 
+// Normalizes the camelCase kind values that round-1 contracts accepted.
+const KIND_ALIAS: Readonly<Record<string, RelationshipKind>> = {
+  oneToOne: 'one_to_one',
+  oneToMany: 'one_to_many',
+  manyToOne: 'many_to_one',
+};
+
 // Creates a relationship from validated dataset and column IDs.
 export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvasTool => ({
   name: 'create_relationship',
@@ -16,16 +23,8 @@ export const createCreateRelationshipTool = (deps: ToolDependencies): DataCanvas
   minimumDatasets: 2,
   handler: async (raw) => {
     const input = asInput(raw);
-    // Normalize camelCase kind values that round-1 contracts accepted.
     const kindRaw = input.kind as string;
-    const kind: RelationshipKind =
-      kindRaw === 'oneToOne'
-        ? 'one_to_one'
-        : kindRaw === 'oneToMany'
-          ? 'one_to_many'
-          : kindRaw === 'manyToOne'
-            ? 'many_to_one'
-            : (kindRaw as RelationshipKind);
+    const kind: RelationshipKind = KIND_ALIAS[kindRaw] ?? (kindRaw as RelationshipKind);
     const payload: CreateRelationshipInput = {
       leftDatasetId: input.leftDatasetId as string,
       rightDatasetId: input.rightDatasetId as string,

@@ -44,9 +44,11 @@ export const createListRelationshipsTool = (deps: ToolDependencies): DataCanvasT
             .slice(0, MAX_LISTED_SUGGESTIONS)
         : [];
 
+    const suggestedSuffix = input.includeSuggestions === true ? `, ${suggestions.length} suggested` : '';
+
     return success({
       revision: workspace.revision,
-      summary: `${relationships.length} relationships defined${input.includeSuggestions === true ? `, ${suggestions.length} suggested` : ''}.`,
+      summary: `${relationships.length} relationships defined${suggestedSuffix}.`,
       // Names accompany the identifiers so identically sourced datasets stay distinguishable.
       relationships: relationships.map((relationship) => ({
         id: relationship.id,

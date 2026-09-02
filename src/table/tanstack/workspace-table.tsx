@@ -62,7 +62,7 @@ export const WorkspaceTable = ({ dataset }: { dataset: Dataset }): React.JSX.Ele
   });
   const virtualRows = virtualizer.getVirtualItems();
   const firstVisible = virtualRows[0]?.index ?? 0;
-  const lastVisible = virtualRows[virtualRows.length - 1]?.index ?? firstVisible;
+  const lastVisible = virtualRows.at(-1)?.index ?? firstVisible;
   // Fetch when either edge of the current window is close.
   const anchor = lastVisible + PREFETCH_MARGIN >= offset + WINDOW_SIZE ? lastVisible + PREFETCH_MARGIN : firstVisible;
   const wantedOffset = Math.max(Math.floor(anchor / WINDOW_SIZE) * WINDOW_SIZE, 0);

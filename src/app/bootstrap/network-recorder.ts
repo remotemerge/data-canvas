@@ -7,11 +7,49 @@ export interface RecordedRequest {
 
 const requests: RecordedRequest[] = [];
 
+/*
+ * Structured bodies (Blob, FormData, streams) have no useful string form: `String(body)` would
+ * collapse every one of them to `[object Object]` and hash distinct requests identically. Those are
+ * read as bytes instead, and anything unreadable is reported by constructor name rather than hashed.
+ */
+const bodyBytes = async (body: unknown): Promise<Uint8Array<ArrayBuffer> | string> => {
+  if (typeof body === 'string') {
+    return new TextEncoder().encode(body);
+  }
+  if (body instanceof Blob) {
+    return new Uint8Array(await body.arrayBuffer());
+  }
+  if (body instanceof ArrayBuffer) {
+    return new Uint8Array(body);
+  }
+  if (ArrayBuffer.isView(body)) {
+    // Copied because the view may be backed by a SharedArrayBuffer, which `digest` rejects.
+    return Uint8Array.from(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
+  }
+  if (body instanceof URLSearchParams) {
+    return new TextEncoder().encode(body.toString());
+  }
+  if (body instanceof FormData) {
+    const parts: string[] = [];
+    for (const [key, value] of body) {
+      parts.push(`${key}=${typeof value === 'string' ? value : `file:${value.name}:${String(value.size)}`}`);
+    }
+    return new TextEncoder().encode(parts.join('&'));
+  }
+  return `unhashable:${(body as object).constructor.name}`;
+};
+
 const hashBody = async (body: unknown): Promise<string | undefined> => {
   if (body === undefined || body === null) {
     return undefined;
   }
-  const bytes = new TextEncoder().encode(typeof body === 'string' ? body : String(body));
+
+  const bytes = await bodyBytes(body);
+
+  if (typeof bytes === 'string') {
+    return bytes;
+  }
+
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 };
@@ -38,7 +76,8 @@ export const installNetworkRecorder = (): (() => void) => {
       {
         transport: 'fetch',
         method: init?.method ?? request?.method ?? 'GET',
-        url: new URL(request?.url ?? String(input), window.location.href).href,
+        // `input` is narrowed to `string | URL` here; the `Request` form is read from `request`.
+        url: new URL(request?.url ?? (input as string | URL), window.location.href).href,
       },
       init?.body,
     );

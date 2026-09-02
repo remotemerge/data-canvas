@@ -115,9 +115,11 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
               }))
           : [];
 
+      const relatedSuffix = related.length === 0 ? '' : `, and is related to ${related.length} other datasets`;
+
       return success({
         revision: workspace.revision,
-        summary: `${dataset.name} has ${dataset.columns.length} columns and ${dataset.rowCount ?? 0} rows${related.length === 0 ? '' : `, and is related to ${related.length} other datasets`}.`,
+        summary: `${dataset.name} has ${dataset.columns.length} columns and ${dataset.rowCount ?? 0} rows${relatedSuffix}.`,
         datasetId: dataset.id,
         name: dataset.name,
         rowCount: dataset.rowCount,
@@ -235,9 +237,11 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       if (!result.ok) {
         return failure(result.error);
       }
+      const warningSuffix = result.value.warning === undefined ? '' : ` ${result.value.warning}`;
+
       return success({
         revision: deps.getWorkspace().revision,
-        summary: `Returned ${result.value.rows.length} aggregate rows.${result.value.warning === undefined ? '' : ` ${result.value.warning}`}`,
+        summary: `Returned ${result.value.rows.length} aggregate rows.${warningSuffix}`,
         columns: result.value.columns,
         rows: result.value.rows.map((row) => row.map(boundedCell)),
       });

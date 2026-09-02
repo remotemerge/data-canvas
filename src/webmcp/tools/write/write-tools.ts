@@ -100,6 +100,11 @@ const queryFrom = (
     };
   }
 
+  return groupedQuery(datasetId, input, binding);
+};
+
+// Builds the grouped query shared by every kind that aggregates measures over dimensions.
+const groupedQuery = (datasetId: string, input: ReturnType<typeof asInput>, binding: VisualBinding): AnalysisQuery => {
   const binned = [
     ...(binding.x === undefined || binding.binX === undefined ? [] : [{ columnId: binding.x, strategy: binding.binX }]),
     ...(binding.series === undefined || binding.binSeries === undefined
