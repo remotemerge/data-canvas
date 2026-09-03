@@ -16,5 +16,19 @@
       }
     }
   ],
-  "expected": { "tools": ["create_visualization"], "visualizations": 1 }
+  "expected": {
+    "expectedCall": [
+      {
+        "functionName": "create_visualization",
+        "arguments": {
+          "datasetId": "ds_sales",
+          "kind": "line",
+          "xColumnId": "col_date",
+          "yColumnIds": ["col_revenue"],
+          "groupByColumnId": "col_region"
+        }
+      }
+    ],
+    "visualizations": 1
+  }
 }

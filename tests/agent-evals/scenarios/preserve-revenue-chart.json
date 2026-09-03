@@ -16,5 +16,14 @@
       }
     }
   ],
-  "expected": { "tools": ["create_visualization"], "visualizations": 2, "preserveExisting": true }
+  "expected": {
+    "expectedCall": [
+      {
+        "functionName": "create_visualization",
+        "arguments": { "datasetId": "ds_sales", "aggregate": "avg" }
+      }
+    ],
+    "visualizations": 2,
+    "preserveExisting": true
+  }
 }
