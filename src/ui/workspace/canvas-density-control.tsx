@@ -1,15 +1,9 @@
 import { MAX_LAYOUT_COLUMNS, MIN_LAYOUT_COLUMNS } from '@/application/actions/handlers/layout-handlers.ts';
+import { CANVAS_DENSITIES } from '@/application/layout/canvas-density.ts';
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { selectLayoutColumns } from '@/state/selectors/workspace-selectors.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
-
-// Discrete canvas-density presets.
-const DENSITY_PRESETS: readonly { label: string; columns: number }[] = [
-  { label: 'Comfortable', columns: 6 },
-  { label: 'Balanced', columns: 12 },
-  { label: 'Compact', columns: 18 },
-] as const;
 
 interface CanvasDensityControlProps {
   onError: (error: DomainError | null) => void;
@@ -31,7 +25,7 @@ export const CanvasDensityControl = ({ onError }: CanvasDensityControlProps): Re
       <h2 className="workspace__panel-heading">Canvas density</h2>
 
       <fieldset className="density__options" aria-label="Canvas density">
-        {DENSITY_PRESETS.map((preset) => (
+        {CANVAS_DENSITIES.map((preset) => (
           <button
             key={preset.columns}
             type="button"

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { Column, Dataset } from '@/domain/dataset/dataset.ts';
 import type { LogicalType } from '@/domain/logical-type.ts';
 import type { VisualizationKind } from '@/domain/visualization/visualization.ts';
-import { AggregateField, DimensionField, MeasureField } from '@/ui/canvas/column-channel-fields.tsx';
+import { AggregateField, DimensionField, MeasureField, SeriesField } from '@/ui/canvas/column-channel-fields.tsx';
 import type { ScopedColumn } from '@/ui/canvas/visualization-form.ts';
 
 const column = (id: string, logicalType: LogicalType): Column => ({
@@ -45,6 +45,9 @@ const dimensionField = (kind: VisualizationKind, temporalBin = false): string =>
 
 const aggregateField = (kind: VisualizationKind): string =>
   renderToStaticMarkup(<AggregateField kind={kind} aggregate="sum" onAggregateChange={() => undefined} />);
+
+const seriesField = (kind: VisualizationKind, scoped: ScopedColumn[] = columns): string =>
+  renderToStaticMarkup(<SeriesField kind={kind} series="" onSeriesChange={() => undefined} columns={scoped} />);
 
 test('a KPI offers no dimension, measure stays available', () => {
   expect(dimensionField('kpi')).toBe('');
@@ -88,6 +91,23 @@ test('histograms and boxplots have no aggregate selector', () => {
   expect(aggregateField('bar')).toContain('Aggregate');
 });
 
+/*
+ * Only a heatmap grids two dimensions, so only a heatmap offers the second one. Showing the picker
+ * elsewhere would present a control whose value the binding discards.
+ */
+test('only a heatmap offers a series picker', () => {
+  expect(seriesField('heatmap')).toContain('Series');
+  expect(seriesField('heatmap')).toContain('region label');
+
+  for (const kind of ['bar', 'line', 'area', 'scatter', 'donut', 'kpi', 'histogram', 'boxplot'] as const) {
+    expect(seriesField(kind)).toBe('');
+  }
+});
+
+test('the series picker groups its columns by dataset', () => {
+  expect(seriesField('heatmap')).toContain('<optgroup label="sales dataset">');
+});
+
 test('column labels render as text, so dataset values cannot inject markup', () => {
   const hostile = dataset('x', [column('<img src=x onerror=alert(1)>', 'number')]);
   const markup = renderToStaticMarkup(
@@ -97,6 +117,18 @@ test('column labels render as text, so dataset values cannot inject markup', () 
       onYChange={() => undefined}
       columns={hostile.columns.map((item) => ({ column: item, dataset: hostile }))}
     />,
+  );
+
+  expect(markup).toContain('&lt;img');
+  expect(markup).not.toContain('<img');
+});
+
+// The series picker renders imported column names too, so it must escape them like every other field.
+test('the series picker escapes hostile column names', () => {
+  const hostile = dataset('x', [column('<img src=x onerror=alert(1)>', 'string')]);
+  const markup = seriesField(
+    'heatmap',
+    hostile.columns.map((item) => ({ column: item, dataset: hostile })),
   );
 
   expect(markup).toContain('&lt;img');

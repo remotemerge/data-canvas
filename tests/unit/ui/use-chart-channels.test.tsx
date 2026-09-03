@@ -52,12 +52,19 @@ const workspace: Workspace = {
  */
 const runHook = (
   dataset: Dataset | undefined,
-  channels: { kind: VisualizationKind; x: string; y: string; aggregate: AggregateFunction; binCount: number },
+  channels: {
+    kind: VisualizationKind;
+    x: string;
+    y: string;
+    series?: string;
+    aggregate: AggregateFunction;
+    binCount: number;
+  },
 ): ChartChannels => {
   let captured: ChartChannels | undefined;
 
   const Probe = (): null => {
-    captured = useChartChannels(workspace, dataset, channels);
+    captured = useChartChannels(workspace, dataset, { series: '', ...channels });
 
     return null;
   };
@@ -124,4 +131,49 @@ test('a valid bar chart validates and produces a matching binding', () => {
 
   expect(result.validation?.ok).toBe(true);
   expect(result.binding).toEqual({ x: 'region', y: ['sales'] });
+});
+
+/*
+ * A heatmap binding is invalid until both axes are bound. Validating each candidate with only `x`
+ * set rejected every column, so the dimension picker was empty and the kind could not be built by
+ * hand at all, while the equivalent WebMCP call succeeded.
+ */
+test('a heatmap offers columns for both of its axes', () => {
+  const result = runHook(sales, channels({ kind: 'heatmap', x: '', series: '' }));
+
+  expect(result.dimensionColumns.length).toBeGreaterThan(0);
+  expect(result.seriesColumns.length).toBeGreaterThan(0);
+});
+
+test('a heatmap binds its second axis to the series channel', () => {
+  const result = runHook(sales, channels({ kind: 'heatmap', x: 'region', series: 'ordered_at' }));
+
+  expect(result.validation?.ok).toBe(true);
+  expect(result.binding).toEqual({ x: 'region', series: 'ordered_at', y: ['sales'] });
+});
+
+// Offering the column already on x would let one axis be plotted against itself.
+test('a heatmap does not offer the x column as its series', () => {
+  const result = runHook(sales, channels({ kind: 'heatmap', x: 'region', series: '' }));
+
+  expect(result.seriesColumns.map((item) => item.column.id)).not.toContain('region');
+});
+
+/*
+ * Heatmap axes group as categories. Applying the day bucket that trend charts use would expand a
+ * temporal axis into one column per day.
+ */
+test('a temporal heatmap axis is not bucketed by day', () => {
+  const result = runHook(sales, channels({ kind: 'heatmap', x: 'ordered_at', series: 'region' }));
+
+  expect(result.selection.temporalDimension).toBe(false);
+  expect(result.binding.binX).toBeUndefined();
+});
+
+// Only a heatmap reads the channel, so a stray value must not leak into another kind's binding.
+test('a non-heatmap kind ignores the series channel', () => {
+  const result = runHook(sales, channels({ kind: 'bar', series: 'ordered_at' }));
+
+  expect(result.binding).toEqual({ x: 'region', y: ['sales'] });
+  expect(result.seriesColumns).toEqual([]);
 });

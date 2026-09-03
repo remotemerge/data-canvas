@@ -132,6 +132,40 @@ test('human and agent scatter paths produce the same row-level query', async () 
   expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
 });
 
+/*
+ * A heatmap grids two dimensions against one measure. The chart form never collected the second
+ * dimension, so the kind was unbuildable by hand while the tool accepted it; this pins the form and
+ * the tool to the same query.
+ */
+test('human and agent heatmap paths produce the same two-dimension query', async () => {
+  const { human, agent, tool } = pair();
+  const binding = { x: 'col_region', series: 'col_notes', y: ['col_revenue'] };
+
+  await human.dispatcher.execute(
+    {
+      type: 'visualization.create',
+      payload: { datasetId: 'ds_sales', title: 'Revenue grid', kind: 'heatmap', binding },
+    },
+    { actor: 'human' },
+  );
+  await tool('create_visualization').handler({
+    datasetId: 'ds_sales',
+    title: 'Revenue grid',
+    kind: 'heatmap',
+    xColumnId: 'col_region',
+    groupByColumnId: 'col_notes',
+    yColumnIds: ['col_revenue'],
+    expectedRevision: 0,
+  });
+
+  const [chart] = Object.values(human.workspace().visualizations);
+
+  // Both axes group; the renderer reads `[x, series, measure]` positionally, so the order matters.
+  expect(chart?.query.dimensions).toEqual(['col_region', 'col_notes']);
+  expect(chart?.binding.series).toBe('col_notes');
+  expect(stripGeneratedIds(agent.workspace())).toEqual(stripGeneratedIds(human.workspace()));
+});
+
 test('human and agent selection paths produce the same workspace', async () => {
   const { human, agent, tool } = pair();
   const predicate = { kind: 'comparison' as const, columnId: 'col_region', operator: 'in' as const, value: ['Europe'] };

@@ -1,5 +1,6 @@
 import type { UpdateLayoutInput } from '@/application/actions/action-types.ts';
 import type { ActionHandler } from '@/application/actions/handlers/handler-types.ts';
+import { refitLayoutColumns } from '@/application/layout/place-visualization.ts';
 import { resolveVisualization } from '@/application/validation/validate-entity-refs.ts';
 import { domainError } from '@/shared/errors/domain-error.ts';
 import { err, ok } from '@/shared/result/result.ts';
@@ -54,7 +55,12 @@ export const handleUpdateLayout: ActionHandler<UpdateLayoutInput> = (workspace, 
     }
   }
 
-  const items = payload.items ?? workspace.layout.items;
+  /*
+   * Supplied items are already expressed in the target grid. Otherwise a density change rescales the
+   * existing ones, which would otherwise keep coordinates from the previous column count and leave
+   * charts overflowing the narrower canvas.
+   */
+  const items = payload.items ?? refitLayoutColumns(workspace.layout.items, workspace.layout.columns, columns);
 
   return ok({
     workspace: { ...workspace, layout: { columns, items } },
