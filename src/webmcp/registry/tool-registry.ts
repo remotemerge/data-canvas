@@ -41,7 +41,10 @@ const describeValidationError = (error: ErrorObject): string => {
   return `'${location}' ${message}.`;
 };
 
-export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise<string> => {
+// Reads the signal at each check around an `await`; it may change between checks.
+const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted ?? false;
+
+export const executeTool = async (tool: DataCanvasTool, input: unknown, signal?: AbortSignal): Promise<string> => {
   const validator = toolValidators[tool.name];
   if (!validator(input)) {
     const first = validator.errors?.[0];
@@ -49,9 +52,17 @@ export const executeTool = async (tool: DataCanvasTool, input: unknown): Promise
     return failure(domainError('INVALID_TOOL_ARGUMENTS', detail));
   }
 
+  if (isAborted(signal)) {
+    return failure(domainError('UNSUPPORTED_OPERATION', 'The tool call was cancelled before it ran.'));
+  }
+
   try {
-    return enforceOutputBudget(await tool.handler(input));
+    return enforceOutputBudget(await tool.handler(input, signal));
   } catch {
+    // Cancellation surfaces as a rejection; reporting it as a failure would invite a pointless retry.
+    if (isAborted(signal)) {
+      return failure(domainError('UNSUPPORTED_OPERATION', 'The tool call was cancelled before it completed.'));
+    }
     return failure(domainError('UNSUPPORTED_OPERATION', 'The tool could not complete the requested operation.'));
   }
 };
@@ -96,11 +107,14 @@ export const createToolRegistry = async (host: ModelContext, deps: ToolDependenc
         description: tool.description,
         inputSchema: tool.schema,
         annotations: tool.annotations,
-        execute: async (input) => {
+        // `@mcp-b/webmcp-types` types `execute` with the input alone, so the host's cancellation
+        // argument is read positionally and treated as absent where it is not supplied.
+        execute: async (input, ...rest: unknown[]) => {
+          const signal = (rest[0] as { signal?: AbortSignal } | undefined)?.signal;
           executingCount += 1;
           setToolStatus({ executingCount });
           try {
-            return await executeTool(tool, input);
+            return await executeTool(tool, input, signal);
           } finally {
             executingCount = Math.max(0, executingCount - 1);
             setToolStatus({ executingCount });

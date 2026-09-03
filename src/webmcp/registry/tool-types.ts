@@ -29,7 +29,7 @@ export interface DataCanvasTool {
    * import completes. Defaults to 1 for `needsDataset` tools.
    */
   minimumDatasets?: number;
-  handler(input: unknown): Promise<string>;
+  handler(input: unknown, signal?: AbortSignal): Promise<string>;
 }
 
 export const requiredDatasetCount = (tool: DataCanvasTool): number =>
@@ -47,11 +47,16 @@ export interface ToolDependencies {
     offset: number;
     limit: number;
     filters: Workspace['filters'][string][];
+    signal?: AbortSignal;
   }): Promise<Result<TableWindow, DomainError>>;
-  executeAnalysis(query: AnalysisQuery): Promise<Result<AnalysisResult, DomainError>>;
+  executeAnalysis(
+    query: AnalysisQuery,
+    options?: { signal?: AbortSignal },
+  ): Promise<Result<AnalysisResult, DomainError>>;
   fetchColumnStatistics(request: {
     datasetId: string;
     columnId: string;
     topValueLimit?: number;
+    signal?: AbortSignal;
   }): Promise<Result<ColumnProfile, DomainError>>;
 }
