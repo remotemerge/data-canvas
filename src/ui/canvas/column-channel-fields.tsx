@@ -86,6 +86,35 @@ export const DimensionField = ({
   );
 };
 
+/*
+ * Only a heatmap needs a second grouping column, which becomes its y axis. Every other kind derives
+ * its series from the bound measures, so the picker stays hidden rather than offering a dead control.
+ */
+export const SeriesField = ({
+  kind,
+  series,
+  onSeriesChange,
+  columns,
+}: {
+  kind: VisualizationKind;
+  series: string;
+  onSeriesChange: (columnId: string) => void;
+  columns: readonly ScopedColumn[];
+}): React.ReactNode => {
+  if (kind !== 'heatmap') {
+    return null;
+  }
+
+  return (
+    <label title={FIELD_HINT.series}>
+      Series{' '}
+      <select value={series} onChange={(event) => onSeriesChange(event.target.value)}>
+        <ColumnOptions columns={columns} />
+      </select>
+    </label>
+  );
+};
+
 // Histogram y is its bucket count, so it has no measure selector.
 export const MeasureField = ({
   kind,

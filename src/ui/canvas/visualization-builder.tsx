@@ -5,7 +5,7 @@ import type { VisualizationKind } from '@/domain/visualization/visualization.ts'
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
-import { AggregateField, DimensionField, MeasureField } from '@/ui/canvas/column-channel-fields.tsx';
+import { AggregateField, DimensionField, MeasureField, SeriesField } from '@/ui/canvas/column-channel-fields.tsx';
 import { useChartChannels } from '@/ui/canvas/use-chart-channels.ts';
 import { buildQuery, CHART_KINDS } from '@/ui/canvas/visualization-form.ts';
 
@@ -22,12 +22,22 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
   const [title, setTitle] = useState('');
   const [x, setX] = useState('');
   const [y, setY] = useState('');
+  const [series, setSeries] = useState('');
   const [aggregate, setAggregate] = useState<AggregateFunction>('sum');
   const [binCount, setBinCount] = useState(20);
   const dataset = datasets[datasetId];
 
-  const { scopedColumns, measureColumns, binnable, dimensionColumns, temporalBin, selection, binding, validation } =
-    useChartChannels(workspace, dataset, { kind, x, y, aggregate, binCount });
+  const {
+    scopedColumns,
+    measureColumns,
+    binnable,
+    dimensionColumns,
+    seriesColumns,
+    temporalBin,
+    selection,
+    binding,
+    validation,
+  } = useChartChannels(workspace, dataset, { kind, x, y, series, aggregate, binCount });
 
   const columnName = (columnId: string): string | undefined =>
     scopedColumns.find((scoped) => scoped.column.id === columnId)?.column.name;
@@ -78,6 +88,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
               setDatasetId(event.target.value);
               setX('');
               setY('');
+              setSeries('');
             }}
           >
             <option value="">Choose</option>
@@ -96,6 +107,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
               setKind(event.target.value as VisualizationKind);
               setX('');
               setY('');
+              setSeries('');
             }}
           >
             {CHART_KINDS.map((item) => (
@@ -125,6 +137,7 @@ export const VisualizationBuilder = ({ onError }: { onError: (error: DomainError
           binCount={binCount}
           onBinCountChange={setBinCount}
         />
+        <SeriesField kind={kind} series={series} onSeriesChange={setSeries} columns={seriesColumns} />
         <MeasureField kind={kind} y={y} onYChange={setY} columns={measureColumns} />
         <AggregateField kind={kind} aggregate={aggregate} onAggregateChange={setAggregate} />
         <button

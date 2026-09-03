@@ -4,7 +4,7 @@ import type { Visualization, VisualizationKind } from '@/domain/visualization/vi
 import type { DomainError } from '@/shared/errors/domain-error.ts';
 import { useActions } from '@/state/use-actions.ts';
 import { useWorkspace } from '@/state/use-workspace.ts';
-import { AggregateField, DimensionField, MeasureField } from '@/ui/canvas/column-channel-fields.tsx';
+import { AggregateField, DimensionField, MeasureField, SeriesField } from '@/ui/canvas/column-channel-fields.tsx';
 import { useChartChannels } from '@/ui/canvas/use-chart-channels.ts';
 import { AGGREGATES, buildQuery, CHART_KINDS } from '@/ui/canvas/visualization-form.ts';
 
@@ -44,16 +44,14 @@ export const VisualizationEditor = ({
   const [title, setTitle] = useState(visualization.title);
   const [x, setX] = useState(visualization.binding.x ?? '');
   const [y, setY] = useState(visualization.binding.y?.[0] ?? '');
+  const [series, setSeries] = useState(visualization.binding.series ?? '');
   const [aggregate, setAggregate] = useState<AggregateFunction>(currentAggregate(visualization));
   const [binCount, setBinCount] = useState(currentBinCount(visualization));
 
   const dataset = workspace.datasets[visualization.datasetId];
 
-  const { measureColumns, binnable, dimensionColumns, temporalBin, selection, binding, validation } = useChartChannels(
-    workspace,
-    dataset,
-    { kind, x, y, aggregate, binCount },
-  );
+  const { measureColumns, binnable, dimensionColumns, seriesColumns, temporalBin, selection, binding, validation } =
+    useChartChannels(workspace, dataset, { kind, x, y, series, aggregate, binCount });
 
   const titled = title.trim() !== '';
 
@@ -113,6 +111,8 @@ export const VisualizationEditor = ({
         binCount={binCount}
         onBinCountChange={setBinCount}
       />
+
+      <SeriesField kind={kind} series={series} onSeriesChange={setSeries} columns={seriesColumns} />
 
       <MeasureField kind={kind} y={y} onYChange={setY} columns={measureColumns} />
 

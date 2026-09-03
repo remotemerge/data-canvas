@@ -47,30 +47,44 @@ export interface ChannelSelection {
   kind: VisualizationKind;
   x: string;
   y: string;
+  // The second grouping dimension, which forms a heatmap's other axis.
+  series: string;
   aggregate: AggregateFunction;
   binStrategy: BinStrategy;
   temporalDimension: boolean;
 }
 
+// An unselected channel is an empty string, which contributes nothing to the binding or the query.
+const chosen = (columnId: string): boolean => columnId !== '';
+
 // A KPI has no dimension, and a histogram bins its own dimension instead of taking a measure.
-export const buildBinding = ({ kind, x, y, binStrategy, temporalDimension }: ChannelSelection): VisualBinding => {
+export const buildBinding = ({
+  kind,
+  x,
+  y,
+  series,
+  binStrategy,
+  temporalDimension,
+}: ChannelSelection): VisualBinding => {
   if (kind === 'kpi') {
-    return { y: y === '' ? [] : [y] };
+    return { y: chosen(y) ? [y] : [] };
   }
 
   if (kind === 'histogram') {
-    return x === '' ? {} : { x, binX: binStrategy };
+    return chosen(x) ? { x, binX: binStrategy } : {};
   }
 
   return {
-    ...(x === '' ? {} : { x }),
-    ...(y === '' ? {} : { y: [y] }),
+    ...(chosen(x) ? { x } : {}),
+    ...(chosen(y) ? { y: [y] } : {}),
+    /*
+     * Only a heatmap reads the series channel. Binding it on another kind would leave a stale second
+     * dimension behind when someone switches kinds, which the validator then rejects.
+     */
+    ...(kind === 'heatmap' && chosen(series) ? { series } : {}),
     ...(temporalDimension ? { binX: DIMENSION_BIN } : {}),
   };
 };
-
-// An unselected channel is an empty string, which contributes nothing to the query.
-const chosen = (columnId: string): boolean => columnId !== '';
 
 const histogramQuery = (datasetId: string, { x, binStrategy }: ChannelSelection) => ({
   datasetId,
@@ -93,6 +107,17 @@ const scatterQuery = (datasetId: string, { x, y }: ChannelSelection) => ({
   datasetId,
   dimensions: [...(chosen(x) ? [x] : []), ...(chosen(y) ? [y] : [])],
   measures: [],
+  filters: [],
+});
+
+/*
+ * A heatmap grids two categorical dimensions, so both stay grouping columns and the measure fills
+ * each cell. The renderer reads `[x, series, measure]` positionally, so the axis order matters.
+ */
+const heatmapQuery = (datasetId: string, { x, series, y, aggregate }: ChannelSelection) => ({
+  datasetId,
+  dimensions: [...(chosen(x) ? [x] : []), ...(chosen(series) ? [series] : [])],
+  measures: chosen(y) ? [{ columnId: y, aggregate }] : [],
   filters: [],
 });
 
@@ -124,6 +149,10 @@ export const buildQuery = (datasetId: string, selection: ChannelSelection) => {
 
   if (selection.kind === 'scatter') {
     return scatterQuery(datasetId, selection);
+  }
+
+  if (selection.kind === 'heatmap') {
+    return heatmapQuery(datasetId, selection);
   }
 
   return groupedQuery(datasetId, selection);

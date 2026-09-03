@@ -39,6 +39,7 @@ const selection = (overrides: Partial<ChannelSelection> = {}): ChannelSelection 
   kind: 'bar',
   x: 'region',
   y: 'sales',
+  series: '',
   aggregate: 'sum',
   binStrategy: { kind: 'equalWidth', binCount: 20 },
   temporalDimension: false,
@@ -107,6 +108,48 @@ test('a temporal dimension is bucketed by day in the binding', () => {
 
 test('unselected channels are omitted from the binding', () => {
   expect(buildBinding(selection({ x: '', y: '' }))).toEqual({});
+});
+
+test('a heatmap binds its second axis and groups by both dimensions', () => {
+  expect(buildBinding(selection({ kind: 'heatmap', series: 'ordered_at' }))).toEqual({
+    x: 'region',
+    series: 'ordered_at',
+    y: ['sales'],
+  });
+
+  expect(buildQuery('sales', selection({ kind: 'heatmap', series: 'ordered_at' }))).toEqual({
+    datasetId: 'sales',
+    dimensions: ['region', 'ordered_at'],
+    measures: [{ columnId: 'sales', aggregate: 'sum' }],
+    filters: [],
+  });
+});
+
+// The series channel belongs to the heatmap alone; other kinds must not pick it up.
+test('a bar chart drops the series channel from its binding', () => {
+  expect(buildBinding(selection({ series: 'ordered_at' }))).toEqual({ x: 'region', y: ['sales'] });
+  expect(buildQuery('sales', selection({ series: 'ordered_at' })).dimensions).toEqual(['region']);
+});
+
+/*
+ * A half-filled heatmap must still produce a query the compiler accepts. Validation blocks the
+ * submit button until both axes are bound, so these shapes are what the form holds while a person is
+ * still choosing.
+ */
+test('a heatmap omits channels that are not chosen yet', () => {
+  expect(buildQuery('sales', selection({ kind: 'heatmap', series: '' })).dimensions).toEqual(['region']);
+  expect(buildQuery('sales', selection({ kind: 'heatmap', x: '', series: 'ordered_at' })).dimensions).toEqual([
+    'ordered_at',
+  ]);
+  expect(buildQuery('sales', selection({ kind: 'heatmap', series: 'ordered_at', y: '' })).measures).toEqual([]);
+});
+
+// A temporal heatmap axis groups as a category, so it must not carry the trend chart's day bucket.
+test('a heatmap does not bucket a temporal axis', () => {
+  const query = buildQuery('sales', selection({ kind: 'heatmap', x: 'ordered_at', series: 'region' }));
+
+  expect(query.dimensions).toEqual(['ordered_at', 'region']);
+  expect(query).not.toHaveProperty('binnedDimensions');
 });
 
 test('a histogram counts rows over a binned dimension', () => {
