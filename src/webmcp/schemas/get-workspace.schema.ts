@@ -7,7 +7,7 @@ export const getWorkspaceSchema = {
       type: 'string',
       enum: ['datasets', 'relationships', 'visualizations', 'filters', 'metrics', 'selections'],
       description:
-        'Return only this section, paginated with offset and limit. Use it when the overview reports more entries than it returned, so every ID stays reachable in a large workspace. Omit to get the overview of all sections.',
+        'Return only this section, paged with offset and limit, when the overview reports more entries than it returned. Omit for all sections.',
     },
     offset: {
       type: 'integer',

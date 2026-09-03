@@ -1,4 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 // Agents supply dataset and column IDs; the application builds the join.
 export const createRelationshipSchema = {
@@ -35,7 +36,7 @@ export const createRelationshipSchema = {
       type: 'string',
       enum: ['one_to_one', 'one_to_many', 'many_to_one'],
       description:
-        'Cardinality from left to right. many_to_one is the common case, such as orders to customers. Choosing wrongly can multiply rows and inflate aggregates.',
+        'Cardinality from left to right. many_to_one is common, such as orders to customers. Choosing wrongly multiplies rows and inflates aggregates.',
     },
     join: {
       type: 'string',
@@ -43,12 +44,7 @@ export const createRelationshipSchema = {
       description:
         'inner keeps only rows matched on both sides; left keeps every left row and leaves unmatched right columns null.',
     },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['leftDatasetId', 'rightDatasetId', 'on', 'kind', 'join'],
   additionalProperties: false,

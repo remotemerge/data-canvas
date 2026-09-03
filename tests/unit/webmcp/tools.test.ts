@@ -19,6 +19,24 @@ import { webmcpFixture } from './webmcp-fixtures.ts';
 
 const setup = () => webmcpFixture();
 
+// Descriptions sit at any depth, including inside $defs and oneOf branches.
+const describedNodes = (node: unknown, path: string): { path: string; description: string }[] => {
+  if (node === null || typeof node !== 'object') {
+    return [];
+  }
+  const own =
+    'description' in node && typeof (node as { description: unknown }).description === 'string'
+      ? [{ path, description: (node as { description: string }).description }]
+      : [];
+
+  return [
+    ...own,
+    ...Object.entries(node as Record<string, unknown>).flatMap(([key, value]) =>
+      key === 'description' ? [] : describedNodes(value, `${path}.${key}`),
+    ),
+  ];
+};
+
 // Adds a chart bound to the sales dataset so update and remove tools have a target.
 const withVisualization = (workspace: Workspace, id = 'viz_1'): Workspace => {
   const chart = makeVisualization(id, 'ds_sales');
@@ -667,6 +685,32 @@ describe('WebMCP semantic tool behavior', () => {
 
   test('the contract version is a number an agent can compare', () => {
     expect(TOOL_CONTRACT_VERSION).toBeNumber();
+  });
+
+  /*
+   * Descriptors cost context on every agent call, and an oversized one risks host truncation before
+   * the model reaches what mattered. Limits are Chrome's published WebMCP budgets; prose that
+   * outgrows them belongs on a narrower property.
+   */
+  describe('descriptor character budgets', () => {
+    const MAX_TOOL_NAME = 30;
+    const MAX_TOOL_DESCRIPTION = 500;
+    const MAX_PARAMETER_DESCRIPTION = 150;
+
+    const { tools } = setup();
+
+    for (const tool of tools) {
+      test(`${tool.name} stays inside the descriptor budgets`, () => {
+        expect(tool.name.length).toBeLessThanOrEqual(MAX_TOOL_NAME);
+        expect(tool.description.length).toBeLessThanOrEqual(MAX_TOOL_DESCRIPTION);
+
+        for (const { path, description } of describedNodes(tool.schema, tool.name)) {
+          expect(`${path}:${description.length}`).toBe(
+            `${path}:${Math.min(description.length, MAX_PARAMETER_DESCRIPTION)}`,
+          );
+        }
+      });
+    }
   });
 });
 

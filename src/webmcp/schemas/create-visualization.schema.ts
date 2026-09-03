@@ -1,5 +1,6 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 import { binStrategySchema } from '@/webmcp/schemas/bin-strategy.schema.ts';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 export const createVisualizationSchema = {
   type: 'object',
@@ -14,7 +15,7 @@ export const createVisualizationSchema = {
       type: 'string',
       enum: ['line', 'bar', 'area', 'scatter', 'donut', 'kpi', 'table', 'histogram', 'boxplot', 'heatmap'],
       description:
-        'Chart type, which decides how the column channels are read. line/area: trend of yColumnIds over xColumnId. bar/donut: yColumnIds aggregated per xColumnId category. scatter: one mark per row, xColumnId against the first yColumnIds entry, not aggregated. kpi: a single aggregated value from yColumnIds. table: rows of the chosen columns. histogram: distribution of xColumnId, requires binX. boxplot: spread of the first yColumnIds entry, optionally split by xColumnId. heatmap: yColumnIds aggregated across xColumnId and groupByColumnId.',
+        'Chart type, deciding how column channels are read. histogram requires binX. scatter, boxplot, and kpi use only the first yColumnIds entry.',
     },
     title: {
       type: 'string',
@@ -52,12 +53,7 @@ export const createVisualizationSchema = {
     },
     binX: { ...binStrategySchema, description: 'Buckets xColumnId. Required for a histogram, optional elsewhere.' },
     binSeries: { ...binStrategySchema, description: 'Buckets groupByColumnId. Mainly useful for a heatmap.' },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['datasetId', 'kind', 'title'],
   additionalProperties: false,

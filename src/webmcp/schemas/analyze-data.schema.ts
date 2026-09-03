@@ -15,7 +15,7 @@ export const analyzeDataSchema = {
       maxItems: 4,
       uniqueItems: true,
       description:
-        'Restricts join-path resolution to these relationships when columns come from more than one dataset. Omit to let the engine resolve the path; supply when an ambiguous path returned NO_JOIN_PATH.',
+        'Restricts join-path resolution when columns span datasets. Omit to let the engine resolve it; supply after an ambiguous path returned NO_JOIN_PATH.',
     },
     dimensions: {
       type: 'array',
@@ -95,7 +95,7 @@ export const analyzeDataSchema = {
       },
       maxItems: 3,
       description:
-        'Orders the aggregate rows before limit applies, so a ranking question returns the actual top rows rather than an arbitrary slice. Sort by measureIndex descending for "top N by <measure>".',
+        'Orders rows before limit applies, so a ranking returns the real top rows. Sort by measureIndex descending for "top N by <measure>".',
     },
     limit: {
       type: 'integer',

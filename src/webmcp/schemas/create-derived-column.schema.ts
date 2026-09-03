@@ -1,4 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 // Recursive expression-node schema. Runtime depth and node-count limits are domain validation.
 // Each branch declares its own object type; the wrapper needs no duplicate type.
@@ -158,14 +159,9 @@ export const createDerivedColumnSchema = {
     expression: {
       $ref: '#/$defs/expression',
       description:
-        'Expression tree computing the column, built from column references, literals, arithmetic, case branches, date parts, bins, and casts. Compiled by the application; expression text is never accepted.',
+        'Expression tree computing the column, built from column references, literals, arithmetic, case branches, date parts, bins, and casts.',
     },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['datasetId', 'name', 'expression'],
   additionalProperties: false,

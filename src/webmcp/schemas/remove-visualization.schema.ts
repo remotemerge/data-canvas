@@ -1,4 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 export const removeVisualizationSchema = {
   type: 'object',
@@ -10,12 +11,7 @@ export const removeVisualizationSchema = {
       description:
         'Visualization to delete, along with its annotations. Obtain from get_workspace. Reversible with undo.',
     },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents deleting a chart a human just changed. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['visualizationId'],
   additionalProperties: false,

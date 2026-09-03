@@ -7,7 +7,7 @@ export const historySchema = {
       type: 'integer',
       minimum: 0,
       description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents reverting an edit made after the one you intended to undo. Omit to apply unconditionally.',
+        'Revision from get_workspace this call assumes. Fails with STALE_WORKSPACE_REVISION if it moved on, so a later edit is not reverted by mistake.',
     },
   },
   additionalProperties: false,
