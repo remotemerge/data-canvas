@@ -236,6 +236,41 @@ describe('ECharts option builder', () => {
     expect(formatter({ marker: '', seriesName: 'revenue', value: 10 })).toContain('10');
   });
 
+  /*
+   * A scatter query carries both channels as dimensions and no measures, so slicing past every
+   * dimension left no measure names and the chart rendered with zero series and an empty plot.
+   */
+  test('a scatter chart plots its y dimension instead of rendering no series', () => {
+    const base = visualization('viz_scatter', 'ds_sales');
+    const option = buildEChartsOption(
+      {
+        ...base,
+        kind: 'scatter',
+        binding: { x: 'col_sales', y: ['col_profit'] },
+        query: { ...base.query, dimensions: ['col_sales', 'col_profit'], measures: [] },
+      },
+      {
+        columns: [
+          { key: 'col_sales', name: 'Sales', logicalType: 'number' },
+          { key: 'col_profit', name: 'Profit', logicalType: 'number' },
+        ],
+        rows: [
+          [10, 2],
+          [8, -3],
+        ],
+        rowCount: 2,
+        sampled: false,
+      },
+      theme,
+    );
+
+    expect(option['series']).toHaveLength(1);
+    expect((option['series'] as { encode: { x: string; y: string } }[])[0]?.encode).toMatchObject({
+      x: 'Sales',
+      y: 'Profit',
+    });
+  });
+
   // Widened time buckets must say which unit is actually drawn, or the axis misleads.
   test('names the x-axis after the widened temporal unit', () => {
     const option = buildEChartsOption(

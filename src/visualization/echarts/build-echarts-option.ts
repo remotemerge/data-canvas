@@ -97,8 +97,18 @@ export const buildEChartsOption = (
   const emphasis = highlightStyle(highlight, theme);
   const dimensions = columnNames(result);
   const xName = dimensions[0];
-  // Count binned dimensions with plain dimensions when locating measures.
-  const groupedCount = visualization.query.dimensions.length + (visualization.query.binnedDimensions ?? []).length;
+  /*
+   * Columns the chart groups by, which the measures follow in the projection. Binned dimensions
+   * count alongside plain ones.
+   *
+   * A scatter plot is the exception: it draws one mark per row, so its query carries both channels
+   * as dimensions and aggregates nothing. Counting every dimension as grouped would leave no measure
+   * names, and the chart would render with zero series on an empty plot.
+   */
+  const groupedCount =
+    visualization.kind === 'scatter'
+      ? 1
+      : visualization.query.dimensions.length + (visualization.query.binnedDimensions ?? []).length;
   const measureNames = dimensions.slice(groupedCount);
   const common = {
     color: theme.colors,
