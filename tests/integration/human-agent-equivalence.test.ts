@@ -94,6 +94,64 @@ test('human and real agent tool handlers produce equivalent canonical state', as
         expectedRevision: 0,
       },
     },
+    /*
+     * A heatmap binds a second grouping column. The chart form did not collect one, so the kind was
+     * buildable by an agent and not by a person, which this pairing is meant to rule out.
+     */
+    {
+      action: {
+        type: 'visualization.create' as const,
+        payload: {
+          datasetId: 'ds_sales',
+          title: 'Revenue grid',
+          kind: 'heatmap' as const,
+          binding: { x: 'col_region', series: 'col_notes', y: ['col_revenue'] },
+          query: {
+            datasetId: 'ds_sales',
+            dimensions: ['col_region', 'col_notes'],
+            measures: [{ columnId: 'col_revenue', aggregate: 'sum' as const }],
+            filters: [],
+          },
+        },
+      },
+      tool: 'create_visualization',
+      input: {
+        datasetId: 'ds_sales',
+        title: 'Revenue grid',
+        kind: 'heatmap',
+        xColumnId: 'col_region',
+        groupByColumnId: 'col_notes',
+        yColumnIds: ['col_revenue'],
+        expectedRevision: 0,
+      },
+    },
+    // A scatter plot keeps both channels as dimensions and aggregates nothing.
+    {
+      action: {
+        type: 'visualization.create' as const,
+        payload: {
+          datasetId: 'ds_sales',
+          title: 'Revenue against units',
+          kind: 'scatter' as const,
+          binding: { x: 'col_units', y: ['col_revenue'] },
+          query: {
+            datasetId: 'ds_sales',
+            dimensions: ['col_units', 'col_revenue'],
+            measures: [],
+            filters: [],
+          },
+        },
+      },
+      tool: 'create_visualization',
+      input: {
+        datasetId: 'ds_sales',
+        title: 'Revenue against units',
+        kind: 'scatter',
+        xColumnId: 'col_units',
+        yColumnIds: ['col_revenue'],
+        expectedRevision: 0,
+      },
+    },
     {
       action: {
         type: 'selection.set' as const,
