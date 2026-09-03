@@ -1,8 +1,23 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+
+/*
+ * A Chrome origin-trial token is bound to a single origin, so it cannot be committed and reused
+ * across preview, production, and local builds. An absent token removes the placeholder rather than
+ * emitting `content=""`, which Chrome treats as a malformed trial tag.
+ */
+const webmcpOriginTrial = (token: string | undefined): Plugin => ({
+  name: 'data-canvas-webmcp-origin-trial',
+  transformIndexHtml: (html) =>
+    html.replace(
+      '%VITE_WEBMCP_ORIGIN_TRIAL_META%',
+      token ? `<meta http-equiv="origin-trial" content="${token}" />` : '',
+    ),
+});
 
 export default defineConfig(({ command }) => {
   const isBuild = command === 'build';
@@ -17,6 +32,7 @@ export default defineConfig(({ command }) => {
     plugins: [
       react(),
       tailwindcss(),
+      webmcpOriginTrial(process.env['VITE_WEBMCP_ORIGIN_TRIAL_TOKEN']),
       VitePWA({
         includeAssets: ['icon.svg', 'icon-maskable.svg'],
         injectRegister: null,

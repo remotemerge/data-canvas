@@ -97,7 +97,7 @@ bun install
 bun run dev
 ```
 
-Vite serves the application at `http://localhost:3000`. WebMCP tools require a browser that implements the native WebMCP model-context API.
+Vite serves the application at `http://localhost:3000`. WebMCP tools require a browser that implements the native WebMCP model-context API. In Chrome, enable `chrome://flags/#enable-webmcp-testing` and relaunch; without it the workspace still runs and the status indicator reports that agent tools are unavailable.
 
 Build and preview the production bundle:
 
@@ -105,6 +105,23 @@ Build and preview the production bundle:
 bun run build
 bun run preview
 ```
+
+### Enabling WebMCP on a deployed origin
+
+The browser flag only covers local development. A deployed origin needs a Chrome [origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241) token, registered for that exact origin and supplied at build time:
+
+```bash
+VITE_WEBMCP_ORIGIN_TRIAL_TOKEN="<token for https://your-domain>" bun run build
+```
+
+On Vercel, set `VITE_WEBMCP_ORIGIN_TRIAL_TOKEN` as an environment variable for the environments that should expose tools. The build injects the `origin-trial` meta tag when the variable is present and omits it otherwise, so a token-less build stays valid and simply runs without agent tools.
+
+A token is bound to one origin. Preview deployments get a generated hostname, so they need either their own token or a stable domain alias to expose tools.
+
+Two response headers in `vercel.json` are also required, because WebMCP is gated on both:
+
+- `Origin-Agent-Cluster: ?1` — WebMCP is available only in origin-isolated documents.
+- `Permissions-Policy: tools=(self)` — states the default explicitly, allowing tools in this origin's own documents while keeping them out of cross-origin frames.
 
 ## Testing
 
