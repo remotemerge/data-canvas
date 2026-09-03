@@ -98,6 +98,68 @@ describe('handleUpdateLayout', () => {
     expect(result.value.summary).toContain('3 columns');
   });
 
+  /*
+   * A density change used to alter only the column count, leaving items measured against the old
+   * grid. A chart at `x: 6` on a 12-column canvas then hung off a 6-column one and rendered as a
+   * sliver at the edge.
+   */
+  test('narrowing the canvas refits existing items instead of overflowing them', () => {
+    const workspace = withVisualization();
+    const paired = {
+      ...workspace,
+      layout: {
+        columns: 12,
+        items: [
+          { visualizationId: 'viz_1', x: 0, y: 0, width: 6, height: 4 },
+          { visualizationId: 'viz_1', x: 6, y: 0, width: 6, height: 4 },
+        ],
+      },
+    };
+    const result = updateLayout(paired, { columns: 6 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    // Comfortable gives each chart its own row, so the pair stacks at full width.
+    expect(result.value.workspace.layout.items).toEqual([
+      { visualizationId: 'viz_1', x: 0, y: 0, width: 6, height: 4 },
+      { visualizationId: 'viz_1', x: 0, y: 4, width: 6, height: 4 },
+    ]);
+    // Every item stays inside the narrower grid.
+    for (const item of result.value.workspace.layout.items) {
+      expect(item.x + item.width).toBeLessThanOrEqual(6);
+    }
+  });
+
+  test('the compact canvas fits three charts to a row', () => {
+    const workspace = withVisualization();
+    const three = {
+      ...workspace,
+      layout: {
+        columns: 12,
+        items: [
+          { visualizationId: 'viz_1', x: 0, y: 0, width: 6, height: 4 },
+          { visualizationId: 'viz_1', x: 6, y: 0, width: 6, height: 4 },
+          { visualizationId: 'viz_1', x: 0, y: 4, width: 6, height: 4 },
+        ],
+      },
+    };
+    const result = updateLayout(three, { columns: 18 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workspace.layout.items.map((item) => [item.x, item.y, item.width])).toEqual([
+      [0, 0, 6],
+      [6, 0, 6],
+      [12, 0, 6],
+    ]);
+  });
+
   test('keeps the current column count when only items are repositioned', () => {
     const workspace = withVisualization();
     const result = updateLayout(workspace, { items: workspace.layout.items });
