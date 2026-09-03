@@ -16,7 +16,7 @@ export const createGetColumnStatisticsTool = (deps: ToolDependencies): DataCanva
     untrustedContentHint: true,
   },
   needsDataset: true,
-  handler: async (raw) => {
+  handler: async (raw, signal) => {
     const input = asInput(raw);
     const datasetId = input.datasetId as string;
     const columnId = input.columnId as string;
@@ -35,6 +35,7 @@ export const createGetColumnStatisticsTool = (deps: ToolDependencies): DataCanva
       datasetId,
       columnId,
       ...(input.topValueLimit === undefined ? {} : { topValueLimit: input.topValueLimit as number }),
+      ...(signal === undefined ? {} : { signal }),
     });
 
     if (!result.ok) {

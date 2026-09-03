@@ -12,7 +12,7 @@ export const listRelationshipsSchema = {
     includeSuggestions: {
       type: 'boolean',
       description:
-        'Also return candidate joins inferred from column names and types, each with a confidence score. Suggestions are proposals only; pass one to create_relationship to make it real. Defaults to false.',
+        'Also return candidate joins inferred from column names and types, scored by confidence. Pass one to create_relationship to make it real.',
     },
   },
   required: [],

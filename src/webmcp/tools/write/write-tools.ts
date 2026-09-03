@@ -24,8 +24,13 @@ const dispatch = async (
   action: Parameters<ToolDependencies['dispatcher']['execute']>[0],
   expectedRevision: number | undefined,
   extra: (changedIds: string[]) => Record<string, unknown> = () => ({}),
+  signal?: AbortSignal,
 ): Promise<string> => {
-  const result = await deps.dispatcher.execute(action, { actor: 'agent', expectedRevision });
+  const result = await deps.dispatcher.execute(action, {
+    actor: 'agent',
+    expectedRevision,
+    ...(signal === undefined ? {} : { signal }),
+  });
   if (!result.ok) {
     return failure(result.error);
   }
@@ -150,7 +155,7 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
       openWorldHint: false,
     },
     needsDataset: true,
-    handler: async (raw) => {
+    handler: async (raw, signal) => {
       const input = asInput(raw);
       const datasetId = input.datasetId as string;
       const binding = bindingFrom(input);
@@ -167,6 +172,7 @@ export const createWriteTools = (deps: ToolDependencies): DataCanvasTool[] => [
         { type: 'visualization.create', payload },
         input.expectedRevision as number,
         ([visualizationId]) => ({ visualizationId }),
+        signal,
       );
     },
   },

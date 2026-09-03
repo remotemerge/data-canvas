@@ -1,5 +1,6 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
 import { binStrategySchema } from '@/webmcp/schemas/bin-strategy.schema.ts';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 export const updateVisualizationSchema = {
   type: 'object',
@@ -45,12 +46,7 @@ export const updateVisualizationSchema = {
       description:
         'How this chart reacts to a selection made elsewhere: ignore it, dim rows outside it, or filter down to it.',
     },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['visualizationId'],
   additionalProperties: false,

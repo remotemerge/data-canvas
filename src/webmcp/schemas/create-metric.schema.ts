@@ -1,4 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 // Window transformations supported by metric creation.
 const modifier = {
@@ -97,12 +98,7 @@ export const createMetricSchema = {
         'Existing filter IDs from get_workspace that scope this metric, for figures like revenue in one region. Omit to follow the workspace filters in effect.',
     },
     modifier: { ...modifier, description: 'Optional window transformation. Defaults to a plain aggregate.' },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['datasetId', 'name', 'aggregate'],
   additionalProperties: false,

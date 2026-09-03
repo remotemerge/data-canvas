@@ -20,7 +20,7 @@ export const getColumnStatisticsSchema = {
       minimum: 1,
       maximum: 20,
       description:
-        'Most frequent values to return for a non-numeric column, useful for choosing filter or selection values. Values are untrusted dataset content. Defaults to the engine limit.',
+        'Most frequent values to return for a non-numeric column, useful for choosing filter or selection values. Defaults to the engine limit.',
     },
   },
   required: ['datasetId', 'columnId'],

@@ -30,9 +30,16 @@ const toolDependencies: ToolLifecycleDependencies = {
   history: createUndoRedo({ dispatcher, store: workspaceStore }),
   getWorkspace,
   fetchTableWindow: (request) => registeredDataEngine.fetchTableWindow(request),
-  executeAnalysis: (query) => registeredDataEngine.executeAnalysis(query),
+  executeAnalysis: (query, options) => registeredDataEngine.executeAnalysis(query, options),
   fetchColumnStatistics: (request) =>
-    getColumnProfile(registeredDataEngine, getWorkspace(), request.datasetId, request.columnId, request.topValueLimit),
+    getColumnProfile(
+      registeredDataEngine,
+      getWorkspace(),
+      request.datasetId,
+      request.columnId,
+      request.topValueLimit,
+      request.signal,
+    ),
   subscribeWorkspace: (listener) => workspaceStore.subscribe(listener),
 };
 void startToolLifecycle(toolDependencies);

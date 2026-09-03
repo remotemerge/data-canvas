@@ -1,4 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 // Anchor coordinates are chart-space values, so they stay scalar and bounded.
 const anchorValue = {
@@ -62,12 +63,7 @@ export const addAnnotationSchema = {
       ],
       description: 'Where the note attaches to the chart. Pick the branch matching the chart kind.',
     },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents annotating a chart a human just changed. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   required: ['visualizationId', 'text', 'anchor'],
   additionalProperties: false,

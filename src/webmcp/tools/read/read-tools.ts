@@ -159,7 +159,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
     name: 'get_workspace',
     title: 'Get workspace',
     description:
-      'Start here. Returns the current revision and the IDs of datasets, relationships, visualizations, filters, metrics, and selections without reading row values. Most other tools use IDs from this call. Each section reports its total alongside the entries returned; when a total exceeds what was returned, call again with section plus offset to page through the rest, so every ID stays reachable. Call it again after a write to verify the result and obtain the revision for the next expectedRevision. toolContractVersion changes when tool argument shapes change. Column names are not included; use get_dataset_schema for those.',
+      'Start here. Returns the current revision and the IDs of datasets, relationships, visualizations, filters, metrics, and selections, without row values. Most other tools need IDs from this call. When a section total exceeds the entries returned, call again with section plus offset to reach the rest. Call it after a write to confirm the result and get the revision for the next expectedRevision. A changed toolContractVersion means argument shapes changed. Column names come from get_dataset_schema.',
     schema: toolSchemas.get_workspace,
     annotations: {
       readOnlyHint: true,
@@ -336,7 +336,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       untrustedContentHint: true,
     },
     needsDataset: true,
-    handler: async (raw) => {
+    handler: async (raw, signal) => {
       const input = asInput(raw);
       const datasetId = input.datasetId as string;
       const dataset = deps.getWorkspace().datasets[datasetId];
@@ -352,6 +352,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         offset: 0,
         limit: Math.min((input.limit as number | undefined) ?? 20, 100),
         filters: filtersFor(deps, datasetId),
+        ...(signal === undefined ? {} : { signal }),
       });
       if (!result.ok) {
         return failure(result.error);
@@ -378,7 +379,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
     name: 'analyze_data',
     title: 'Analyze data',
     description:
-      'Answer quantitative questions by computing grouped aggregates over the full dataset and returning only the aggregate rows. Use it for totals, averages, rankings, trends, or checking a result before building a chart. The engine applies enabled workspace filters automatically, so do not repeat them. Use dimensions to group, measures to aggregate, and timeGrain to bucket dates. Use orderBy with limit to rank, such as orderBy measureIndex 0 descending for the top rows by the first measure. Related-dataset columns work when a relationship provides a join path. This tool does not change the workspace. Use create_visualization to show the result there. Arbitrary SQL is never accepted.',
+      'Answer quantitative questions by computing grouped aggregates over the full dataset, returning only the aggregate rows. Use it for totals, averages, rankings, trends, or to check numbers before charting. Enabled workspace filters apply automatically, so do not repeat them. Group with dimensions, aggregate with measures, bucket dates with timeGrain, rank with orderBy and limit. Related-dataset columns need a join path. Leaves the workspace unchanged; use create_visualization to show a result.',
     schema: toolSchemas.analyze_data,
     annotations: {
       readOnlyHint: true,
@@ -387,7 +388,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
       untrustedContentHint: true,
     },
     needsDataset: true,
-    handler: async (raw) => {
+    handler: async (raw, signal) => {
       const input = asInput(raw);
       const datasetId = input.datasetId as string;
       const workspace = deps.getWorkspace();
@@ -436,7 +437,7 @@ export const createReadTools = (deps: ToolDependencies): DataCanvasTool[] => [
         filters: analysisFiltersFor(deps, dataset.id),
         limit: Math.min((input.limit as number | undefined) ?? 50, 200),
       };
-      const result = await deps.executeAnalysis(query);
+      const result = await deps.executeAnalysis(query, signal === undefined ? undefined : { signal });
       if (!result.ok) {
         return failure(result.error);
       }

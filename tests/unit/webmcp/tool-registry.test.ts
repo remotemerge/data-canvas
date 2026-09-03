@@ -6,7 +6,7 @@ import { webmcpFixture } from './webmcp-fixtures.ts';
 
 interface RecordedTool {
   name: string;
-  execute(input: unknown): Promise<string>;
+  execute(input: unknown, options?: { signal?: AbortSignal }): Promise<string>;
 }
 
 const recordingHost = (): { registrations: Map<string, RecordedTool>; host: ModelContext } => {
@@ -45,6 +45,59 @@ describe('executeTool', () => {
 
     expect(output['ok']).toBe(false);
     expect(output['error']).toContain('must be equal');
+  });
+
+  // Running a withdrawn call anyway occupies the DuckDB worker and delays the calls still wanted.
+  test('an already cancelled call is refused before the handler runs', async () => {
+    const { tool } = webmcpFixture();
+    let handlerCalls = 0;
+    const counting = {
+      ...tool('get_workspace'),
+      handler: async () => {
+        handlerCalls += 1;
+        return '{"ok":true}';
+      },
+    };
+
+    const output = JSON.parse(await executeTool(counting, {}, AbortSignal.abort())) as Record<string, unknown>;
+
+    expect(output['ok']).toBe(false);
+    expect(handlerCalls).toBe(0);
+  });
+
+  test('the abort signal reaches the tool handler', async () => {
+    const { tool } = webmcpFixture();
+    const controller = new AbortController();
+    let received: AbortSignal | undefined;
+    const capturing = {
+      ...tool('get_workspace'),
+      handler: async (_input: unknown, signal?: AbortSignal) => {
+        received = signal;
+        return '{"ok":true}';
+      },
+    };
+
+    await executeTool(capturing, {}, controller.signal);
+
+    expect(received).toBe(controller.signal);
+  });
+
+  // Reporting a cancellation as a failure would have the agent retry work the user stopped.
+  test('a handler that rejects after cancellation reports the cancellation', async () => {
+    const { tool } = webmcpFixture();
+    const controller = new AbortController();
+    const aborting = {
+      ...tool('get_workspace'),
+      handler: async () => {
+        controller.abort();
+        throw new Error('aborted');
+      },
+    };
+
+    const output = JSON.parse(await executeTool(aborting, {}, controller.signal)) as Record<string, unknown>;
+
+    expect(output['ok']).toBe(false);
+    expect(output['error']).toContain('cancelled');
   });
 
   // A thrown handler must not surface a stack trace or an engine message to the agent.
@@ -104,6 +157,23 @@ describe('createToolRegistry', () => {
     }
 
     expect(JSON.parse(await registered.execute({}))).toMatchObject({ ok: true });
+
+    registry.dispose();
+  });
+
+  // The signal arrives positionally because the published types omit it, so pin that arrival path.
+  test('a cancelled registered call is refused through the host signal argument', async () => {
+    const { registrations, host } = recordingHost();
+    const registry = await createToolRegistry(host, webmcpFixture().deps);
+    const registered = registrations.get('get_workspace');
+    if (registered === undefined) {
+      throw new Error('get_workspace was not registered');
+    }
+
+    const output = JSON.parse(await registered.execute({}, { signal: AbortSignal.abort() })) as Record<string, unknown>;
+
+    expect(output['ok']).toBe(false);
+    expect(getToolStatus().executingCount).toBe(0);
 
     registry.dispose();
   });

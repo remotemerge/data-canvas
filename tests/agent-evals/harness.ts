@@ -6,20 +6,29 @@ import {
   workspaceWithDataset,
 } from '../unit/application/action-fixtures.ts';
 import { createToolDefinitions } from '@/webmcp/registry/tool-registry.ts';
+import { MAX_TOOL_OUTPUT_LENGTH } from '@/webmcp/results/enforce-output-budget.ts';
+import { gradeTranscript } from './expected-call.ts';
+import type { ActualToolCall, ExpectedCallNode } from './expected-call.ts';
 
 export interface EvalScenario {
   name: string;
   prompt: string;
   fixture: 'sales' | 'sales-with-chart';
-  transcript: { tool: string; arguments: Record<string, unknown> }[];
+  transcript: ActualToolCall[];
   expected: {
-    tools: string[];
+    // `tools` is the flat form of the same assertion, kept so scenarios needing no ordering nuance
+    // stay a plain list of names.
+    expectedCall?: ExpectedCallNode[];
+    tools?: string[];
     visualizations?: number;
     filters?: number;
     selections?: number;
     preserveExisting?: boolean;
   };
 }
+
+const expectationNodes = (expected: EvalScenario['expected']): ExpectedCallNode[] =>
+  expected.expectedCall ?? (expected.tools ?? []).map((functionName) => ({ functionName }));
 
 export const runScenario = async (scenario: EvalScenario) => {
   const initial = workspaceWithDataset();
@@ -50,23 +59,27 @@ export const runScenario = async (scenario: EvalScenario) => {
     outputs.push(await tool.handler(call.arguments));
   }
   const final = harness.workspace();
-  const selected = scenario.transcript.map((call) => call.tool);
+  const graded = gradeTranscript(expectationNodes(scenario.expected), scenario.transcript);
   const workspaceCorrect =
     (scenario.expected.visualizations === undefined ||
       Object.keys(final.visualizations).length === scenario.expected.visualizations) &&
     (scenario.expected.filters === undefined || Object.keys(final.filters).length === scenario.expected.filters) &&
     (scenario.expected.selections === undefined ||
       Object.keys(final.selections).length === scenario.expected.selections);
+
   return {
     scores: {
-      correctToolsSelected: selected.every((name, index) => name === scenario.expected.tools[index]),
-      correctArguments: outputs.every((output) => !output.includes('INVALID_TOOL_ARGUMENTS')),
-      unnecessaryToolsAvoided: selected.length === scenario.expected.tools.length,
+      correctToolsSelected: graded.satisfied,
+      correctArguments:
+        graded.argumentsMatched && outputs.every((output) => !output.includes('INVALID_TOOL_ARGUMENTS')),
+      unnecessaryToolsAvoided: graded.noExtraCalls,
       existingHumanChangesPreserved:
         !scenario.expected.preserveExisting || final.visualizations[existing.id] !== undefined,
       workspaceResultCorrect: workspaceCorrect,
-      toolOutputStayedBounded: outputs.every((output) => output.length <= 16_000),
+      // The transport enforces this budget, so a scenario must fail here before a real agent is truncated.
+      toolOutputStayedBounded: outputs.every((output) => output.length <= MAX_TOOL_OUTPUT_LENGTH),
     },
+    grades: graded.grades,
     outputs,
     workspace: final,
   };

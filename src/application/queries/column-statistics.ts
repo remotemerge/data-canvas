@@ -19,6 +19,7 @@ export const getColumnProfile = async (
   datasetId: EntityId,
   columnId: EntityId,
   topValueLimit?: number,
+  signal?: AbortSignal,
 ): Promise<Result<ColumnProfile, DomainError>> => {
   const resolved = resolveDatasetColumn(workspace, datasetId, columnId);
 
@@ -33,6 +34,7 @@ export const getColumnProfile = async (
     columnId,
     filters,
     ...(topValueLimit === undefined ? {} : { topValueLimit }),
+    ...(signal === undefined ? {} : { signal }),
   });
 
   if (!statistics.ok) {

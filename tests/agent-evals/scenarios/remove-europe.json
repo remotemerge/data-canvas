@@ -18,5 +18,19 @@
       "arguments": { "datasetId": "ds_sales", "columnId": "col_date", "values": ["2026-02-01"], "expectedRevision": 1 }
     }
   ],
-  "expected": { "tools": ["apply_filter", "highlight_selection"], "filters": 1, "selections": 1 }
+  "expected": {
+    "expectedCall": [
+      {
+        "ordered": [
+          {
+            "functionName": "apply_filter",
+            "arguments": { "columnId": "col_region", "operator": "neq", "value": "Europe" }
+          },
+          { "functionName": "highlight_selection", "arguments": { "columnId": "col_date" } }
+        ]
+      }
+    ],
+    "filters": 1,
+    "selections": 1
+  }
 }

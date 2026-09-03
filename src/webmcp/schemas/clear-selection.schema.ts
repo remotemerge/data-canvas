@@ -1,4 +1,5 @@
 import type { JsonSchemaForInference } from '@mcp-b/webmcp-types';
+import { expectedRevisionSchema } from '@/webmcp/schemas/expected-revision.schema.ts';
 
 export const clearSelectionSchema = {
   type: 'object',
@@ -10,12 +11,7 @@ export const clearSelectionSchema = {
       description:
         'Clears only the selection on this dataset. Omit to clear every selection in the workspace, including one a human made.',
     },
-    expectedRevision: {
-      type: 'integer',
-      minimum: 0,
-      description:
-        'Workspace revision this call assumes. The call fails with STALE_WORKSPACE_REVISION if the workspace moved on, which prevents overwriting a concurrent human edit. Omit to apply unconditionally.',
-    },
+    expectedRevision: expectedRevisionSchema,
   },
   additionalProperties: false,
 } as const satisfies JsonSchemaForInference;
