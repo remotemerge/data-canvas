@@ -35,7 +35,7 @@
     "@base-ui/react": "^1.7.0",
     "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
     "@tanstack/react-table": "^9.2.4",
-    "@tanstack/react-virtual": "^3.14.10",
+    "@tanstack/react-virtual": "^3.14.13",
     "ajv": "^8.20.0",
     "echarts": "^6.1.0",
     "react": "^19.2.8",
